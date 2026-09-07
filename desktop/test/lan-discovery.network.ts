@@ -17,13 +17,18 @@ import { MemoryClipboard, waitForClipboard } from './clipboard-helpers.js';
 import { ClipboardClient } from '../src/integration-client/clipboard-client.js';
 import { FileClient } from '../src/integration-client/file-client.js';
 import { privateDirectory } from '../src/security-pairing/private-directory.js';
+import { LauncherClient } from '../src/integration-client/launcher-client.js';
 
 test('mDNS public certificate discovery bootstraps pinned pairing and authenticated WSS', { timeout: 25_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-mdns-'));
   const desktopClipboard = new MemoryClipboard();
   const localClipboard = new MemoryClipboard();
+  let launches = 0;
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit LAN Test',
-    clipboard: { createAdapter: () => desktopClipboard, pollMs: 10 } });
+    clipboard: { createAdapter: () => desktopClipboard, pollMs: 10 }, launcher: { createAdapter: () => ({
+      list: async () => [{ key: 'synthetic-lan-app', name: 'Synthetic App', revision: 'one' }],
+      launch: async (_app, authorize) => { authorize(); launches++; },
+    }) } });
   let client: OrbitClient | undefined;
   let clipboard: ClipboardClient | undefined;
   let files: FileClient | undefined;
@@ -53,6 +58,9 @@ test('mDNS public certificate discovery bootstraps pinned pairing and authentica
     await files.download(offer.transferId);
     await waitForClipboard(() => files!.store.records.get(offer.transferId)?.state === 'completed');
     assert.deepEqual(readFileSync(files.store.paths(files.store.records.get(offer.transferId)!).destination), bytes);
+    const launcher = new LauncherClient(client);
+    try { const apps = await launcher.list(); await launcher.launch(apps[0]!.appId); assert.equal(launches, 1); }
+    finally { launcher.stop(); }
   } finally {
     client?.stop();
     await files?.stop();

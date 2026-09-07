@@ -2,7 +2,7 @@
 
 The Node.js + TypeScript background service for Orbit. Phases 1–2 provide the **Command Router**, **WebSocket** encrypted command channel, **QR Code Pairing**, durable device credentials, automatic session renewal, mDNS/Bonjour discovery, and an in-memory **Activity Log**. A TypeScript integration client exercises the channel while Orbit Mobile remains a later phase.
 
-Phase 3 adds **Clipboard Sync**: bidirectional Unicode plain text, up to 8 KiB in UTF-8, through authenticated connection-scoped subscriptions. Windows and Linux adapters are wired into the service and TypeScript integration client. Phase 4 adds **File Transfer**: authenticated uploads and explicitly accepted downloads, chunk integrity checks, durable checkpoints, and resume after reconnect or restart. App Launcher, Input Simulation, Power & Session, and Orbit Mobile remain later phases. The root [README](../README.md) remains the product scope reference.
+Phase 3 adds **Clipboard Sync**: bidirectional Unicode plain text, up to 8 KiB in UTF-8, through authenticated connection-scoped subscriptions. Windows and Linux adapters are wired into the service and TypeScript integration client. Phase 4 adds **File Transfer**: authenticated uploads and explicitly accepted downloads, chunk integrity checks, durable checkpoints, and resume after reconnect or restart. Phase 5 adds **App Launcher**: listing registered desktop applications and requesting their activation through Windows Shell or Linux GIO. Input Simulation, Power & Session, and Orbit Mobile remain later phases. The root [README](../README.md) remains the product scope reference.
 
 ## Test the Module
 
@@ -22,7 +22,9 @@ The default suite generates temporary self-signed certificates and device creden
 
 File Transfer tests cover chunk conflicts, whole-file integrity, lease and ownership isolation, destination collisions, changed sources, cancellation, authorization loss during verification, quotas, expiry, restart recovery, and renewal at 3,000 commands. All files are synthetic and temporary.
 
-`test:lan` additionally exercises real mDNS multicast discovery followed by pinned HTTPS pairing, authenticated WSS, bidirectional Clipboard Sync with synthetic OS adapters, and uploads/downloads with synthetic files. It needs multicast access on the host; a sandbox or firewall blocking UDP 5353 causes a failure, not a skipped test. These are desktop/Node tests, not real-phone validation.
+App Launcher tests cover bounded catalogs, registration changes, strict payload rejection, authorization loss before activation, native helper failures, XDG precedence/visibility, and interrupted activation without replay. Activation is synthetic in automated tests; they never open installed applications.
+
+`test:lan` additionally exercises real mDNS multicast discovery followed by pinned HTTPS pairing, authenticated WSS, bidirectional Clipboard Sync with synthetic OS adapters, uploads/downloads with synthetic files, and synthetic app activation. It needs multicast access on the host; a sandbox or firewall blocking UDP 5353 causes a failure, not a skipped test. These are desktop/Node tests, not real-phone validation.
 
 Approved runtime dependencies are `ws` (WebSocket), `zod` (boundary validation), `selfsigned` (certificate generation), `qrcode` (local SVG rendering), and `bonjour-service` (mDNS). Node supplies HTTPS, TLS, crypto, and the test runner. TypeScript and type definitions are development dependencies. Versions are pinned in `package-lock.json`.
 
@@ -258,7 +260,72 @@ After `completed`, run `Get-FileHash .local/client/received/*-file-transfer-test
 
 During a larger transfer, enter `quit` in the service and restart it, or stop/restart the files client with the same private directory. Expect checkpoint reconciliation followed by completion with the same UUID and matching hash. To request reconciliation explicitly, enter `{"type":"resume","transferId":"<transfer-UUID>"}`. To cancel an incomplete transfer, enter `{"type":"cancel","transferId":"<transfer-UUID>"}`; its receiving partial disappears while its source remains. Repeated tests create separate UUID-prefixed final files instead of overwriting previous results.
 
-Phase 4 uses the TypeScript integration client. React Native remains Phase 8; real-phone validation, native Linux Clipboard Sync, and real Linux File Transfer verification remain open for Phase 9.
+Phase 4 uploads, downloads, hash comparison, cancellation, restart-resume, and Clipboard Sync during transfer were verified locally on Windows. React Native remains Phase 8; real-phone validation, native Linux Clipboard Sync, and real Linux File Transfer verification remain open for Phase 9.
+
+## App Launcher
+
+The service registers `launcher.list` and `launcher.launch`. Discovery starts only when requested. Both commands require the live paired session and use the existing version 1 envelope; payloads cannot carry credentials, filesystem paths, URLs, arguments, or shell commands. There are no scenes, custom commands, icons, or grid settings in this phase.
+
+### Discovery and Native Activation
+
+Windows lists current-user Start menu registrations through `Get-StartApps` and Windows Shell's AppsFolder. Unregistered portable executables do not appear. PowerShell runs hidden in an STA thread; selected registration data travels through stdin as JSON and is never interpolated into script text. The helper rechecks the registration, then waits for Orbit to recheck the connection/session before invoking the Shell `open` verb. Orbit does not request elevation or bypass an OS prompt. Run the service in the signed-in user's interactive desktop session. See [Microsoft's registration documentation](https://learn.microsoft.com/en-us/windows/configuration/store/find-aumid).
+
+Linux reads `applications/` under `XDG_DATA_HOME` (default `~/.local/share`) and the absolute directories in `XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`). It respects desktop-file ID precedence, `Hidden`, `NoDisplay`, `OnlyShowIn`, `NotShowIn`, `TryExec`, localized names, and `Terminal=true` exclusions. Only `Type=Application` entries are eligible. Hidden or invalid user overrides mask lower-priority registrations. Ambiguous duplicate IDs in one root are omitted. File symlinks are resolved and fingerprinted to support exported application registrations; directory symlinks are not traversed. See the [Desktop Entry specification](https://specifications.freedesktop.org/desktop-entry/latest-single/).
+
+Linux requires `gio` with its `launch` subcommand, plus access to the active graphical session (`DISPLAY` or `WAYLAND_DISPLAY`, and the session bus where required by the application). Check `gio version` and `gio help launch` locally. GIO handles the selected registration's Exec/activation semantics; Orbit does not expand an Exec string or invoke a command shell. Missing tools/session access return `LAUNCHER_UNAVAILABLE`, with no alternate launcher fallback. No npm dependencies were added.
+
+### Launcher Protocol
+
+| Command | Payload | Successful result |
+| :--- | :--- | :--- |
+| `launcher.list` | `{ "cursor": "<optional continuation>" }`, or `{}` for a fresh catalog | `{ "catalogRevision": "<UUID>", "apps": [{ "appId": "<opaque ID>", "name": "App name" }], "nextCursor": "<continuation or null>" }` |
+| `launcher.launch` | `{ "appId": "<opaque ID>", "catalogRevision": "<UUID>" }` | `{ "status": "requested" }` |
+
+Each page contains at most 32 apps, with a maximum catalog of 2,048. Names are bounded to 256 UTF-8 bytes and contain no control characters. Cursors identify a revision and page offset; use the returned value unchanged. A fresh list and each launch re-enumerate registrations. Changes invalidate the revision; `LAUNCHER_STALE_CATALOG` means list again and select from the new result. Continuation pages refer to the in-memory snapshot, with another revalidation before activation.
+
+Opaque IDs are derived with a service-instance secret and reveal no native path or AppID. They remain stable while a registration's identity and service instance remain unchanged; restart requires a fresh list. The catalog and secret are memory-only. The native adapter checks the selected registration again before activation, and Orbit rechecks authorization immediately before handing off to the OS.
+
+`requested` means the native activation request returned successfully; it does not prove a visible window opened or gained focus. An application may reuse an existing window, show an OS prompt, or fail after activation. The OS handoff is not transactional: a registration can change after the final check, and a disconnect after handoff cannot undo activation. Interrupted or timed-out launches have an unknown outcome and are never replayed automatically, including after session renewal. Inspect the desktop before deciding whether to launch again.
+
+Other safe errors are `LAUNCHER_NOT_FOUND`, `LAUNCHER_UNAVAILABLE`, `LAUNCHER_LIMIT`, and `LAUNCHER_UNKNOWN_OUTCOME`. Native stderr and exceptions are never returned. Activity Log contains only the existing command metadata and outcome; no app names, native IDs, paths, or arguments are logged.
+
+Native helpers have an eight-second deadline and 2 MiB output cap. The integration client allows 20 seconds for a launcher command because launch includes discovery and activation checks. Native work is serialized service-wide; overlapping launcher operations return `BUSY`. The shared socket's other commands wait in its bounded online scheduler during a launcher request. Linux additionally bounds scans to 8,192 directory items, eight nested directory levels, and 64 KiB per desktop entry. Exceeding the scan/catalog bounds fails explicitly rather than returning a silently truncated catalog.
+
+### Test App Launcher Locally
+
+From `desktop/`, run:
+
+```powershell
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run test:lan
+```
+
+Use the existing service identity and pairing. Start the service in one terminal with `npm.cmd start`; in another run:
+
+```powershell
+npm.cmd run client -- launcher
+```
+
+In the running client, enter:
+
+```json
+{"type":"list"}
+```
+
+Wait for `App catalog ready`, then choose a harmless installed app from the displayed names and copy its opaque `appId`:
+
+```json
+{"type":"launch","appId":"<ID from the list>"}
+```
+
+Expect `Launch requested` and verify the app on the desktop. Launch an ordinary desktop app and, on Windows, a Store app if one is available. App names/IDs are shown for selection in this harness, not written to Activity Log. Enter `quit` to stop the client. On Linux use `npm` instead of `npm.cmd` and run in the active desktop session.
+
+To check coexistence, run `npm.cmd run client -- launcher --clipboard`, wait for `Clipboard Sync: active`, copy new plain text between two desktops, and request a launch. A native launcher command may delay queued clipboard commands for several seconds. File Transfer coexistence is covered by the WSS integration test using synthetic activation.
+
+After installing/removing an app or editing a test registration, try an old selection: expect `LAUNCHER_STALE_CATALOG`; enter `list` again. After service restart or automatic session renewal, list again before selecting an app. Disconnect during a launch and confirm reconnection does not repeat it; inspect the desktop for an uncertain first outcome.
+
+Read-only Windows discovery and native preparation can be checked without opening apps; successful visible activation still requires the manual check above. Native Linux App Launcher, Clipboard Sync, and File Transfer remain open verification items for Phase 9. Icons/grid customization and Orbit Mobile remain Phase 8.
 
 ## Security & Activity Log
 

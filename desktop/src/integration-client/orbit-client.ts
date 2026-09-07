@@ -13,6 +13,8 @@ import { pairedDesktopSchema, type PairedDesktop } from './paired-desktop.js';
 const RETRY_BASE_MS = 500;
 const RETRY_MAX_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 10_000;
+// Launch revalidates discovery and activation through two native helpers, each bounded to eight seconds.
+const LAUNCHER_COMMAND_TIMEOUT_MS = 20_000;
 export const RENEW_AFTER_COMMANDS = 3_000;
 const MAX_ONLINE_COMMANDS = 16;
 const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),
@@ -24,6 +26,7 @@ const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('
       'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED',
       'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA',
       'FILE_OFFSET', 'FILE_INTEGRITY', 'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
+      'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_UNKNOWN_OUTCOME',
     ]) }) }),
   ]) });
 const eventSchema = z.strictObject({ version: z.literal(1), type: z.literal('event'), requestId: z.null(),
@@ -89,7 +92,7 @@ export class OrbitClient extends EventEmitter {
       const timer = setTimeout(() => {
         this.failPending();
         this.socket?.terminate();
-      }, COMMAND_TIMEOUT_MS);
+      }, type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS : COMMAND_TIMEOUT_MS);
       this.pending = { id: requestId, resolve, reject, timer };
       this.submitted++;
       this.socket!.send(message, error => { if (error) this.failPending(); });
