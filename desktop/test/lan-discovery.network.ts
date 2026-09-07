@@ -1,6 +1,6 @@
 /** Exercises actual multicast discovery and cold pairing; depends on LAN multicast access; does not replace real-phone validation. */
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -15,6 +15,8 @@ import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { MemoryClipboard, waitForClipboard } from './clipboard-helpers.js';
 import { ClipboardClient } from '../src/integration-client/clipboard-client.js';
+import { FileClient } from '../src/integration-client/file-client.js';
+import { privateDirectory } from '../src/security-pairing/private-directory.js';
 
 test('mDNS public certificate discovery bootstraps pinned pairing and authenticated WSS', { timeout: 25_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-mdns-'));
@@ -24,6 +26,7 @@ test('mDNS public certificate discovery bootstraps pinned pairing and authentica
     clipboard: { createAdapter: () => desktopClipboard, pollMs: 10 } });
   let client: OrbitClient | undefined;
   let clipboard: ClipboardClient | undefined;
+  let files: FileClient | undefined;
   try {
     const qr = service.pairing.open();
     const hint = await discoverDesktop(qr);
@@ -42,8 +45,17 @@ test('mDNS public certificate discovery bootstraps pinned pairing and authentica
     desktopClipboard.value = { kind: 'text', text: 'synthetic desktop response over discovered WSS' };
     await waitForClipboard(() => localClipboard.writes.length === 1);
     assert.deepEqual(localClipboard.value, desktopClipboard.value);
+    files = new FileClient(client, privateDirectory(join(root, 'file-client')), paired.desktopServiceId);
+    const source = join(root, 'synthetic-lan.bin'); const bytes = Buffer.alloc(70_001, 83); writeFileSync(source, bytes);
+    const upload = await files.upload(source);
+    await waitForClipboard(() => files!.store.records.get(upload)?.state === 'completed');
+    const offer = await service.files.offerLocal(source, paired.deviceId);
+    await files.download(offer.transferId);
+    await waitForClipboard(() => files!.store.records.get(offer.transferId)?.state === 'completed');
+    assert.deepEqual(readFileSync(files.store.paths(files.store.records.get(offer.transferId)!).destination), bytes);
   } finally {
     client?.stop();
+    await files?.stop();
     await clipboard?.stop();
     await service.stop();
     rmSync(root, { recursive: true, force: true });

@@ -13,6 +13,8 @@ import { pairedDesktopSchema, type PairedDesktop } from './paired-desktop.js';
 const RETRY_BASE_MS = 500;
 const RETRY_MAX_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 10_000;
+export const RENEW_AFTER_COMMANDS = 3_000;
+const MAX_ONLINE_COMMANDS = 16;
 const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),
   requestId: z.string().regex(IDENTIFIER_PATTERN).nullable(), payload: z.union([
     z.strictObject({ ok: z.literal(true), result: z.unknown() }),
@@ -20,6 +22,8 @@ const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('
       'INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'UNKNOWN_COMMAND',
       'INVALID_PAYLOAD', 'BIOMETRIC_REQUIRED', 'COMMAND_FAILED', 'DUPLICATE_REQUEST', 'BUSY',
       'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED',
+      'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA',
+      'FILE_OFFSET', 'FILE_INTEGRITY', 'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
     ]) }) }),
   ]) });
 const eventSchema = z.strictObject({ version: z.literal(1), type: z.literal('event'), requestId: z.null(),
@@ -32,6 +36,10 @@ export class OrbitClient extends EventEmitter {
   private stopped = true;
   private started = false;
   private attempt = 0;
+  private submitted = 0;
+  private draining = false;
+  private readonly queue: { type: string; payload: JsonValue; socket: WebSocket;
+    resolve: (response: ResponseMessage) => void; reject: (error: Error) => void }[] = [];
   private abort = new AbortController();
   private pending?: { id: string; resolve: (response: ResponseMessage) => void;
     reject: (error: Error) => void; timer: NodeJS.Timeout };
@@ -60,12 +68,17 @@ export class OrbitClient extends EventEmitter {
     this.socket?.terminate();
     this.socket = undefined;
     this.failPending();
+    this.failQueue();
     if (wasRunning) this.emit('status', 'stopped');
   }
 
   command(type: string, payload: JsonValue): Promise<ResponseMessage> {
     if (!this.connected) return Promise.reject(new Error('Client is disconnected; command was not sent'));
     if (this.pending) return Promise.reject(new Error('A command is already pending'));
+    if (this.submitted >= RENEW_AFTER_COMMANDS) {
+      void this.reconnect();
+      return Promise.reject(new Error('Session renewing; command was not sent'));
+    }
     if (!COMMAND_PATTERN.test(type) || type.length > 64 || type.startsWith('session.')) {
       return Promise.reject(new Error('Invalid feature command'));
     }
@@ -78,8 +91,31 @@ export class OrbitClient extends EventEmitter {
         this.socket?.terminate();
       }, COMMAND_TIMEOUT_MS);
       this.pending = { id: requestId, resolve, reject, timer };
+      this.submitted++;
       this.socket!.send(message, error => { if (error) this.failPending(); });
     });
+  }
+
+  /** Fair, bounded arbitration on the current live socket; disconnect discards unsent requests. */
+  scheduledCommand(type: string, payload: JsonValue): Promise<ResponseMessage> {
+    if (!this.connected || this.queue.length >= MAX_ONLINE_COMMANDS) return Promise.reject(new Error('No live command slot'));
+    return new Promise((resolve, reject) => {
+      this.queue.push({ type, payload, socket: this.socket!, resolve, reject });
+      this.drain();
+    });
+  }
+  private drain(): void {
+    if (this.draining || this.pending || !this.queue.length) return;
+    const entry = this.queue.shift()!;
+    if (!this.connected || entry.socket !== this.socket) { entry.reject(new Error('Command was not sent')); this.drain(); return; }
+    this.draining = true;
+    void this.command(entry.type, entry.payload).then(entry.resolve, entry.reject).finally(() => {
+      this.draining = false;
+      setImmediate(() => this.drain());
+    });
+  }
+  private failQueue(): void {
+    for (const entry of this.queue.splice(0)) entry.reject(new Error('Connection changed; queued command was not sent'));
   }
 
   private async establish(): Promise<void> {
@@ -106,6 +142,7 @@ export class OrbitClient extends EventEmitter {
     if (this.stopped) { socket.terminate(); return; }
     if (socket.readyState !== WebSocket.OPEN) throw new Error('Encrypted channel closed during setup');
     this.socket = socket;
+    this.submitted = 0;
     this.attempt = 0;
     socket.on('message', (data, binary) => {
       if (socket !== this.socket) return;
@@ -120,6 +157,7 @@ export class OrbitClient extends EventEmitter {
           this.pending = undefined;
           clearTimeout(pending.timer);
           pending.resolve(response as ResponseMessage);
+          setImmediate(() => this.drain());
         }
       } catch { socket.terminate(); }
     });
@@ -127,6 +165,7 @@ export class OrbitClient extends EventEmitter {
       if (socket !== this.socket) return;
       this.socket = undefined;
       this.failPending();
+      this.failQueue();
       if (!this.stopped) { this.emit('status', 'disconnected'); this.scheduleRetry(); }
     });
     clearTimeout(this.timer);
@@ -137,9 +176,11 @@ export class OrbitClient extends EventEmitter {
 
   private async reconnect(): Promise<void> {
     if (this.stopped) return;
+    clearTimeout(this.timer);
     const previous = this.socket;
     this.socket = undefined;
     this.failPending();
+    this.failQueue();
     previous?.terminate();
     this.emit('status', 'reconnecting');
     try { await this.establish(); }

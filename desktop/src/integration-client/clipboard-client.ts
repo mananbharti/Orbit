@@ -8,7 +8,7 @@ import type { OrbitClient } from './orbit-client.js';
 
 interface Subscription { subscriptionId: string; revision: number; fingerprint: string }
 type Change = ReturnType<typeof clipboardChangedSchema.parse>;
-type ClipboardChannel = Pick<OrbitClient, 'connected' | 'command' | 'stop'> & Pick<EventEmitter, 'on' | 'off'>;
+type ClipboardChannel = Pick<OrbitClient, 'connected' | 'command' | 'stop'> & Partial<Pick<OrbitClient, 'scheduledCommand'>> & Pick<EventEmitter, 'on' | 'off'>;
 export type ClipboardClientStatus = 'active' | 'disconnected' | 'sent' | 'received' | 'conflict'
   | 'unsupported' | 'oversized' | 'unavailable' | 'unknown-outcome' | 'stopped';
 
@@ -81,7 +81,7 @@ export class ClipboardClient extends EventEmitter {
       if (!this.current(generation)) return;
       this.commandPending = true;
       let response;
-      try { response = await this.client.command('clipboard.subscribe', {}); }
+      try { response = await this.command('clipboard.subscribe', {}); }
       finally { this.commandPending = false; }
       if (!this.current(generation)) return;
       if (!response.payload.ok) { this.disable(); return; }
@@ -140,7 +140,7 @@ export class ClipboardClient extends EventEmitter {
     let response;
     this.commandPending = true;
     try {
-      response = await this.client.command('clipboard.write', { subscriptionId: subscription.subscriptionId,
+      response = await this.command('clipboard.write', { subscriptionId: subscription.subscriptionId,
         baseRevision: revisionBeforeRead, text: local.text });
     } catch {
       if (this.current(generation)) this.status('unknown-outcome');
@@ -180,9 +180,12 @@ export class ClipboardClient extends EventEmitter {
   }
   private async unsubscribe(subscriptionId: string): Promise<void> {
     try {
-      const response = await this.client.command('clipboard.unsubscribe', { subscriptionId });
+      const response = await this.command('clipboard.unsubscribe', { subscriptionId });
       if (!response.payload.ok && response.payload.error.code !== 'CLIPBOARD_NOT_SUBSCRIBED') this.client.stop();
     } catch { this.client.stop(); }
   }
   private status(status: ClipboardClientStatus): void { this.emit('status', status); }
+  private command(type: string, payload: import('../protocol/messages.js').JsonValue) {
+    return this.client.scheduledCommand ? this.client.scheduledCommand(type, payload) : this.client.command(type, payload);
+  }
 }

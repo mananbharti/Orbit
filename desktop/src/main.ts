@@ -1,4 +1,4 @@
-/** Runs Orbit Desktop and explicit local pairing controls; depends on the service and QR renderer; never prints credentials or runs features. */
+/** Runs Orbit Desktop with local pairing and file-selection controls; depends on the service and QR renderer; never prints credentials or accepts remote source paths. */
 import { createInterface } from 'node:readline';
 import { readConfig } from './config.js';
 import { startDesktop } from './desktop-service.js';
@@ -45,6 +45,15 @@ async function main(): Promise<void> {
   input.on('line', line => {
     if (line.trim() === 'pair') void open();
     if (line.trim() === 'quit') stopSafely();
+    if (line.trim().startsWith('{')) {
+      try {
+        const value: unknown = JSON.parse(line);
+        if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'file.offer'
+          || !('deviceId' in value) || typeof value.deviceId !== 'string' || !('path' in value) || typeof value.path !== 'string') throw new Error('Invalid local offer');
+        void service.files.offerLocal(value.path, value.deviceId).then(manifest => console.info(`File offered: ${manifest.transferId}`))
+          .catch(() => console.error('Local file offer failed. Check device ID, selected file, and transfer limits.'));
+      } catch { console.error('Invalid local file offer command.'); }
+    }
   });
   process.once('SIGINT', stopSafely);
   process.once('SIGTERM', stopSafely);

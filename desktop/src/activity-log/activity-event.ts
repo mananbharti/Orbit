@@ -6,7 +6,7 @@ export interface ActivityEvent {
     | 'session.issued' | 'session.refreshed' | 'connection.opened' | 'connection.closed'
     | 'connection.error' | 'connection.timeout' | 'authentication.rejected'
     | 'message.rejected' | 'command.completed' | 'service.started' | 'service.stopped' | 'service.error'
-    | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable';
+    | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable' | 'file.state';
   deviceId?: string;
   sessionId?: string;
   requestId?: string;

@@ -29,5 +29,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   const displayName = env.ORBIT_DISPLAY_NAME ?? hostname();
   if (!displayName.length || displayName.length > 64 || /[\x00-\x1f\x7f]/.test(displayName)) throw new Error('Invalid display name');
-  return { host, port, displayName, directory: resolve(env.ORBIT_DATA_DIR ?? '.local/service') };
+  return { host, port, displayName, directory: resolve(env.ORBIT_DATA_DIR ?? '.local/service'),
+    inbox: env.ORBIT_RECEIVE_DIR ? resolve(env.ORBIT_RECEIVE_DIR) : undefined };
 }

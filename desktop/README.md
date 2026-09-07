@@ -2,7 +2,7 @@
 
 The Node.js + TypeScript background service for Orbit. Phases 1–2 provide the **Command Router**, **WebSocket** encrypted command channel, **QR Code Pairing**, durable device credentials, automatic session renewal, mDNS/Bonjour discovery, and an in-memory **Activity Log**. A TypeScript integration client exercises the channel while Orbit Mobile remains a later phase.
 
-Phase 3 adds **Clipboard Sync**: bidirectional Unicode plain text, up to 8 KiB in UTF-8, through authenticated connection-scoped subscriptions. Windows and Linux adapters are wired into the service and TypeScript integration client. File Transfer, App Launcher, Input Simulation, Power & Session, and Orbit Mobile remain later phases. The root [README](../README.md) remains the product scope reference.
+Phase 3 adds **Clipboard Sync**: bidirectional Unicode plain text, up to 8 KiB in UTF-8, through authenticated connection-scoped subscriptions. Windows and Linux adapters are wired into the service and TypeScript integration client. Phase 4 adds **File Transfer**: authenticated uploads and explicitly accepted downloads, chunk integrity checks, durable checkpoints, and resume after reconnect or restart. App Launcher, Input Simulation, Power & Session, and Orbit Mobile remain later phases. The root [README](../README.md) remains the product scope reference.
 
 ## Test the Module
 
@@ -20,7 +20,9 @@ In PowerShell, use `npm.cmd` if local execution policy blocks `npm.ps1`.
 
 The default suite generates temporary self-signed certificates and device credentials, runs real WSS servers on loopback, and removes its temporary files afterward. It covers certificate pinning, one-time enrollment, persistence, renewal, malformed messages, biometric gating, events, and dropped connections. Clipboard tests use synthetic OS adapters to verify both directions, connection isolation, stale-write rejection, echo suppression, cleanup, and resubscription without replay. The default suite does not touch the OS clipboard, simulate input, or change power state.
 
-`test:lan` additionally exercises real mDNS multicast discovery followed by pinned HTTPS pairing, authenticated WSS, and bidirectional Clipboard Sync with synthetic OS adapters. It needs multicast access on the host; a sandbox or firewall blocking UDP 5353 causes a failure, not a skipped test. These are desktop/Node tests, not real-phone validation.
+File Transfer tests cover chunk conflicts, whole-file integrity, lease and ownership isolation, destination collisions, changed sources, cancellation, authorization loss during verification, quotas, expiry, restart recovery, and renewal at 3,000 commands. All files are synthetic and temporary.
+
+`test:lan` additionally exercises real mDNS multicast discovery followed by pinned HTTPS pairing, authenticated WSS, bidirectional Clipboard Sync with synthetic OS adapters, and uploads/downloads with synthetic files. It needs multicast access on the host; a sandbox or firewall blocking UDP 5353 causes a failure, not a skipped test. These are desktop/Node tests, not real-phone validation.
 
 Approved runtime dependencies are `ws` (WebSocket), `zod` (boundary validation), `selfsigned` (certificate generation), `qrcode` (local SVG rendering), and `bonjour-service` (mDNS). Node supplies HTTPS, TLS, crypto, and the test runner. TypeScript and type definitions are development dependencies. Versions are pinned in `package-lock.json`.
 
@@ -72,7 +74,7 @@ Phase 1's `ORBIT_TLS_CERT`, `ORBIT_TLS_KEY`, and `ORBIT_CREDENTIAL_STORE` overri
 3. Send bodyless `POST /v1/pair` over pinned HTTPS with `Authorization: Bearer <one-time-pairing-token>`. Success returns `version`, `desktopServiceId`, `deviceId`, and a durable `credential`. Invalid/expired/reused invitations return 401. A storage failure returns 503 and consumes the invitation; request a new local QR rather than retrying redemption.
 4. Send bodyless `POST /v1/session` over pinned HTTPS with `Authorization: Bearer <durable-device-credential>`. Success returns `version`, `deviceId`, `sessionId`, `expiresAt`, and `sessionToken`. Responses use `Cache-Control: no-store`.
 5. Connect to WSS with `Authorization: Bearer <session-token>`. Every command uses this verified connection identity. Credentials/tokens are never accepted in URLs or feature payloads. The old `session.refresh` command is rejected.
-6. At 80% of the token's lifetime, the integration client automatically exchanges its durable credential and opens a replacement WSS connection with the new Authorization header. A disconnect follows bounded exponential backoff with jitter (500 ms base, 30 s cap). Failed authentication stops retries and requires explicit recovery. No commands are queued or replayed. In-flight commands interrupted by renewal/disconnection reject with an unknown outcome.
+6. At 80% of the token's lifetime, or before sending another command after 3,000 submissions, the integration client automatically exchanges its durable credential and opens a replacement WSS connection with the new Authorization header. A disconnect follows bounded exponential backoff with jitter (500 ms base, 30 s cap). Failed authentication stops retries and requires explicit recovery. A bounded queue of 16 online requests lets Clipboard Sync and File Transfer share a socket fairly. Every queued request belongs to that socket and is discarded if the connection changes; no offline queue or command replay exists. In-flight commands interrupted by renewal/disconnection reject with an unknown outcome. File Transfer resumes by reconciling durable checkpoints.
 
 TLS chain verification stays enabled. The public certificate that matches the QR fingerprint is the trust anchor, and each connection checks its stable service identity and fingerprint again. A changed discovery endpoint never changes the pin. React Native equivalents remain Phase 8.
 
@@ -140,7 +142,7 @@ Run this on each Windows/Linux desktop from `desktop/`. **It replaces the curren
 npm.cmd run test:clipboard:native
 ```
 
-On Linux use `npm run test:clipboard:native` in the active graphical session. Native Windows writes and Linux desktop behavior require local verification; passing synthetic adapter tests does not verify those OS integrations.
+On Linux use `npm run test:clipboard:native` in the active graphical session. Phase 3 Windows native writes and bidirectional sync were verified locally. **Linux Clipboard Sync remains unverified because no Linux machine was available.** Keep this as an open Phase 9 integration item; passing synthetic adapter tests does not verify native Linux behavior.
 
 For live bidirectional testing, use two separate Windows/Linux desktops so they have independent OS clipboards. Start Orbit Desktop on one machine, bound to its private IPv4 address. Pair the other machine's integration client using a locally transferred, still-valid private pairing JSON file, as in the pairing instructions above. Then run on the client machine:
 
@@ -159,6 +161,105 @@ On Linux use `npm run client -- clipboard`. Wait for `Clipboard Sync: active` be
 
 The same-machine service/client setup remains useful for pairing and command tests but shares one OS clipboard, so it cannot prove independent bidirectional native sync. React Native and real-phone validation remain Phases 8 and 9.
 
+## File Transfer
+
+Files use the same paired WSS channel and version 1 envelope. Authentication comes from the live connection/session, never a payload credential. An authenticated paired device may upload into the dedicated desktop inbox. Downloads require a file selected locally in the desktop terminal, addressed to one paired device, and explicitly accepted by that client. There is no remote path request, filesystem browsing, automatic opening, or execution.
+
+### File Protocol
+
+The manifest is `{ transferId, direction, name, sizeBytes, sha256, chunkBytes }`: a UUID, `to-desktop` or `to-client`, a plain filename, integer byte length, lowercase hexadecimal SHA-256 of the whole file, and exactly `32768`. Names cannot contain paths, reserved Windows names, control characters, or trailing dots/spaces, and are limited to 200 UTF-8 bytes. UUIDs are normalized to lowercase. Payloads are strict Zod objects.
+
+Each decoded chunk is 32 KiB, except the final chunk, which may be shorter. Empty files have no chunks. `dataBase64` must be canonical base64; offsets are sequential, zero-based byte offsets at chunk boundaries. Chunk and whole-file hashes must both match. Base64 chunks fit the existing 64 KiB envelope.
+
+In the table, `ref` means `{ transferId }`, `lease` means `{ transferId, leaseId }`, and `status` means `{ manifest, state, nextOffset, leaseId?, error? }`. `nextOffset` is the durable acknowledged byte count; errors contain only a safe `FILE_*` code. The twelve commands below are the complete approved list (previously described as “ten”).
+
+| Command | Payload | Successful result |
+| :--- | :--- | :--- |
+| `file.subscribe` | `{}` | `{ subscriptionId }`; future local offers only, no initial replay |
+| `file.unsubscribe` | `{ subscriptionId }` | `{ unsubscribed: true }` |
+| `file.offers` | `{ cursor? }` | `{ offers: Manifest[], nextCursor: UUID or null }`; owned pending downloads, at most 16 per page |
+| `file.offer` | Upload manifest | `status`; idempotent for the same owner, ID, and manifest |
+| `file.accept` | `ref` | `status`; accepts a download with an empty receiver checkpoint |
+| `file.status` | `ref` | `status`; also returns retained terminal receipts |
+| `file.resume` | `{ transferId, checkpoint? }` | `status`; creates a fresh connection-bound lease |
+| `file.chunk` | `{ ...lease, offset, dataBase64, sha256 }` | `{ transferId, nextOffset, state }`; upload checkpoint after file flush and metadata save |
+| `file.read` | `{ ...lease, offset }` | `{ transferId, offset, dataBase64, sha256 }`; one download chunk |
+| `file.ack` | `{ ...lease, nextOffset, sha256 }` | `{ transferId, nextOffset, state }`; receiver confirms a durably stored download chunk |
+| `file.finish` | `lease` | `status`; starts final verification, then poll status for the terminal receipt |
+| `file.cancel` | `ref` | `status`; removes incomplete receiving data, preserves source and completed files |
+
+Events use the existing event envelope. `file.offered` contains `{ subscriptionId, manifest }` and reaches only subscribed sockets of the selected paired device. `file.progress` contains `{ transferId, state, committedBytes, sizeBytes }` and reaches the exact live lease connection. Progress events are limited to four per second, with immediate state transitions; command responses always carry the current checkpoint. Neither event is persisted or replayed.
+
+The normal state path is `offered → transferring ⇄ paused → verifying → completed`; `cancelled`, `failed`, and `expired` are terminal. Download acceptance/resume also uses `verifying` while checking the selected source and receiver prefix, then becomes `transferring`. Disconnect invalidates the lease and pauses incomplete work. A new lease cannot be used by an old socket or another paired device. Final verification rechecks authorization before publishing a received file.
+
+Upload resume omits `checkpoint` and uses the desktop's durable offset. Download resume requires `{ receivedBytes, prefixSha256 }`, calculated from the client's durable partial file. The desktop verifies that prefix against its selected source, then reconciles its acknowledgement to the receiver's offset. Bytes written after the last durable checkpoint are truncated on restart. A source that no longer matches its manifest fails verification. Matching repeated chunks are acknowledged; conflicting duplicates fail. A lost final response is recovered through `file.status`, without retransmitting a completed upload or needing its original source.
+
+### Storage and Limits
+
+The desktop inbox defaults to `.local/service/received`; the integration client's inbox is `.local/client/received`. `ORBIT_RECEIVE_DIR` can select a dedicated owner-only desktop inbox before startup. Keep it on a filesystem that supports hard links (for example NTFS or a normal Linux filesystem); publishing uses an atomic link that refuses to overwrite an existing destination. Unsupported filesystems fail with `FILE_IO`; there is no overwrite fallback.
+
+Final files are named `<transferId>-<name>`. Incomplete receiving files are `.<transferId>.part` in the same inbox; strict JSON checkpoints live in the private `transfers/` directory. The checkpoints contain transfer metadata and, for locally selected sources, their local path. These are transfer state, not Activity Log entries. Data directories must remain private. Run only one integration client against each client directory.
+
+Limits are 1 GiB per file, one nonterminal transfer per paired device, four nonterminal transfers service-wide, and 4 GiB reserved for incomplete receiving data. Offered and paused transfers count toward these limits. Reservations use the declared file size; orphan partial bytes also count until cleanup. Completed files are outside the incomplete-data quota and remain in the inbox until the user manages them.
+
+Incomplete transfers expire after 24 hours without checkpoint activity. Terminal receipts remain for 24 hours after their terminal transition. Cleanup runs while the service/client is open and on startup; it removes managed incomplete files and expired checkpoints, never source files or completed inbox files. Orphan partials from a crash before checkpoint creation expire after 24 hours too. Activity Log remains in memory and contains no filenames, paths, hashes, or file contents.
+
+### Test File Transfer Locally
+
+Run the automated checks from `desktop/`:
+
+```powershell
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run test:lan
+```
+
+Start the service and pair once using the instructions above. With an existing pairing, simply run `npm.cmd start` in the service terminal. In the client terminal run:
+
+```powershell
+npm.cmd run client -- files
+```
+
+This mode does not access the native clipboard. To exercise both features on separate desktop machines, use `npm.cmd run client -- files --clipboard`. The client prints its paired device ID and metadata-only transfer status. On Linux use `npm` instead of `npm.cmd`.
+
+Create a synthetic file in a third PowerShell terminal, from `desktop/`:
+
+```powershell
+[System.IO.File]::WriteAllBytes("$PWD/.local/file-transfer-test.bin", (New-Object byte[] 16777217))
+Get-FileHash .local/file-transfer-test.bin -Algorithm SHA256
+```
+
+In the running client, enter the following JSON (the path is local to that client; relative paths resolve from `desktop/`):
+
+```json
+{"type":"upload","path":".local/file-transfer-test.bin"}
+```
+
+Wait for `completed`, then compare hashes in the service terminal's directory using a separate shell:
+
+```powershell
+Get-FileHash .local/service/received/*-file-transfer-test.bin -Algorithm SHA256
+```
+
+For a download, select the file in the running **desktop service** terminal. Replace the device ID with the one printed by the files client:
+
+```json
+{"type":"file.offer","deviceId":"<paired-device-UUID>","path":".local/file-transfer-test.bin"}
+```
+
+The service prints a transfer UUID. In the running **client**, list offers and explicitly accept that UUID:
+
+```json
+{"type":"offers"}
+{"type":"download","transferId":"<transfer-UUID>"}
+```
+
+After `completed`, run `Get-FileHash .local/client/received/*-file-transfer-test.bin -Algorithm SHA256` and compare with the original. For a LAN test, use each machine's own local paths and bind the service to its private IPv4 address as described above.
+
+During a larger transfer, enter `quit` in the service and restart it, or stop/restart the files client with the same private directory. Expect checkpoint reconciliation followed by completion with the same UUID and matching hash. To request reconciliation explicitly, enter `{"type":"resume","transferId":"<transfer-UUID>"}`. To cancel an incomplete transfer, enter `{"type":"cancel","transferId":"<transfer-UUID>"}`; its receiving partial disappears while its source remains. Repeated tests create separate UUID-prefixed final files instead of overwriting previous results.
+
+Phase 4 uses the TypeScript integration client. React Native remains Phase 8; real-phone validation, native Linux Clipboard Sync, and real Linux File Transfer verification remain open for Phase 9.
+
 ## Security & Activity Log
 
 - **LAN-only** — no APNs/FCM, cloud routes, analytics, or telemetry. Native requests carrying a browser Origin are rejected.
@@ -169,4 +270,4 @@ The same-machine service/client setup remains useful for pairing and command tes
 
 Operational limits are named in `src/config.ts`, `session-auth.ts`, and the transport/router modules: five-minute sessions, 30-second heartbeats, 64 KiB incoming messages, 256 KiB outbound buffering, 32 WebSocket connections, eight sessions per device, and 128 sessions total. A missed heartbeat terminates the peer. Expiry/revocation closes the socket with code `4001`; shutdown uses `1001` and a bounded close grace period. A new session beyond a device's eight-session limit invalidates its oldest session.
 
-Session issuance and upgrade attempts are limited to 60 per peer IP per minute. The router remembers up to 4,096 request IDs per session and then returns `BUSY` until the client renews its session. File Transfer will define chunk sizing below the message limit when that module is built.
+Session issuance and upgrade attempts are limited to 60 per peer IP per minute. The router remembers up to 4,096 request IDs per session and then returns `BUSY` until the client renews its session. The integration client renews proactively at 3,000 submitted commands; File Transfer reconciles checkpoints on the replacement connection.
