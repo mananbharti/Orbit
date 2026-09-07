@@ -5,7 +5,8 @@ export interface ActivityEvent {
   eventType: 'pairing.opened' | 'pairing.completed' | 'pairing.rejected' | 'discovery.error'
     | 'session.issued' | 'session.refreshed' | 'connection.opened' | 'connection.closed'
     | 'connection.error' | 'connection.timeout' | 'authentication.rejected'
-    | 'message.rejected' | 'command.completed' | 'service.started' | 'service.stopped' | 'service.error';
+    | 'message.rejected' | 'command.completed' | 'service.started' | 'service.stopped' | 'service.error'
+    | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable';
   deviceId?: string;
   sessionId?: string;
   requestId?: string;

@@ -13,11 +13,17 @@ import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
+import { MemoryClipboard, waitForClipboard } from './clipboard-helpers.js';
+import { ClipboardClient } from '../src/integration-client/clipboard-client.js';
 
 test('mDNS public certificate discovery bootstraps pinned pairing and authenticated WSS', { timeout: 25_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-mdns-'));
-  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit LAN Test' });
+  const desktopClipboard = new MemoryClipboard();
+  const localClipboard = new MemoryClipboard();
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit LAN Test',
+    clipboard: { createAdapter: () => desktopClipboard, pollMs: 10 } });
   let client: OrbitClient | undefined;
+  let clipboard: ClipboardClient | undefined;
   try {
     const qr = service.pairing.open();
     const hint = await discoverDesktop(qr);
@@ -27,8 +33,18 @@ test('mDNS public certificate discovery bootstraps pinned pairing and authentica
     await client.start();
     assert.deepEqual((await client.command('test.unregistered', null)).payload,
       { ok: false, error: { code: 'UNKNOWN_COMMAND' } });
+    clipboard = new ClipboardClient(client, localClipboard, 10);
+    let active = false;
+    clipboard.on('status', status => { if (status === 'active') active = true; });
+    await waitForClipboard(() => active);
+    localClipboard.value = { kind: 'text', text: 'synthetic clipboard over discovered WSS' };
+    await waitForClipboard(() => desktopClipboard.writes.length === 1);
+    desktopClipboard.value = { kind: 'text', text: 'synthetic desktop response over discovered WSS' };
+    await waitForClipboard(() => localClipboard.writes.length === 1);
+    assert.deepEqual(localClipboard.value, desktopClipboard.value);
   } finally {
     client?.stop();
+    await clipboard?.stop();
     await service.stop();
     rmSync(root, { recursive: true, force: true });
   }

@@ -11,10 +11,11 @@ export interface CommandHandler {
 export class CommandRegistry {
   private readonly handlers = new Map<string, CommandHandler>();
 
-  register(type: string, handler: CommandHandler): void {
+  register(type: string, handler: CommandHandler): () => void {
     if (!COMMAND_PATTERN.test(type) || type.length > 64 || type.startsWith('session.')
       || this.handlers.has(type)) throw new Error('Invalid or duplicate command registration');
     this.handlers.set(type, handler);
+    return () => { if (this.handlers.get(type) === handler) this.handlers.delete(type); };
   }
 
   get(type: string): CommandHandler | undefined { return this.handlers.get(type); }

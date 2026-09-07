@@ -4,13 +4,15 @@ import { failure, success, type CommandMessage, type ResponseMessage } from '../
 import { isSensitiveCommand, requireBiometricConfirmation, type BiometricConfirmation } from '../security-pairing/biometric-confirmation.js';
 import type { SessionAuth } from '../security-pairing/session-auth.js';
 import type { CommandRegistry } from './command-registry.js';
+import type { CommandConnection } from './command-context.js';
+import { ProtocolError } from '../protocol/errors.js';
 
 export class CommandRouter {
   private readonly requests = new Map<string, { expiresAt: number; ids: Set<string> }>();
   constructor(private readonly registry: CommandRegistry, private readonly auth: SessionAuth,
     private readonly log: ActivityLog, private readonly biometric: BiometricConfirmation = requireBiometricConfirmation) {}
 
-  async dispatch(message: CommandMessage, sessionToken: string): Promise<ResponseMessage> {
+  async dispatch(message: CommandMessage, sessionToken: string, connection?: CommandConnection): Promise<ResponseMessage> {
     const session = this.auth.authenticate(sessionToken);
     if (!session) {
       this.log.record({ severity: 'warn', eventType: 'authentication.rejected',
@@ -34,7 +36,7 @@ export class CommandRouter {
       if (!handler) response = failure(message.requestId, 'UNKNOWN_COMMAND');
       else if (!handler.validate(message.payload)) response = failure(message.requestId, 'INVALID_PAYLOAD');
       else {
-        const context = { session, requestId: message.requestId };
+        const context = { session, requestId: message.requestId, connection };
         if (isSensitiveCommand(message.type) && !await this.biometric.verify(message, context)) {
           response = failure(message.requestId, 'BIOMETRIC_REQUIRED');
         } else if (!this.auth.authenticate(sessionToken)) {
@@ -42,7 +44,7 @@ export class CommandRouter {
           response = failure(message.requestId, 'UNAUTHENTICATED');
         } else response = success(message.requestId, await handler.execute(message.payload, context));
       }
-    } catch { response = failure(message.requestId, 'COMMAND_FAILED'); }
+    } catch (error) { response = failure(message.requestId, error instanceof ProtocolError ? error.code : 'COMMAND_FAILED'); }
     this.log.record({ severity: response.payload.ok ? 'info' : 'warn', eventType: 'command.completed',
       deviceId: session.deviceId, sessionId: session.sessionId, requestId: message.requestId,
       commandType: handler ? message.type : undefined, outcome: response.payload.ok ? 'success'

@@ -19,6 +19,7 @@ const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('
     z.strictObject({ ok: z.literal(false), error: z.strictObject({ code: z.enum([
       'INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'UNKNOWN_COMMAND',
       'INVALID_PAYLOAD', 'BIOMETRIC_REQUIRED', 'COMMAND_FAILED', 'DUPLICATE_REQUEST', 'BUSY',
+      'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED',
     ]) }) }),
   ]) });
 const eventSchema = z.strictObject({ version: z.literal(1), type: z.literal('event'), requestId: z.null(),
@@ -51,6 +52,7 @@ export class OrbitClient extends EventEmitter {
   }
 
   stop(): void {
+    const wasRunning = !this.stopped;
     this.stopped = true;
     clearTimeout(this.timer);
     this.abort.abort();
@@ -58,6 +60,7 @@ export class OrbitClient extends EventEmitter {
     this.socket?.terminate();
     this.socket = undefined;
     this.failPending();
+    if (wasRunning) this.emit('status', 'stopped');
   }
 
   command(type: string, payload: JsonValue): Promise<ResponseMessage> {

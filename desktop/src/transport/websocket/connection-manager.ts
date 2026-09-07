@@ -1,5 +1,7 @@
 /** Maintains authenticated sockets and heartbeats; depends on ws, router and sessions; never retries feature commands. */
 import { WebSocket, type RawData } from 'ws';
+import { randomUUID } from 'node:crypto';
+import type { CommandConnection } from '../../command-router/command-context.js';
 import type { ActivityLog } from '../../activity-log/activity-log.js';
 import type { CommandRouter } from '../../command-router/command-router.js';
 import { HEARTBEAT_INTERVAL_MS, MAX_BUFFERED_BYTES } from '../../config.js';
@@ -14,6 +16,8 @@ interface Connection {
   session: Session;
   alive: boolean;
   busy: boolean;
+  abort: AbortController;
+  binding: CommandConnection;
   expiryTimer?: NodeJS.Timeout;
   closeTimer?: NodeJS.Timeout;
 }
@@ -31,7 +35,15 @@ export class ConnectionManager {
   get size(): number { return this.connections.size; }
 
   attach(socket: WebSocket, token: string, session: Session): void {
-    const connection: Connection = { token, session, alive: true, busy: false };
+    const abort = new AbortController();
+    const binding: CommandConnection = { id: randomUUID(), closed: abort.signal,
+      isAuthorized: () => !abort.signal.aborted && socket.readyState === WebSocket.OPEN && !!this.auth.authenticate(token),
+      publish: (eventType, data) => {
+        if (!COMMAND_PATTERN.test(eventType) || eventType.length > 64) throw new Error('Invalid event type');
+        if (binding.isAuthorized()) this.send(socket, connection,
+          { version: 1, type: 'event', requestId: null, payload: { eventType, data } });
+      } };
+    const connection: Connection = { token, session, alive: true, busy: false, abort, binding };
     this.connections.set(socket, connection);
     this.scheduleExpiry(socket, connection);
     this.record(connection, 'connection.opened', 'success');
@@ -41,6 +53,7 @@ export class ConnectionManager {
       socket.terminate();
     });
     socket.on('close', code => {
+      abort.abort();
       clearTimeout(connection.expiryTimer);
       clearTimeout(connection.closeTimer);
       this.connections.delete(socket);
@@ -93,7 +106,7 @@ export class ConnectionManager {
       return;
     }
     connection.busy = true;
-    try { this.send(socket, connection, await this.router.dispatch(message, connection.token)); }
+    try { this.send(socket, connection, await this.router.dispatch(message, connection.token, connection.binding)); }
     finally { connection.busy = false; }
   }
 
@@ -146,6 +159,7 @@ export class ConnectionManager {
 
   private close(socket: WebSocket, connection: Connection, code: number, reason: string): void {
     if (connection.closeTimer) return;
+    connection.abort.abort();
     socket.close(code, reason);
     connection.closeTimer = setTimeout(() => socket.terminate(), CLOSE_GRACE_MS);
     connection.closeTimer.unref();

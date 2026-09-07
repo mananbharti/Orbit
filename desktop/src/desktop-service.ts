@@ -1,4 +1,4 @@
-/** Composes the Phase 2 service lifecycle; depends on pairing, discovery and transport; registers no feature modules or mobile UI. */
+/** Composes the desktop lifecycle; depends on pairing, discovery, transport and Clipboard Sync; does not implement mobile UI or later feature modules. */
 import { join } from 'node:path';
 import { ActivityLog } from './activity-log/activity-log.js';
 import { CommandRegistry } from './command-router/command-registry.js';
@@ -11,19 +11,25 @@ import { PairingService } from './security-pairing/pairing-service.js';
 import { SessionAuth } from './security-pairing/session-auth.js';
 import { advertiseDesktop, type DesktopHint } from './transport/discovery/lan-discovery.js';
 import { createWebSocketTransport, type TransportOptions } from './transport/websocket/websocket-server.js';
+import { ClipboardSync } from './clipboard-sync/clipboard-sync.js';
+import { createClipboard } from './os-integration/create-clipboard.js';
+import type { ClipboardAdapter } from './os-integration/clipboard.js';
 
 export async function startDesktop(options: { directory: string; host: string; port: number; displayName: string;
-  discovery?: boolean; sessionTtlMs?: number; registry?: CommandRegistry }) {
+  discovery?: boolean; sessionTtlMs?: number; registry?: CommandRegistry;
+  clipboard?: { createAdapter: () => ClipboardAdapter; pollMs?: number } }) {
   const directory = privateDirectory(options.directory);
   const unlock = lockService(directory);
   const log = new ActivityLog();
   let transport: ReturnType<typeof createWebSocketTransport> | undefined;
   let discovery: ReturnType<typeof advertiseDesktop> | undefined;
+  let clipboard: ClipboardSync | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
     const store = new FilePairedCredentialStore(join(directory, 'credentials.json'));
     const auth = new SessionAuth(store, log, options.sessionTtlMs);
     const registry = options.registry ?? new CommandRegistry();
+    clipboard = new ClipboardSync(registry, options.clipboard?.createAdapter ?? createClipboard, log, options.clipboard?.pollMs);
     const router = new CommandRouter(registry, auth, log);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
@@ -42,13 +48,17 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
-        try { await discovery?.stop(); } finally {
-          try { await transport!.stop(); } finally { unlock(); }
+        try { await clipboard!.stop(); } finally {
+          try { await discovery?.stop(); } finally {
+            try { await transport!.stop(); } finally { unlock(); }
+          }
         }
       } };
   } catch (error) {
-    try { await discovery?.stop(); } finally {
-      try { await transport?.stop(); } finally { unlock(); }
+    try { await clipboard?.stop(); } finally {
+      try { await discovery?.stop(); } finally {
+        try { await transport?.stop(); } finally { unlock(); }
+      }
     }
     throw error;
   }

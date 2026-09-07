@@ -13,6 +13,7 @@
     "start": "npm run build && node dist/src/main.js",
     "client": "npm run build && node dist/src/integration-client/main.js",
     "test:lan": "npm run build && node --test dist/test/lan-discovery.network.js",
+    "test:clipboard:native": "npm run build && node --test dist/test/clipboard.native.js",
     "test": "npm run build && node --test dist/test/*.test.js"
   },
   "dependencies": {
