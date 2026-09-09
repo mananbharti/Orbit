@@ -27,6 +27,7 @@ const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('
       'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA',
       'FILE_OFFSET', 'FILE_INTEGRITY', 'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
       'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_UNKNOWN_OUTCOME',
+      'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE',
     ]) }) }),
   ]) });
 const eventSchema = z.strictObject({ version: z.literal(1), type: z.literal('event'), requestId: z.null(),

@@ -327,6 +327,25 @@ After installing/removing an app or editing a test registration, try an old sele
 
 Read-only Windows discovery and native preparation can be checked without opening apps; successful visible activation still requires the manual check above. Native Linux App Launcher, Clipboard Sync, and File Transfer remain open verification items for Phase 9. Icons/grid customization and Orbit Mobile remain Phase 8.
 
+## Input Simulation
+
+Phase 6 begins with the control-session guard in `src/input-simulation/control-session.ts`. This is an internal module tested with synthetic adapters. It is not registered with the Command Router or wired into the desktop service yet; there are no live `input.begin` / `input.events` commands or native input backends in this step.
+
+The guard reserves one controlling connection before awaiting biometric verification. The default verifier denies access before creating an adapter. A verified session belongs to the exact transport connection and authenticated device/session identity. Native setup begins only after verification; event batches require strictly increasing sequence numbers starting at 1 and execute one at a time. A partly applied or interrupted batch is never replayed. Keepalive and end use the existing verified control session without asking for another biometric confirmation. A replacement WSS connection requires a new control session and fresh verification.
+
+Disconnect and shutdown invalidate control immediately. Expiry and revocation are checked before operations and every 100 ms while a reservation exists. Once native setup completes, an explicit keepalive is required within five seconds; event traffic does not extend that deadline. Expired keepalives cannot resurrect control. The guard aborts pending work, waits for it to settle, releases the adapter's held inputs, and disposes its resources. Cleanup is idempotent and disposal is attempted even if release rejects.
+
+Cleanup has a five-second deadline. Failure or timeout disables further control for that guard instance until the service is restarted and records only `input.release_failed` metadata. A pending operation that settles later still runs its cleanup; it never restores control. This does not guarantee physical key release if the native process or OS hangs. The upcoming adapters must stop input after abort, bound native operations, track only their own held keys/buttons, and provide their own cleanup guarantees. Native platform verification remains outstanding.
+
+Run the guard tests from `desktop/` without generating physical input:
+
+```powershell
+npm.cmd run build
+node --test dist/test/input-control-session.test.js
+```
+
+The next Phase 6 step is native adapter implementation and failure-path testing, followed by command/service/client wiring. The production biometric hook remains default-deny; this module adds no runtime bypass.
+
 ## Security & Activity Log
 
 - **LAN-only** — no APNs/FCM, cloud routes, analytics, or telemetry. Native requests carrying a browser Origin are rejected.
