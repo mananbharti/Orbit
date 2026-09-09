@@ -17,6 +17,7 @@
     "test": "npm run build && node --test dist/test/*.test.js"
   },
   "dependencies": {
+    "@particle/dbus-next": "0.11.4",
     "bonjour-service": "1.4.4",
     "qrcode": "1.5.4",
     "selfsigned": "5.5.0",
