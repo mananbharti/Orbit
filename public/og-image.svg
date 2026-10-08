@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eff9f4"/><stop offset=".52" stop-color="#f5f8f8"/><stop offset="1" stop-color="#edf3f8"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#c8eddf" stop-opacity=".9"/><stop offset="1" stop-color="#dff1e9" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="600" cy="355" rx="500" ry="300" fill="url(#glow)"/>
+  <rect x="56" y="50" width="1088" height="530" rx="30" fill="#fff" fill-opacity=".58" stroke="#dce8e2"/>
+  <g transform="translate(102 103)" fill="none" stroke="#171c1b" stroke-width="3"><circle cx="23" cy="23" r="10" fill="#171c1b"/><ellipse cx="23" cy="23" rx="21" ry="8.5" transform="rotate(-27 23 23)"/><circle cx="38" cy="14" r="2.5" fill="#51b99d" stroke="none"/></g>
+  <text x="157" y="135" font-family="Arial,sans-serif" font-size="31" font-weight="700" letter-spacing="-2" fill="#171c1b">orbit</text>
+  <rect x="102" y="194" width="217" height="31" rx="16" fill="#fff" stroke="#dce9e3"/>
+  <circle cx="120" cy="209.5" r="4" fill="#51b99d"/>
+  <text x="133" y="213" font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#586660">LOCAL-FIRST · IN DEVELOPMENT</text>
+  <text x="102" y="319" font-family="Arial,sans-serif" font-size="93" font-weight="700" letter-spacing="-6" fill="#171c1b">Meet <tspan fill="#2b9076">Orbit.</tspan></text>
+  <text x="107" y="369" font-family="Arial,sans-serif" font-size="22" fill="#68716e">A local-first connection for phone and computer.</text>
+  <text x="107" y="403" font-family="Arial,sans-serif" font-size="17" fill="#7b8580">Open source · Desktop-first · In active development</text>
+  <g transform="translate(785 208)">
+    <ellipse cx="178" cy="169" rx="220" ry="97" fill="none" stroke="#9bcab7" stroke-opacity=".45"/>
+    <rect x="75" y="25" width="115" height="217" rx="21" fill="#202724"/>
+    <rect x="82" y="34" width="101" height="197" rx="16" fill="#fbfcfb"/>
+    <rect x="111" y="40" width="44" height="9" rx="5" fill="#202724"/>
+    <rect x="93" y="91" width="79" height="43" rx="7" fill="#f3faf6" stroke="#d7eadf"/>
+    <rect x="93" y="143" width="79" height="43" rx="7" fill="#fff" stroke="#e5ebe7"/>
+    <circle cx="106" cy="112" r="8" fill="#dfedff"/><circle cx="106" cy="164" r="8" fill="#e5f4ed"/>
+    <rect x="123" y="107" width="37" height="4" rx="2" fill="#6f7c76"/><rect x="123" y="117" width="27" height="3" rx="2" fill="#bec8c2"/>
+    <rect x="123" y="159" width="37" height="4" rx="2" fill="#6f7c76"/><rect x="123" y="169" width="27" height="3" rx="2" fill="#bec8c2"/>
+    <rect x="266" y="63" width="175" height="145" rx="12" fill="#202724"/>
+    <rect x="274" y="72" width="159" height="126" rx="7" fill="#fbfcfb"/>
+    <path d="M274 89h159" stroke="#e4e9e6"/>
+    <circle cx="284" cy="81" r="2.5" fill="#ee8d83"/><circle cx="293" cy="81" r="2.5" fill="#edc86e"/><circle cx="302" cy="81" r="2.5" fill="#75c48e"/>
+    <rect x="291" y="103" width="123" height="34" rx="6" fill="#f3faf6" stroke="#d7eadf"/>
+    <rect x="291" y="144" width="123" height="34" rx="6" fill="#fff" stroke="#e5ebe7"/>
+    <rect x="303" y="114" width="14" height="13" rx="3" fill="#dfedff"/><rect x="303" y="155" width="14" height="13" rx="3" fill="#e5f4ed"/>
+    <path d="M199 158h66" stroke="#72b99d" stroke-dasharray="4 5"/><circle cx="228" cy="158" r="10" fill="#fff" stroke="#dbe9e1"/><path d="M223 158h10m-4-4 4 4-4 4" fill="none" stroke="#2b9076" stroke-width="1.5"/>
+  </g>
+</svg>
