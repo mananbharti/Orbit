@@ -1,0 +1,27 @@
+{
+  "name": "orbit-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~54.0.0",
+    "expo-camera": "~17.0.0",
+    "expo-clipboard": "~8.0.0",
+    "expo-crypto": "~15.0.0",
+    "expo-haptics": "~15.0.0",
+    "expo-modules-core": "~3.0.0",
+    "expo-secure-store": "~15.0.0",
+    "expo-status-bar": "~3.0.0",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
+  }
+}
