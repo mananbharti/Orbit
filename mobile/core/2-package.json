@@ -1,0 +1,14 @@
+{
+  "name": "@orbit/client-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orbit phone client core: pairing, session, commands and agent tasks over an injected pinned transport",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test --test-timeout=10000 dist/test/*.test.js"
+  },
+  "dependencies": { "zod": "4.5.4" },
+  "devDependencies": { "@types/node": "24.13.3", "typescript": "7.0.2" }
+}
