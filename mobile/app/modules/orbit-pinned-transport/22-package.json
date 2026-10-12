@@ -1,0 +1,1 @@
+{ "name": "orbit-pinned-transport", "version": "0.1.0", "private": true, "description": "Certificate-pinned HTTPS and WSS for Orbit", "main": "index.js" }
