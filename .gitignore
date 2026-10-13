@@ -1,9 +1,0 @@
-node_modules/
-.next/
-out/
-desktop/dist/
-desktop/.local/
-*.tsbuildinfo
-.env
-.env.*
-!.env.example
