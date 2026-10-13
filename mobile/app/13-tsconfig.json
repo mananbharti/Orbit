@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": { "@orbit/core": ["../core/src/index.ts"], "zod": ["node_modules/zod"] }
+  },
+  "include": ["index.ts", "preview/**/*.ts", "preview/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "../core/src/**/*.ts"]
+}
