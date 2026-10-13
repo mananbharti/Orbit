@@ -1,0 +1,42 @@
+# Compiles the native pinning module inside a generated Android project.
+# Manual or weekly, and never blocks a merge: it has NOT been run yet, so treat the first result as a real finding.
+name: native-build
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: mobile/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm install --legacy-peer-deps
+      - run: npx expo prebuild --platform android --no-install
+      - run: ./gradlew :app:assembleDebug --no-daemon
+        working-directory: mobile/app/android
+  ios:
+    runs-on: macos-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: mobile/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --legacy-peer-deps
+      - run: npx expo prebuild --platform ios
+      - run: xcodebuild -workspace ios/Orbit.xcworkspace -scheme Orbit -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+        working-directory: mobile/app
