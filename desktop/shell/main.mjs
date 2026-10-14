@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { startDesktop } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'desktop-service.js')).href);
-const { pickLanAddress } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'lan-address.js')).href);
+const { pickLanAddress, defaultRouteAddress } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'lan-address.js')).href);
 const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { hostname } = await import('node:os');
 
@@ -23,7 +23,7 @@ let win; let tray; let service; let pairingTimer; let pairingUntil = 0; let stat
 let quitting = false;
 
 async function boot() {
-  const host = process.env.ORBIT_HOST || pickLanAddress();
+  const host = process.env.ORBIT_HOST || pickLanAddress(undefined, await defaultRouteAddress());
   if (!host) { state = { phase: 'offline' }; return; }
   try {
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
