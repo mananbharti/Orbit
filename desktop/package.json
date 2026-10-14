@@ -15,7 +15,9 @@
     "audit:export": "npm run build --silent && node dist/src/agent/export-audit.js",
     "test:lan": "npm run build && node --test dist/test/lan-discovery.network.js",
     "test:clipboard:native": "npm run build && node --test dist/test/clipboard.native.js",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "app": "npm run build && electron .",
+    "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@particle/dbus-next": "0.11.4",
@@ -29,6 +31,57 @@
     "@types/node": "24.13.3",
     "@types/qrcode": "1.5.6",
     "@types/ws": "8.18.1",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "main": "shell/main.mjs",
+  "author": "Orbit <hello@heyorbit.xyz>",
+  "homepage": "https://heyorbit.xyz",
+  "build": {
+    "appId": "xyz.heyorbit.desktop",
+    "productName": "Orbit",
+    "copyright": "Orbit",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/src/**",
+      "shell/**",
+      "build/tray.png",
+      "package.json",
+      "!dist/test/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Orbit",
+      "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "maintainer": "Orbit <hello@heyorbit.xyz>"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png"
+    }
   }
 }

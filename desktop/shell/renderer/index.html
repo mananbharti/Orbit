@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="glow g1"></div><div class="glow g2"></div>
+<aside class="side">
+  <div class="brand"><span class="mark"></span><span>Orbit</span></div>
+  <nav>
+    <button class="nav on" data-tab="home">Home</button>
+    <button class="nav" data-tab="devices">Devices</button>
+    <button class="nav" data-tab="activity">Activity</button>
+    <button class="nav" data-tab="settings">Settings</button>
+  </nav>
+  <div class="status"><span id="dot" class="dot"></span><span id="status-text">Starting</span></div>
+</aside>
+<main>
+  <section id="home" class="tab on">
+    <h1 id="title">Connect your phone</h1>
+    <p class="sub" id="subtitle">Open Orbit on your phone, tap Pair, and scan the code. Both devices must be on the same Wi-Fi.</p>
+    <div class="card hero">
+      <div class="qrbox" id="qrbox"><div class="qr-empty">Pairing is closed</div></div>
+      <div class="hero-side">
+        <div id="hero-msg" class="hero-msg">Codes work once and expire after two minutes.</div>
+        <button id="pair" class="primary">Show pairing code</button>
+        <button id="cancel" class="ghost" hidden>Close pairing</button>
+        <div class="meta" id="meta"></div>
+      </div>
+    </div>
+  </section>
+  <section id="devices" class="tab"><h1>Devices</h1><p class="sub">Phones allowed to talk to this computer.</p><div class="card list" id="device-list"></div></section>
+  <section id="activity" class="tab"><h1>Activity</h1><p class="sub">Recent events on this computer. Only metadata is kept, never contents.</p><div class="card list" id="activity-list"></div></section>
+  <section id="settings" class="tab"><h1>Settings</h1><p class="sub">Orbit runs in the background and only talks to devices you paired.</p>
+    <div class="card list"><label class="row"><span><b>Start Orbit at login</b><small>So your phone can always reach this computer.</small></span><input type="checkbox" id="login" class="switch"></label></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

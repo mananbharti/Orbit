@@ -9,3 +9,4 @@ desktop/.local/
 !.env.example
 preview-dist/
 preview-shots/
+desktop/release/

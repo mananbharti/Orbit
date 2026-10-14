@@ -1,0 +1,43 @@
+:root{--bg:#F5F5F7;--card:rgba(255,255,255,.72);--text:#1D1D1F;--sub:#6E6E73;--line:rgba(0,0,0,.08);--tint:#0071E3;--ok:#30D158;--bad:#FF453A;--glass:rgba(255,255,255,.6)}
+@media (prefers-color-scheme:dark){:root{--bg:#0B0B10;--card:rgba(32,32,40,.66);--text:#F5F5F7;--sub:#9A9AA2;--line:rgba(255,255,255,.09);--tint:#0A84FF;--glass:rgba(30,30,38,.6)}}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{display:flex;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",Inter,Roboto,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;-webkit-font-smoothing:antialiased}
+.glow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.35;pointer-events:none}
+.g1{width:420px;height:420px;background:#5E5CE6;top:-140px;right:-100px}
+.g2{width:360px;height:360px;background:#0A84FF;bottom:-160px;left:120px;opacity:.22}
+.side{position:relative;width:220px;padding:28px 14px 18px;display:flex;flex-direction:column;gap:22px;background:var(--glass);backdrop-filter:blur(30px);border-right:1px solid var(--line);-webkit-app-region:drag}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:17px;padding:0 10px;letter-spacing:-.01em}
+.mark{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0,#7AB8FF 25%,#0A84FF 60%,#5E5CE6);box-shadow:0 0 0 1px var(--line),0 4px 14px rgba(10,132,255,.45)}
+nav{display:flex;flex-direction:column;gap:2px;-webkit-app-region:no-drag}
+.nav{all:unset;cursor:pointer;padding:8px 12px;border-radius:9px;color:var(--text);font-weight:500;transition:background .15s}
+.nav:hover{background:var(--line)}.nav.on{background:var(--tint);color:#fff}
+.nav:focus-visible,button:focus-visible{outline:2px solid var(--tint);outline-offset:2px}
+.status{margin-top:auto;display:flex;gap:8px;align-items:center;padding:0 10px;color:var(--sub);font-size:12.5px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--sub)}.dot.ok{background:var(--ok);box-shadow:0 0 8px var(--ok)}.dot.bad{background:var(--bad)}
+main{position:relative;flex:1;padding:40px 48px;overflow:auto}
+.tab{display:none;animation:in .28s ease}.tab.on{display:block}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+h1{font-size:30px;letter-spacing:-.02em;font-weight:700}
+.sub{color:var(--sub);margin:6px 0 26px;max-width:520px}
+.card{background:var(--card);backdrop-filter:blur(24px);border:1px solid var(--line);border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.08)}
+.hero{display:flex;gap:36px;padding:30px;align-items:center}
+.qrbox{width:240px;height:240px;border-radius:16px;background:#fff;display:grid;place-items:center;padding:12px;flex:none;box-shadow:inset 0 0 0 1px var(--line)}
+.qrbox svg{width:100%;height:100%}.qr-empty{color:#8E8E93;text-align:center;font-size:13px}
+.hero-side{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.hero-msg{color:var(--sub);max-width:280px}
+.meta{color:var(--sub);font-size:12.5px;margin-top:6px}
+button.primary,button.ghost{all:unset;cursor:pointer;padding:10px 20px;border-radius:12px;font-weight:600;transition:transform .12s,filter .15s}
+button.primary{background:var(--tint);color:#fff;box-shadow:0 6px 18px rgba(10,132,255,.35)}
+button.ghost{background:var(--line)}
+button:hover{filter:brightness(1.08)}button:active{transform:scale(.97)}
+.list{overflow:hidden}.row{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);gap:16px}
+.row:last-child{border:0}.row small{display:block;color:var(--sub);font-size:12.5px;margin-top:2px}
+.empty{padding:36px;text-align:center;color:var(--sub)}
+.badge{font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--line);color:var(--sub)}.badge.warn{background:rgba(255,159,10,.18);color:#FF9F0A}.badge.fail{background:rgba(255,69,58,.16);color:var(--bad)}
+.link{all:unset;cursor:pointer;color:var(--bad);font-weight:550}
+.switch{appearance:none;width:44px;height:26px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;transition:background .2s;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:transform .2s}
+.switch:checked{background:var(--ok)}.switch:checked::after{transform:translateX(18px)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+[hidden]{display:none!important}
