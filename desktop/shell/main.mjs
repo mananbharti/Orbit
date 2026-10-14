@@ -1,14 +1,14 @@
 // Orbit Desktop shell: a tray + window around the existing service. Depends on Electron and the compiled service in ../dist.
 // Runs the service in-process, shows a pairing QR only when the user asks, and never exposes the service to the page except through preload.
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, nativeTheme, shell } from 'electron';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import QRCode from 'qrcode';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { startDesktop } = await import(join(here, '..', 'dist', 'src', 'desktop-service.js'));
-const { pickLanAddress } = await import(join(here, '..', 'dist', 'src', 'lan-address.js'));
-const { DEFAULT_PORT } = await import(join(here, '..', 'dist', 'src', 'config.js'));
+const { startDesktop } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'desktop-service.js')).href);
+const { pickLanAddress } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'lan-address.js')).href);
+const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { hostname } = await import('node:os');
 
 if (!app.requestSingleInstanceLock()) app.quit();
