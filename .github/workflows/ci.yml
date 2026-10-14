@@ -23,6 +23,7 @@ jobs:
       - run: npm run lint
       - run: npm run build
   desktop-app-smoke:
+    timeout-minutes: 4
     strategy:
       fail-fast: false
       matrix: { os: [windows-latest, ubuntu-latest] }
@@ -37,9 +38,9 @@ jobs:
       - name: Launch the app and capture a window frame (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        env: { ORBIT_HOST: 127.0.0.1, ORBIT_SMOKE_SHOT: smoke.png }
-        run: npx electron . && test -s smoke.png
+        env: { ORBIT_HOST: 127.0.0.1, ORBIT_SMOKE_SHOT: smoke.png, ELECTRON_ENABLE_LOGGING: '1' }
+        run: node node_modules/electron/cli.js . 2>&1 | tail -30; test -s smoke.png
       - name: Launch the app and capture a window frame (Linux)
         if: runner.os == 'Linux'
-        env: { ORBIT_HOST: 127.0.0.1, ORBIT_SMOKE_SHOT: smoke.png }
-        run: xvfb-run -a npx electron . --no-sandbox && test -s smoke.png
+        env: { ORBIT_HOST: 127.0.0.1, ORBIT_SMOKE_SHOT: smoke.png, ELECTRON_ENABLE_LOGGING: '1' }
+        run: xvfb-run -a node node_modules/electron/dist/electron --no-sandbox --disable-gpu --disable-dev-shm-usage . 2>&1 | grep -vi dbus | tail -30; test -s smoke.png
