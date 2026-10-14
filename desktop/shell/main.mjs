@@ -86,12 +86,14 @@ createWindow();
 createTray();
 // Used by CI to smoke-test the packaged window: renders one frame to a PNG and exits.
 if (process.env.ORBIT_SMOKE_SHOT) {
+  console.log('SMOKE: waiting for window, phase=' + state.phase);
   win.webContents.once('did-finish-load', () => setTimeout(async () => {
     const { writeFileSync } = await import('node:fs');
     await win.webContents.executeJavaScript("document.getElementById('pair').click()");
     await new Promise(r => setTimeout(r, 800));
     writeFileSync(process.env.ORBIT_SMOKE_SHOT, (await win.webContents.capturePage()).toPNG());
-    quitting = true; app.quit();
+    console.log('SMOKE: frame written'); app.exit(0);
   }, 1200));
+  setTimeout(() => { console.log('SMOKE: timed out before a frame was captured, state=' + JSON.stringify(state)); app.exit(2); }, 90000);
 }
 });
