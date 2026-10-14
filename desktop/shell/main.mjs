@@ -82,7 +82,7 @@ function createTray() {
 
 app.on('second-instance', () => { win?.show(); win?.focus(); });
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', e => { if (service) { e.preventDefault(); const s = service; service = undefined; s.stop().finally(() => app.quit()); } });
+app.on('will-quit', e => { if (service) { e.preventDefault(); const s = service; service = undefined; console.log('QUIT: stopping'); s.stop().then(() => console.log('QUIT: stopped'), er => console.log('QUIT: stop err ' + er)).finally(() => app.exit(0)); } });
 nativeTheme.on('updated', push);
 setInterval(push, 2000);
 
@@ -105,6 +105,7 @@ await boot();
 createWindow();
 createTray();
 // Used by CI to smoke-test the packaged window: renders one frame to a PNG and exits.
+if (process.env.ORBIT_QUIT_TEST) { setTimeout(() => { console.log('QUIT: calling app.quit()'); app.quit(); }, 3000); }
 if (process.env.ORBIT_SMOKE_SHOT) {
   console.log('SMOKE: waiting for window, phase=' + state.phase);
   win.webContents.once('did-finish-load', () => setTimeout(async () => {
