@@ -43,4 +43,6 @@ jobs:
       - name: Launch the app and capture a window frame (Linux)
         if: runner.os == 'Linux'
         env: { ORBIT_HOST: 127.0.0.1, ORBIT_SMOKE_SHOT: smoke.png, ELECTRON_ENABLE_LOGGING: '1' }
-        run: xvfb-run -a ./node_modules/electron/dist/electron --no-sandbox --disable-gpu --disable-dev-shm-usage .; test -s smoke.png
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+          xvfb-run -a ./node_modules/electron/dist/electron --no-sandbox --disable-gpu --disable-dev-shm-usage .; test -s smoke.png
