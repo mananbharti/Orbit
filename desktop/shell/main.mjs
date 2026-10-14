@@ -28,7 +28,7 @@ async function boot() {
   try {
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64) });
-    state = { phase: 'running', host };
+    state = { phase: 'running', host, port: DEFAULT_PORT };
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
   }
@@ -85,6 +85,20 @@ app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', e => { if (service) { e.preventDefault(); const s = service; service = undefined; s.stop().finally(() => app.quit()); } });
 nativeTheme.on('updated', push);
 setInterval(push, 2000);
+
+// Wi-Fi changes (new network, hotspot, VPN on/off) change the only address the phone can reach, so follow them.
+// Skipped when the address is forced with ORBIT_HOST.
+let switching = false;
+setInterval(async () => {
+  if (switching || quitting || process.env.ORBIT_HOST || state.phase === 'starting') return;
+  const next = pickLanAddress(undefined, await defaultRouteAddress());
+  if (next === state.host || (!next && state.phase === 'offline')) return;
+  switching = true;
+  try {
+    if (service) { const old = service; service = undefined; pairingUntil = 0; clearTimeout(pairingTimer); await old.stop(); }
+    await boot();
+  } finally { switching = false; push(); }
+}, 5000);
 
 if (gotLock) app.whenReady().then(async () => {
 await boot();

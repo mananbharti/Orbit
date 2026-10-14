@@ -20,7 +20,7 @@ function render(s) {
   current = s; const open = s.pairingUntil > Date.now(); if (!open) qrSvg = '';
   const ok = s.phase === 'running';
   $('dot').className = 'dot ' + (ok ? 'ok' : 'bad');
-  $('status-text').textContent = ok ? 'Ready on ' + s.host : s.phase === 'offline' ? 'No Wi-Fi' : s.phase === 'error' ? 'Problem starting' : 'Starting';
+  $('status-text').textContent = ok ? 'Ready on ' + s.host + ':' + (s.port ?? 8765) : s.phase === 'offline' ? 'No Wi-Fi' : s.phase === 'error' ? 'Problem starting' : 'Starting';
   $('title').textContent = !ok ? (s.phase === 'offline' ? 'Connect to Wi-Fi' : 'Orbit could not start') : s.devices.length ? 'You are all set' : 'Connect your phone';
   $('subtitle').textContent = s.phase === 'offline' ? 'Orbit needs the same Wi-Fi network as your phone. Join one, then try again.' : s.phase === 'error' ? (s.message ?? '') : 'Open Orbit on your phone, tap Pair, and scan the code. Both devices must be on the same Wi-Fi.';
   $('qrbox').innerHTML = qrSvg || '<div class="qr-empty">Pairing is closed</div>';
