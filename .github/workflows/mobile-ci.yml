@@ -1,0 +1,26 @@
+name: mobile-app
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --legacy-peer-deps
+      - run: npm run typecheck
+      - name: Bundle for Android and iOS (catches broken imports and missing packages)
+        run: npm run bundle
+      - name: Render every screen with mock data (layout check, light and dark)
+        run: npm run preview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screen-previews
+          path: mobile/app/preview-shots
