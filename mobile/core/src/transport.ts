@@ -31,7 +31,7 @@ export function explainTransportFailure(kind: TransportFailure): string {
     case 'refused': return 'Your computer is reachable but Orbit is not listening at that address. Make sure Orbit is running on it.';
     case 'local-network-denied': return 'iPhone is blocking Orbit from your local network. Open Settings, then Orbit, and turn on Local Network.';
     case 'desktop-refused': return 'Your computer answered but refused the pairing. Show a fresh code in Orbit on your computer and scan it again.';
-    case 'unreachable': return 'Cannot reach your computer. Check that both devices are on the same Wi-Fi.';
+    case 'unreachable': return 'Cannot reach your computer. Check that both devices are on the same Wi-Fi, and that iPhone Settings > Orbit > Local Network is turned on.';
     default: return 'Could not pair. Check that both devices are on the same network';
   }
 }

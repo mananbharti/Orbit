@@ -86,8 +86,6 @@ public final class OrbitPinnedTransportModule: Module {
   static func classify(_ error: Error?, mismatch: Bool) -> String {
     if mismatch { return "PIN_MISMATCH" }
     guard let ns = error as NSError? else { return "UNKNOWN" }
-    if let reason = ns.userInfo[NSURLErrorNetworkUnavailableReasonKey] as? Int,
-       reason == NSURLErrorNetworkUnavailableReason.localNetworkProhibited.rawValue { return "LOCAL_NETWORK_DENIED" }
     switch ns.code {
     case NSURLErrorTimedOut: return "TIMEOUT"
     case NSURLErrorCannotConnectToHost: return "REFUSED"

@@ -61,3 +61,4 @@ jobs:
           name: orbit-ios-unsigned-ipa
           path: mobile/app/Orbit-unsigned.ipa
 # rebuilt 2026-10-14 with pairing failure details
+# rebuild: remove duplicate swift file
