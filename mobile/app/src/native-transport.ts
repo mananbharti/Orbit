@@ -42,10 +42,10 @@ export function createNativeTransport(uuid: () => string): PinnedTransport {
         const code = (e as { code?: string })?.code;
         const known: TransportFailure[] = ['pin-mismatch', 'timeout', 'refused', 'unreachable', 'local-network-denied'];
         const kind = code === 'PIN_MISMATCH' ? 'pin-mismatch' : known.find(k => k === code?.toLowerCase().replace(/_/g, '-'));
-        throw new TransportError(kind ?? 'unknown');
+        throw new TransportError(kind ?? 'unknown', kind ? undefined : (code ? `code ${code}` : undefined));
       });
       if (res.status === 401) throw new AuthenticationRejected();
-      if (res.status !== 200) throw new Error('Desktop request rejected');
+      if (res.status !== 200) throw new TransportError('desktop-refused', `HTTP ${res.status}`);
       return JSON.parse(res.body) as unknown;
     },
     openChannel(trust: PinnedTrust, sessionToken: string, h: ChannelHandlers): Channel {

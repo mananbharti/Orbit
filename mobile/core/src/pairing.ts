@@ -20,7 +20,8 @@ export async function pairWithQr(qrText: string, transport: PinnedTransport, now
       certificateFingerprint: qr.certificateFingerprint }, '/v1/pair', qr.pairingToken);
   } catch (error) {
     if (error instanceof AuthenticationRejected) throw new PairingError('rejected', 'The computer did not accept this code. It may have been used already. Show a new one.');
-    throw new PairingError('rejected', explainTransportFailure(error instanceof TransportError ? error.kind : 'unknown'));
+    const detail = error instanceof TransportError ? error.detail : undefined;
+    throw new PairingError('rejected', explainTransportFailure(error instanceof TransportError ? error.kind : 'unknown') + (detail ? ` (${detail})` : ''));
   }
   const result = pairedResponseSchema.safeParse(response);
   if (!result.success || result.data.desktopServiceId !== qr.desktopServiceId) {
