@@ -11,7 +11,13 @@ const { pickLanAddress } = await import(pathToFileURL(join(here, '..', 'dist', '
 const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { hostname } = await import('node:os');
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// Chromium's disk caches are useless for a local UI and fail with "Access is denied" when a previous
+// instance still holds them (or the profile sits in a synced folder), so keep them off and in a private folder.
+app.setName('Orbit');
+app.commandLine.appendSwitch('disk-cache-size', '1');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.exit(0); // a second launch only focuses the first window (see 'second-instance')
 
 let win; let tray; let service; let pairingTimer; let pairingUntil = 0; let state = { phase: 'starting' };
 let quitting = false;
@@ -80,7 +86,7 @@ app.on('will-quit', e => { if (service) { e.preventDefault(); const s = service;
 nativeTheme.on('updated', push);
 setInterval(push, 2000);
 
-app.whenReady().then(async () => {
+if (gotLock) app.whenReady().then(async () => {
 await boot();
 createWindow();
 createTray();
