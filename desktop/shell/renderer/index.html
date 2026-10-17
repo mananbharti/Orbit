@@ -10,14 +10,16 @@
 <body>
 <div class="glow g1"></div><div class="glow g2"></div>
 <aside class="side">
-  <div class="brand"><span class="mark"></span><span>Orbit</span></div>
+  <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="4.4" stroke="currentColor" stroke-width="1.6" transform="rotate(-24 12 12)"/></svg></span><span class="brand-name">Orbit</span></div>
   <nav>
-    <button class="nav on" data-tab="home">Home</button>
-    <button class="nav" data-tab="devices">Devices</button>
-    <button class="nav" data-tab="activity">Activity</button>
-    <button class="nav" data-tab="settings">Settings</button>
+    <button class="nav on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Home</button>
+    <button class="nav" data-tab="files"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg>Files</button>
+    <button class="nav" data-tab="clipboard"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Clipboard</button>
+    <button class="nav" data-tab="devices"><svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M11 18.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Devices</button>
+    <button class="nav" data-tab="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Activity</button>
+    <button class="nav" data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Settings</button>
   </nav>
-  <div class="status"><span id="dot" class="dot"></span><span id="status-text">Starting</span></div>
+  <div class="status"><span id="dot" class="dot"></span><div class="status-text"><span id="status-text">Starting</span><small id="status-sub"></small></div></div>
 </aside>
 <main>
   <section id="home" class="tab on">
@@ -32,13 +34,46 @@
         <div class="meta" id="meta"></div>
       </div>
     </div>
+    <div class="grid2">
+      <button class="tile" id="quick-send"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 20h16" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Send files</b><small>Drop or pick files to deliver to your phone</small></span></button>
+      <button class="tile" id="quick-clipboard"><span class="tile-icon"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span><b>Clipboard</b><small>See what is on this computer's clipboard</small></span></button>
+    </div>
+  </section>
+  <section id="files" class="tab">
+    <h1>Files</h1>
+    <p class="sub">Send files to your phone and find everything it sent you. No cloud, no cables.</p>
+    <div class="card drop" id="dropzone">
+      <span class="drop-icon"><svg viewBox="0 0 24 24"><path d="M12 16V6m0 0-4 4m4-4 4 4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></span>
+      <b>Drop files to send</b>
+      <small>Delivered straight to your phone over your own Wi-Fi</small>
+      <button class="primary" id="choose-files">Choose files</button>
+      <div id="send-result" class="send-result"></div>
+    </div>
+    <div id="active-transfers"></div>
+    <h2>Received on this computer</h2>
+    <div class="card list" id="received-list"></div>
+    <h2>Sent to your phone</h2>
+    <div class="card list" id="sent-list"></div>
+  </section>
+  <section id="clipboard" class="tab">
+    <h1>Clipboard</h1>
+    <p class="sub">What is on this computer's clipboard right now. Paired phones get it automatically while connected.</p>
+    <div class="card clip">
+      <div class="clip-head"><span class="label">On this computer</span><button class="ghost small" id="clip-refresh">Refresh</button></div>
+      <div class="clip-body" id="clip-body">Reading…</div>
+      <div class="clip-actions"><button class="primary" id="clip-copy">Copy</button></div>
+    </div>
   </section>
   <section id="devices" class="tab"><h1>Devices</h1><p class="sub">Phones allowed to talk to this computer.</p><div class="card list" id="device-list"></div></section>
   <section id="activity" class="tab"><h1>Activity</h1><p class="sub">Recent events on this computer. Only metadata is kept, never contents.</p><div class="card list" id="activity-list"></div></section>
   <section id="settings" class="tab"><h1>Settings</h1><p class="sub">Orbit runs in the background and only talks to devices you paired.</p>
-    <div class="card list"><label class="row"><span><b>Start Orbit at login</b><small>So your phone can always reach this computer.</small></span><input type="checkbox" id="login" class="switch"></label></div>
+    <div class="card list">
+      <label class="row"><span><b>Start Orbit at login</b><small>So your phone can always reach this computer.</small></span><input type="checkbox" id="login" class="switch"></label>
+      <div class="row"><span><b>Received files folder</b><small>Where files from your phone are saved.</small></span><button class="ghost small" id="open-inbox">Open folder</button></div>
+    </div>
   </section>
 </main>
+<div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>
 </html>
