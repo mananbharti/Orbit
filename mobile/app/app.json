@@ -64,6 +64,12 @@
           "savePhotosPermission": "Orbit saves files you receive from your computer only when you ask it to.",
           "isAccessMediaLocationEnabled": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Orbit uses your location while the app is open to run scenes you chose, like opening your work apps when you arrive."
+        }
       ]
     ],
     "icon": "./assets/icon.png",

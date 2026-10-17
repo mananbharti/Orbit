@@ -30,7 +30,7 @@ function Screen({ name }: { name: string }) {
     case 'tasks-offline': return <TasksScreen store={mockStore('reconnecting')} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onPresent={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
     case 'task-detail': return <TaskDetailScreen store={mockStore()} taskId={tasks[0]!.taskId} onBack={noop} />;
     case 'activity': return <ActivityScreen api={mockAgent()} onBack={noop} />;
-    case 'apps': return <AppsScreen api={mockLauncher()} onBack={noop} />;
+    case 'apps': return <AppsScreen api={mockLauncherScenes()} onBack={noop} desktopServiceId="pc-1" />;
     case 'apps-pinned': return <AppsScreen api={mockLauncherPinned()} onBack={noop} />;
     case 'apps-scenes': return <AppsScreen api={mockLauncherScenes()} onBack={noop} />;
     case 'clipboard': return <ClipboardScreen api={mockClipboard()} onBack={noop} />;

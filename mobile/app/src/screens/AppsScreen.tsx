@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { OutcomeUnknown, type AppEntry, type LauncherApi, type LauncherScene } from '@orbit/core';
+import { clearPlaceTrigger, currentCoordinates, placeTriggers, scenePlacesAvailable, setPlaceTrigger } from '../scene-places';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
@@ -21,7 +22,7 @@ function initials(name: string): string {
   return pick.toUpperCase();
 }
 
-export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => void }) {
+export function AppsScreen({ api, onBack, desktopServiceId }: { api: LauncherApi; onBack: () => void; desktopServiceId?: string }) {
   const t = useTheme();
   const [apps, setApps] = useState<AppEntry[]>();
   const [error, setError] = useState<string>();
@@ -32,11 +33,14 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
   const [pinned, setPinned] = useState<string[]>([]);
   const [scenes, setScenes] = useState<LauncherScene[]>([]);
   const [launchingScene, setLaunchingScene] = useState<string>();
+  const [places, setPlaces] = useState<Record<string, 'arrive' | 'leave'>>({});
   const [selecting, setSelecting] = useState<{ id?: string; name: string; selected: Set<string> } | null>(null);
 
   const load = useCallback(async () => {
     setError(undefined);
-    try { setApps(await api.list()); setPinned(api.getPinned()); setScenes(await api.scenes()); } catch (e) { setError(friendlyError(e)); }
+    try { setApps(await api.list()); setPinned(api.getPinned()); setScenes(await api.scenes());
+      if (desktopServiceId) { try { const list = await placeTriggers(desktopServiceId); setPlaces(Object.fromEntries(list.map(t => [t.sceneId, t.on]))); } catch { /* secure store unavailable (web preview) */ } } }
+    catch (e) { setError(friendlyError(e)); }
   }, [api]);
   useEffect(() => { void load(); }, [load]);
 
@@ -126,10 +130,25 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
   };
 
   const manageScene = (scene: LauncherScene): void => {
-    Alert.alert(scene.name, `${scene.appIds.length} apps`, [
+    const place = places[scene.id];
+    const canPlace = !!desktopServiceId && scenePlacesAvailable();
+    const setPlace = (on: 'arrive' | 'leave'): void => { void (async () => {
+      if (!desktopServiceId) return;
+      const coords = await currentCoordinates();
+      if (!coords) { setError('Orbit needs location access to know when you arrive'); return; }
+      const list = await setPlaceTrigger(desktopServiceId, { sceneId: scene.id, ...coords, radiusMeters: 150, on });
+      setPlaces(Object.fromEntries(list.map(t => [t.sceneId, t.on])));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    })(); };
+    Alert.alert(scene.name, `${scene.appIds.length} apps` + (place ? ` · runs when you ${place === 'arrive' ? 'arrive here' : 'leave here'}` : ''), [
       { text: 'Edit', onPress: () => setSelecting({ id: scene.id, name: scene.name, selected: new Set(scene.appIds) }) },
-      { text: 'Delete scene', style: 'destructive', onPress: () => { void api.deleteScene(scene.id).then(setScenes).catch(e => setError(friendlyError(e))); } },
-      { text: 'Cancel', style: 'cancel' },
+      ...(canPlace && !place ? [
+        { text: 'When I arrive here', onPress: () => setPlace('arrive') },
+        { text: 'When I leave here', onPress: () => setPlace('leave') },
+      ] : []),
+      ...(canPlace && place ? [{ text: 'Remove place trigger', onPress: () => { void clearPlaceTrigger(desktopServiceId!, scene.id).then(list => setPlaces(Object.fromEntries(list.map(t => [t.sceneId, t.on])))); } }] : []),
+      { text: 'Delete scene', style: 'destructive' as const, onPress: () => { void api.deleteScene(scene.id).then(setScenes).catch(e => setError(friendlyError(e))); } },
+      { text: 'Cancel', style: 'cancel' as const },
     ]);
   };
 
@@ -200,6 +219,7 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
               style={[styles.sceneChip, { backgroundColor: t.tint + '1f', opacity: launchingScene && launchingScene !== scene.id ? 0.5 : 1 }]}>
               {launchingScene === scene.id ? <ActivityIndicator size="small" color={t.tint} /> : null}
               <Text style={{ color: t.tint, fontSize: 15, fontWeight: '600' }}>{scene.name}</Text>
+              {places[scene.id] ? <Text style={{ color: t.tint, fontSize: 12 }}>{places[scene.id] === 'arrive' ? 'arrives' : 'leaves'}</Text> : null}
             </Pressable>
           ))}
           <Pressable accessibilityRole="button" accessibilityLabel="New scene" onPress={() => setSelecting({ name: '', selected: new Set() })}

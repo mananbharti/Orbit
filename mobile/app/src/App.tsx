@@ -18,6 +18,7 @@ import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { PhotoBackup, photoBackupAvailable, photoBackupEnabled, photoBackupPermitted, setPhotoBackupEnabled, type BackupProgress } from './photo-backup';
 import { ShareIntake } from './share-intake';
+import { ScenePlaceWatcher } from './scene-places';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
@@ -99,6 +100,14 @@ function Shell() {
   }, [connected, showBanner]);
   useEffect(() => { autoRef.current?.setEnabled(autoSync); }, [autoSync]);
   useEffect(() => { if (connected) intakeRef.current?.notifyConnected(); }, [connected]);
+  useEffect(() => {
+    if (!connected) return;
+    const watcher = new ScenePlaceWatcher(connected.paired.desktopServiceId, connected.launcher,
+      sceneId => { void connected.launcher.scenes().then(list => { const name = list.find(sc => sc.id === sceneId)?.name; showBanner(`Opened ${name ?? 'your scene'} - you're here`); }).catch(() => undefined); },
+      message => showBanner(message));
+    void watcher.start();
+    return () => watcher.stop();
+  }, [connected, showBanner]);
   useEffect(() => { void photoBackupEnabled().then(setBackupOn); }, []);
   useEffect(() => {
     if (!connected || !backupOn) return;
@@ -188,7 +197,7 @@ function Shell() {
       onToggle: on => { void (async () => { if (on && !(await photoBackupPermitted())) { showBanner('Orbit needs access to your photos'); return; } await setPhotoBackupEnabled(on); setBackupOn(on); })(); } }} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
   else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { if (activeId) void forgetComputer(activeId); }} />;
-  else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
+  else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} desktopServiceId={connected.paired.desktopServiceId} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
   else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} onAutomations={() => { setAutomationsOpen(true); void connected.launcher.scenes().then(list => setSceneOptions(list.map(sc => ({ id: sc.id, name: sc.name })))).catch(() => {}); }} onTerminal={() => setTerminalOpen(true)} onTabs={() => setTabsOpen(true)} />;

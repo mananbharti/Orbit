@@ -54,4 +54,6 @@ Remote:
 
 24. Browser tabs (needs the desktop app updated): on the PC, open chrome://extensions, turn on Developer mode, Load unpacked -> pick the orbit repo's extension folder. The extension's setup page asks for the port and token shown in Orbit's Settings on the PC. Phone Home -> Tabs: your PC browser's tabs appear. Tap one: that tab comes to the front on the PC. Close one from the phone. Type a link (e.g. wikipedia.org) and Open: it opens on the PC.
 
+25. Place scenes: Apps -> long-press a scene -> "When I arrive here" (allow location). The scene chip gets an "arrives" marker. Leave the area with Orbit open, come back: within about a minute of arriving, the phone says it opened the scene and those apps launch on the PC. Long-press again -> "Remove place trigger" turns it off. (Works while Orbit is open; iOS does not let apps watch location in the background.)
+
 Report anything that fails with the exact step number.

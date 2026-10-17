@@ -22,3 +22,4 @@ export * from './automation.js';
 export * from './terminal.js';
 export { isSharedFileUrl, sharedFileName } from './share-intake.js';
 export { TabsApi, browserTabSchema, type BrowserTab } from './tabs.js';
+export { GeoTriggerEvaluator, haversineMeters, type PlaceTrigger } from './geo.js';
