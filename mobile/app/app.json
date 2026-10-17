@@ -40,6 +40,14 @@
         {
           "cameraPermission": "Orbit uses the camera only to scan the pairing code shown on your computer."
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Orbit backs up your photos to your own computer when you turn on photo backup.",
+          "savePhotosPermission": "Orbit saves files you receive from your computer only when you ask it to.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "icon": "./assets/icon.png",
