@@ -14,15 +14,19 @@ export type PromptSpawn = (text: string) => ChildProcessWithoutNullStreams;
 const defaultSpawn: PromptSpawn = text => spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', SCRIPT],
   { windowsHide: false, stdio: 'pipe', env: windowsPowerShellEnv({ ORBIT_PROMPT_TEXT: text }) });
 
-export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeoutMs = APPROVAL_TIMEOUT_MS): BiometricConfirmation {
+export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeoutMs = APPROVAL_TIMEOUT_MS,
+  family: 'input' | 'terminal' = 'input'): BiometricConfirmation {
   return { verify: (message, context) => new Promise<boolean>(resolve => {
-    if (!message.type.startsWith('input.')) { resolve(false); return; } // this prompt only ever approves remote control
+    if (!message.type.startsWith(family + '.')) { resolve(false); return; } // one prompt approves exactly one family
     const device = context.session.deviceId.slice(0, 8);
     let child: ChildProcessWithoutNullStreams;
     let out = ''; let done = false;
     const finish = (v: boolean): void => { if (done) return; done = true; clearTimeout(timer); try { child.kill(); } catch { /* already gone */ } resolve(v); };
     const timer = setTimeout(() => finish(false), timeoutMs);
-    try { child = spawnPrompt(`Allow your phone (device ${device}) to move the mouse and type on this computer?\n\nChoose No unless you just started this on your phone.`); }
+    const text = family === 'terminal'
+      ? `Allow your phone (device ${device}) to run commands on this computer? Commands can change or delete anything.\n\nChoose No unless you just started this on your phone.`
+      : `Allow your phone (device ${device}) to move the mouse and type on this computer?\n\nChoose No unless you just started this on your phone.`;
+    try { child = spawnPrompt(text); }
     catch { clearTimeout(timer); resolve(false); return; }
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (c: string) => { out += c; if (out.length > 64) finish(false); else if (out.includes('\n')) finish(out.trim() === 'ALLOW'); });

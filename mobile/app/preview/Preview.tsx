@@ -14,12 +14,13 @@ import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { DevicesScreen } from '../src/screens/DevicesScreen';
 import { ComputersScreen } from '../src/screens/ComputersScreen';
 import { AutomationsScreen } from '../src/screens/AutomationsScreen';
+import { TerminalScreen } from '../src/screens/TerminalScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockAutomation, mockSceneOptions, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -39,6 +40,8 @@ function Screen({ name }: { name: string }) {
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} />;
+    case 'terminal': return <TerminalScreen api={mockTerminal} onBack={noop} initialState={{ cwd: 'C:\\Users\\Manan', lines: terminalLines }} />;
+    case 'terminal-start': return <TerminalScreen api={mockTerminal} onBack={noop} />;
     case 'automations': return <AutomationsScreen api={mockAutomation} scenes={mockSceneOptions} onBack={noop} />;
     case 'automations-edit': return <AutomationsScreen api={mockAutomation} scenes={mockSceneOptions} onBack={noop} initialDraft={{ id: 'a1a1a1a1-1111-4111-8111-aaaaaaaaaaaa', time: '09:00', days: [1, 2, 3, 4, 5], action: { type: 'scene', sceneId: 'b2b2b2b2-2222-4222-8222-bbbbbbbbbbbb' } }} />;
     case 'computers': return <ComputersScreen list={mockComputers} activeId={mockComputers[0]!.desktopServiceId} onSwitch={noop} onAdd={noop} onForget={noop} onBack={noop} />;
@@ -46,7 +49,7 @@ function Screen({ name }: { name: string }) {
     case 'devices': return <DevicesScreen api={mockDevices} onBack={noop} />;
     case 'devices-limited': return <DevicesScreen api={mockDevices} onBack={noop} initialSelected={ipadDeviceId} />;
     case 'pair': return <PairScreen onScanned={async () => {}} />;
-    default: return <TasksScreen store={mockStore()} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onPresent={noop} onMemory={noop} onControl={noop} onSettings={noop} onComputers={noop} onAutomations={noop} />;
+    default: return <TasksScreen store={mockStore()} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onPresent={noop} onMemory={noop} onControl={noop} onSettings={noop} onComputers={noop} onAutomations={noop} onTerminal={noop} />;
   }
 }
 function Frame({ screen }: { screen: string }) {

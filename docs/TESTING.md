@@ -46,4 +46,6 @@ Remote:
 
 20. Automations: Home -> Automations -> New automation. Pick Sleep, set the time two minutes from now, leave Weekdays (or Every day), Save. Watch the PC sleep at that minute. Turn the switch off, delete the automation. Make one for Open Work scene at a near time: the scene's apps open on their own. Restart the PC app after one fires: it does not fire again.
 
+21. Terminal: Home -> Terminal -> Start session. The PC shows an approval dialog - approve it. Run: dir (or ls). Output streams in. Run: cd Documents - the path above the output moves. Run: cd nowhere - an error line appears and the path does NOT move. Run: ping localhost -n 20 (Windows) or ping localhost (Mac/Linux), then tap the stop square: it dies within a second. Tap End session, then Start session and choose Deny on the PC: the phone says it was declined, no session opens.
+
 Report anything that fails with the exact step number.

@@ -27,6 +27,7 @@ import { InputControl } from './input-simulation/input-control.js';
 import { KeyboardMacroStore } from './input-simulation/keyboard-macros.js';
 import { DeviceDirectory } from './security-pairing/device-directory.js';
 import { AutomationService } from './automation/automation-service.js';
+import { TerminalService, type SpawnShell } from './terminal/terminal-service.js';
 import { AutomationStore } from './automation/automation-store.js';
 import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
@@ -60,6 +61,8 @@ export async function startDesktop(options: { directory: string; host: string; p
   /** Power, volume and brightness control. On by default; pass a custom adapter to test. */
   system?: { createAdapter: () => SystemControlAdapter } | false;
   audioMixer?: { createAdapter: () => AudioMixerAdapter } | false;
+  /** Remote terminal: off unless a spawner is supplied; every session needs the computer owner's approval. */
+  terminal?: { confirmation?: BiometricConfirmation; spawnShell?: SpawnShell };
   input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation } }) {
   const directory = privateDirectory(options.directory);
   const unlock = lockService(directory);
@@ -77,6 +80,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let panic: PanicLock | undefined;
   let devices: DeviceDirectory | undefined;
   let automations: AutomationService | undefined;
+  let terminal: TerminalService | undefined;
   let mixer: AudioMixer | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
@@ -115,6 +119,7 @@ export async function startDesktop(options: { directory: string; host: string; p
       power: action => system ? system.powerLocal(action) : Promise.reject(new Error('SYSTEM_UNAVAILABLE')),
     }, log);
     automations.start();
+    if (options.terminal) terminal = new TerminalService(registry, log, options.terminal.confirmation, options.terminal.spawnShell);
     transportOptions.pairing = pairing;
     if (options.discovery !== false) discovery = advertiseDesktop(hint,
       () => log.record({ severity: 'warn', eventType: 'discovery.error', outcome: 'failed' }));
@@ -124,6 +129,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
+        await terminal?.stop();
         await automations?.stop();
         devices?.stop(); system?.stop(); panic?.stop(); mixer?.stop();
         await dictation?.stop();
@@ -138,6 +144,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         } }
       } };
   } catch (error) {
+    await terminal?.stop();
     await automations?.stop();
     await dictation?.stop();
     await input?.stop();

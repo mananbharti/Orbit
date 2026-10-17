@@ -1,5 +1,5 @@
 /** Fake data and fake APIs so every screen can be drawn without a computer, a phone or a network. Preview only; never imported by the real app. */
-import type { AgentApi, AutomationApi, AppEntry, AuditEntry, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, SystemApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
+import type { AgentApi, AutomationApi, TerminalApi, AppEntry, AuditEntry, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, SystemApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const NOW = 1_760_000_000_000;
@@ -98,3 +98,18 @@ const automationList = [
 export const mockAutomation: AutomationApi = { refresh: async () => automationList, getAutomations: () => automationList,
   save: async () => automationList, setEnabled: async () => automationList, remove: async () => automationList } as unknown as AutomationApi;
 export const mockSceneOptions = [{ id: 'b2b2b2b2-2222-4222-8222-bbbbbbbbbbbb', name: 'Work' }, { id: 'e5e5e5e5-5555-4555-8555-eeeeeeeeeeee', name: 'Gaming' }];
+
+const terminalLines: { id: number; stream: 'cmd' | 'stdout' | 'stderr' | 'note'; text: string }[] = [
+  { id: 1, stream: 'note', text: 'Session approved.' },
+  { id: 2, stream: 'cmd', text: 'git status' },
+  { id: 3, stream: 'stdout', text: 'On branch main' },
+  { id: 4, stream: 'stdout', text: 'nothing to commit, working tree clean' },
+  { id: 5, stream: 'cmd', text: 'npm run build' },
+  { id: 6, stream: 'stderr', text: 'WARN: deprecated option' },
+  { id: 7, stream: 'stdout', text: 'Build finished in 4.2s' },
+];
+export const mockTerminal: TerminalApi = { begin: async () => ({ cwd: 'C:\\Users\\Manan' }),
+  exec: async () => ({ exitCode: 0, cwd: 'C:\\Users\\Manan', truncated: false, timedOut: false }),
+  interrupt: async () => {}, end: async () => {}, onOutput: () => () => {}, dispose: () => {},
+  activeSessionId: 'a1a1a1a1-1111-4111-8111-aaaaaaaaaaaa' } as unknown as TerminalApi;
+export { terminalLines };

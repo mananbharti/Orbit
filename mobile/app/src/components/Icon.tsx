@@ -20,6 +20,7 @@ const paths = {
   control: 'M4 8h10M18 8h2M4 16h2M10 16h10M14 6v4M6 14v4',
   present: 'M3 4h18v11H3zM12 15v3M9 21h6M12 8.5l3.5 2-3.5 2z',
   automations: 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3.5 2',
+  terminal: 'M4 17l6-5-6-5M12 19h8',
 } as const;
 export type IconName = keyof typeof paths;
 

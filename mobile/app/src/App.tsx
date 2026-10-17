@@ -21,6 +21,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
 import { ComputersScreen } from './screens/ComputersScreen';
 import { AutomationsScreen } from './screens/AutomationsScreen';
+import { TerminalScreen } from './screens/TerminalScreen';
 import type { PairedDesktop } from '@orbit/core';
 import { ThemeProvider, useTheme } from './theme';
 
@@ -38,6 +39,7 @@ function Shell() {
   const [activeId, setActiveId] = useState<string>();
   const [switchingId, setSwitchingId] = useState<string>();
   const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [sceneOptions, setSceneOptions] = useState<{ id: string; name: string }[]>([]);
   const [booting, setBooting] = useState(true);
   const [locked, setLocked] = useState(false);
@@ -148,6 +150,7 @@ function Shell() {
   else if (pairing) body = <PairScreen onScanned={onScanned} onBack={() => { setPairing(false); setComputersOpen(true); }} />;
   else if (computersOpen) body = <ComputersScreen list={pairedList} activeId={activeId} switchingId={switchingId} onSwitch={id => { void switchTo(id); }} onAdd={() => { setComputersOpen(false); setPairing(true); }} onForget={id => { void forgetComputer(id); }} onBack={() => setComputersOpen(false)} />;
   else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} onComputers={() => setComputersOpen(true)} />;
+  else if (terminalOpen) body = <TerminalScreen api={connected.terminal} onBack={() => setTerminalOpen(false)} />;
   else if (automationsOpen) body = <AutomationsScreen api={connected.automation} scenes={sceneOptions} onBack={() => setAutomationsOpen(false)} />;
   else if (devicesOpen) body = <DevicesScreen api={connected.devices} onBack={() => setDevicesOpen(false)} />;
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
@@ -159,8 +162,8 @@ function Shell() {
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
-  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} onAutomations={() => { setAutomationsOpen(true); void connected.launcher.scenes().then(list => setSceneOptions(list.map(sc => ({ id: sc.id, name: sc.name })))).catch(() => {}); }} />;
-  const screenKey = booting ? 'boot' : !connected ? 'pair' : computersOpen ? 'computers' : pairing ? 'pair-add' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : automationsOpen ? 'automations' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
+  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} onAutomations={() => { setAutomationsOpen(true); void connected.launcher.scenes().then(list => setSceneOptions(list.map(sc => ({ id: sc.id, name: sc.name })))).catch(() => {}); }} onTerminal={() => setTerminalOpen(true)} />;
+  const screenKey = booting ? 'boot' : !connected ? 'pair' : computersOpen ? 'computers' : pairing ? 'pair-add' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : terminalOpen ? 'terminal' : automationsOpen ? 'automations' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <ScreenTransition key={screenKey}>{body}</ScreenTransition>

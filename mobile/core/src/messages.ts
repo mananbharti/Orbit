@@ -26,6 +26,8 @@ const BY_CODE: Partial<Record<string, string>> = {
   PAIR_SELF_SCOPES: 'This phone cannot change its own permissions.',
   AUTOMATION_NOT_FOUND: 'That automation no longer exists.',
   AUTOMATION_LIMIT: 'The computer has too many automations. Delete one first.',
+  TERMINAL_UNAVAILABLE: 'The terminal is not available on this computer.',
+  TERMINAL_SESSION_REQUIRED: 'Start a terminal session first.',
 };
 
 export function describeError(error: unknown): string {

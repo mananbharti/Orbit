@@ -44,6 +44,14 @@ export const sessionResponseSchema = z.strictObject({ version: z.literal(1),
   deviceId: idSchema, sessionId: idSchema, expiresAt: z.number().int().positive(), sessionToken: tokenSchema,
   scopes: z.array(z.string().max(24)).max(16).optional() }); // older desktops echo the device's scopes
 
+export const terminalBeginResultSchema = z.strictObject({ sessionId: idSchema, cwd: z.string().min(1).max(1024),
+  idleTimeoutMs: z.number().int().positive() });
+export const terminalExecResultSchema = z.strictObject({ exitCode: z.number().int().nullable(),
+  cwd: z.string().min(1).max(1024), truncated: z.boolean(), timedOut: z.boolean() });
+export const terminalOutputEventSchema = z.strictObject({ sessionId: idSchema,
+  stream: z.enum(['stdout', 'stderr']), data: z.string().max(4096) });
+export type TerminalExecResult = z.infer<typeof terminalExecResultSchema>;
+
 export const automationTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const automationDaySchema = z.number().int().min(0).max(6);
 export const automationActionSchema = z.discriminatedUnion('type', [
@@ -80,7 +88,8 @@ export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENT
   'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_STALE_LAYOUT', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_SCENE_CONFLICT', 'LAUNCHER_UNKNOWN_OUTCOME',
   'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE', 'INPUT_CONFLICT', 'INPUT_NOT_FOUND',
   'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE',
-  'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES', 'AUTOMATION_NOT_FOUND', 'AUTOMATION_LIMIT'] as const;
+  'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES', 'AUTOMATION_NOT_FOUND', 'AUTOMATION_LIMIT',
+  'TERMINAL_UNAVAILABLE', 'TERMINAL_SESSION_REQUIRED'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),

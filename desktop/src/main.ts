@@ -17,11 +17,14 @@ async function main(): Promise<void> {
   // Remote mouse/keyboard is opt-in, Windows only, and every session needs a Yes on a dialog at the PC. Untested on a real PC.
   const remoteInput = process.platform === 'win32' && process.env.ORBIT_ENABLE_REMOTE_INPUT === '1'
     ? { createDevice: () => new WindowsInputDevice(), confirmation: windowsApproval() } : undefined;
+  // Remote terminal: opt-in, Windows only, every session needs a Yes at the PC. Untested on a real PC.
+  const terminal = process.platform === 'win32' && process.env.ORBIT_ENABLE_TERMINAL === '1'
+    ? { confirmation: windowsApproval(undefined, undefined, 'terminal') } : undefined;
   // Dictation is off unless a local whisper.cpp binary and model are named. ORBIT_FFMPEG additionally lets Android phones send compressed audio.
   const whisperBin = process.env.ORBIT_WHISPER_BIN; const whisperModel = process.env.ORBIT_WHISPER_MODEL; const ffmpeg = process.env.ORBIT_FFMPEG;
   const dictation = whisperBin && whisperModel
     ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(ffmpeg ? { decoder: ffmpegDecoder(ffmpeg) } : {}) } : undefined;
-  const service = await startDesktop({ ...readConfig(), agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}) });
+  const service = await startDesktop({ ...readConfig(), agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}) });
   const input = createInterface({ input: process.stdin });
   let cleanup: (() => void) | undefined;
   let expiry: NodeJS.Timeout | undefined;

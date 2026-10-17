@@ -34,8 +34,10 @@ async function boot() {
     // Remote mouse/keyboard: Windows only, and every session needs a Yes on a dialog shown at this PC (below).
     const remoteInput = process.platform === 'win32'
       ? { createDevice: () => new WindowsInputDevice(), confirmation: electronApproval } : undefined;
+    // Remote terminal: every session needs a Yes on a dialog shown at this PC (below), same as remote control.
+    const terminal = process.platform === 'win32' ? { confirmation: electronApproval } : undefined;
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}) });
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}) });
     state = { phase: 'running', host, port: DEFAULT_PORT };
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
@@ -81,13 +83,17 @@ function notifyNewTransfers(rows) {
 
 // PC-side approval for phone remote control: a focused native dialog, default Deny, 30s timeout.
 const electronApproval = { verify: async (message, context) => {
-  if (!message.type.startsWith('input.')) return false;
+  const isInput = message.type.startsWith('input.');
+  const isTerminal = message.type === 'terminal.begin';
+  if (!isInput && !isTerminal) return false;
   if (!win || win.isDestroyed()) return false;
   const device = String(context?.session?.deviceId ?? 'unknown').slice(0, 8);
   win.show(); win.focus();
   const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'Orbit',
-    message: 'Allow remote control?',
-    detail: `Your phone (device ${device}) wants to move the mouse and type on this computer.\n\nChoose Deny unless you just started this on your phone.`,
+    message: isTerminal ? 'Allow terminal access?' : 'Allow remote control?',
+    detail: isTerminal
+      ? `Your phone (device ${device}) wants to run commands on this computer. Commands can change or delete anything.\n\nChoose Deny unless you just started this on your phone.`
+      : `Your phone (device ${device}) wants to move the mouse and type on this computer.\n\nChoose Deny unless you just started this on your phone.`,
     buttons: ['Allow', 'Deny'], defaultId: 1, cancelId: 1, noLink: true,
     signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 30000); return c.signal; })() }).catch(() => ({ response: 1 }));
   return response === 0;
