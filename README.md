@@ -98,12 +98,12 @@
 Orbit 1.0 is being built phase by phase. What exists in this repo today:
 
 - **Desktop agent**: pairing, pinned TLS, scoped sessions, an activity log, kill switch, and commands for agent tasks, clipboard, files, launcher, dictation, memory and (opt-in) remote input.
-- **Phone side**: a typed client core and an Expo app with Tasks, Activity, Apps, Clipboard, Files, Memory and Remote screens.
+- **Phone side**: a typed client core and an Expo app with Tasks, Activity, Apps (launcher + scenes with time and place triggers), Clipboard (sync + history), Files (transfer + photo backup + share-in), Memory, Remote (trackpad, gyro, full keyboard, macros), Present, Control (volume, per-app mixer, power, panic lock), Automations, Terminal, Tabs (browser tab control via the companion extension), Computers (multi-PC), Devices (permissions + revocation) and Settings screens.
 - **Memory**: a local graph memory store.
 - **Router**: sends a request to a fast local model (Laya) or the Hermes agent.
 - **Tests**: automated tests for desktop, phone core and end-to-end (phone core against the real desktop over real TLS). CI runs all of them on every push.
 
-What is not proven yet: nothing has been run on a real phone or PC. The native pinning module, the Windows input script, whisper.cpp dictation and the Laya router have only been tested against fakes. There has been no independent security review. See [docs/device-test-checklist.md](docs/device-test-checklist.md) for the full honest list and how to check it yourself.
+What is proven on real devices so far: QR pairing and the encrypted session between a Windows 11 PC and an iPhone (October 14, over a Windows hotspot). Everything else has passed automated tests (266 desktop, 106 phone core, 33 end-to-end) but is waiting on one structured real-device pass. Platform-honest limits are documented per feature: clipboard sync, photo backup and place triggers run while the phone app is open, and true iOS share-sheet extensions need a separate native target. There has been no independent security review. To run it yourself: [docs/BUILD-CHECKLIST.md](docs/BUILD-CHECKLIST.md), then the 27-step pass in [docs/TESTING.md](docs/TESTING.md); per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 ## What is Orbit?
 
