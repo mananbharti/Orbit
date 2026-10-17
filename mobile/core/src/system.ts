@@ -8,6 +8,7 @@ const powerResultSchema = z.strictObject({ status: z.literal('requested') });
 const volumeStateSchema = z.strictObject({ level: z.number().int().min(0).max(100), muted: z.boolean() });
 const brightnessResultSchema = z.strictObject({ level: z.number().int().min(0).max(100).nullable() });
 const appliedSchema = z.strictObject({ applied: z.literal(true) });
+const panicResultSchema = z.strictObject({ status: z.enum(['locked', 'unpaired']) });
 
 export type PowerAction = 'lock' | 'sleep' | 'restart' | 'shutdown';
 export interface VolumeState { level: number; muted: boolean }
@@ -23,6 +24,10 @@ export class SystemApi {
   }
   power(action: PowerAction): Promise<void> {
     return this.call('system.power', { action }, powerResultSchema).then(() => {});
+  }
+  /** Locks the PC (best effort) and unpairs this phone immediately; the session dies right after the reply. */
+  panic(): Promise<'locked' | 'unpaired'> {
+    return this.call('system.panic', {}, panicResultSchema).then(r => (r as { status: 'locked' | 'unpaired' }).status);
   }
   getVolume(): Promise<VolumeState> {
     return this.call('system.volume.get', {}, volumeStateSchema) as Promise<VolumeState>;

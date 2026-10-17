@@ -28,7 +28,7 @@ function Screen({ name }: { name: string }) {
     case 'files': return <FilesScreen api={mockFiles()} onBack={noop} />;
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;
     case 'remote': return <RemoteScreen api={mockInput()} onBack={noop} />;
-    case 'control': return <ControlScreen api={mockSystem} onBack={noop} />;
+    case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} />;
     case 'pair': return <PairScreen onScanned={async () => {}} />;
     default: return <TasksScreen store={mockStore()} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onMemory={noop} onControl={noop} onSettings={noop} />;

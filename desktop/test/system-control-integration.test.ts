@@ -8,7 +8,7 @@ import { startDesktop } from '../src/desktop-service.js';
 import { pairDesktop } from '../src/integration-client/pair-desktop.js';
 import { OrbitClient } from '../src/integration-client/orbit-client.js';
 import type { SystemControlAdapter } from '../src/os-integration/system-control.js';
-import { MemoryClipboard } from './clipboard-helpers.js';
+import { MemoryClipboard, waitForClipboard as waitFor } from './clipboard-helpers.js';
 
 async function fixture(t: TestContext, adapter: SystemControlAdapter) {
   const root = mkdtempSync(join(tmpdir(), 'orbit-system-wss-'));
@@ -18,7 +18,7 @@ async function fixture(t: TestContext, adapter: SystemControlAdapter) {
   const client = new OrbitClient(paired);
   t.after(async () => { client.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
   await client.start();
-  return { client };
+  return { client, service, paired };
 }
 
 function fakeAdapter(state: { calls: string[]; level: number; muted: boolean; brightness: number | null }): SystemControlAdapter {
@@ -78,4 +78,27 @@ test('invalid power actions are rejected before reaching the adapter', { timeout
   if (bad.payload.ok) assert.fail('expected failure payload');
   assert.match(bad.payload.error.code, /INVALID/);
   assert.deepEqual(state.calls, []);
+});
+
+test('panic locks the machine and unpairs the phone immediately', { timeout: 30_000 }, async t => {
+  const state = { calls: [] as string[], level: 50, muted: false, brightness: 50 as number | null };
+  const f = await fixture(t, fakeAdapter(state));
+  const panic = await f.client.command('system.panic', {});
+  assert.deepEqual(panic.payload, { ok: true, result: { status: 'locked' } });
+  assert.deepEqual(state.calls, ['power:lock']);
+  await waitFor(() => !f.service.credentials.isActive(f.paired.deviceId));
+  // The revoked phone's session dies: the next command is refused.
+  await assert.rejects(f.client.command('system.volume.get', {}));
+});
+
+test('panic still unpairs when the machine cannot lock', { timeout: 30_000 }, async t => {
+  const failing: SystemControlAdapter = {
+    power: async () => { throw new Error('no OS hooks'); },
+    getVolume: async () => ({ level: 0, muted: true }), setVolume: async () => {},
+    getBrightness: async () => null, setBrightness: async () => {},
+  };
+  const f = await fixture(t, failing);
+  const panic = await f.client.command('system.panic', {});
+  assert.deepEqual(panic.payload, { ok: true, result: { status: 'unpaired' } });
+  await waitFor(() => !f.service.credentials.isActive(f.paired.deviceId));
 });

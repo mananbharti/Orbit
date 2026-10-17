@@ -14,7 +14,7 @@ const POWER: { action: PowerAction; label: string; icon: IconName; danger?: bool
   { action: 'shutdown', label: 'Shut down', icon: 'power', danger: true, confirm: 'Shut down your computer? Unsaved work will be lost.' },
 ];
 
-export function ControlScreen({ api, onBack }: { api: SystemApi; onBack: () => void }) {
+export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack: () => void; onPanic?: () => void }) {
   const t = useTheme();
   const [volume, setVolume] = useState<number>();
   const [muted, setMuted] = useState(false);
@@ -97,6 +97,26 @@ export function ControlScreen({ api, onBack }: { api: SystemApi; onBack: () => v
           </View>
         </>
       ) : null}
+      {onPanic ? (
+        <>
+          <Text style={[styles.section, { color: t.sub }]}>EMERGENCY</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Panic lock"
+            onPress={() => Alert.alert('Panic Lock', 'Lock the computer and unpair this phone immediately? You will need to pair again to reconnect.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Panic Lock', style: 'destructive', onPress: () => {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                void api.panic().then(status => {
+                  Alert.alert(status === 'locked' ? 'Computer locked' : 'Phone unpaired', 'This phone has been unpaired. Pair again to reconnect.');
+                  onPanic();
+                }).catch(e => setError(friendlyError(e)));
+              } },
+            ])}
+            style={[styles.panic, { backgroundColor: t.bad }]}>
+            <Icon name="lock" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600' }}>Panic Lock</Text>
+          </Pressable>
+        </>
+      ) : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
     </View>
@@ -113,4 +133,5 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 22, fontWeight: '700' },
   meterWrap: { flex: 1, gap: 4 },
   meter: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  panic: { borderRadius: radius, padding: space.m, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s },
 });

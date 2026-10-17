@@ -75,7 +75,7 @@ function Shell() {
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;
   else if (filesOpen) body = <FilesScreen api={connected.files} onBack={() => setFilesOpen(false)} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
-  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} />;
+  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { void forget(connected).then(() => { setConnected(undefined); setControl(false); }); }} />;
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;

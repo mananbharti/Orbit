@@ -8,7 +8,7 @@ export interface ActivityEvent {
     | 'message.rejected' | 'command.completed' | 'service.started' | 'service.stopped' | 'service.error'
     | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable' | 'file.state'
     | 'input.started' | 'input.ended' | 'input.release_failed'
-    | 'dictation.started' | 'dictation.finished' | 'pairing.revoked'
+    | 'dictation.started' | 'dictation.finished' | 'pairing.revoked' | 'system.panic'
     | 'memory.remembered' | 'memory.forgotten' | 'system.power' | 'system.volume' | 'system.brightness';
   deviceId?: string;
   sessionId?: string;

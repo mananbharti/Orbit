@@ -24,6 +24,7 @@ import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
 import { MemoryService } from './memory/memory-service.js';
 import { SystemControl } from './system-control/system-control.js';
+import { PanicLock } from './security-pairing/panic-lock.js';
 import { createSystemControl } from './os-integration/create-system-control.js';
 import type { SystemControlAdapter } from './os-integration/system-control.js';
 import { GraphStore } from './memory/graph-store.js';
@@ -61,6 +62,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let dictation: DictationService | undefined;
   let memory: MemoryService | undefined;
   let system: SystemControl | undefined;
+  let panic: PanicLock | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
     const store = new FilePairedCredentialStore(join(directory, 'credentials.json'));
@@ -74,7 +76,9 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation);
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);
     if (options.memory !== false) memory = new MemoryService(registry, new GraphStore(join(directory, 'memory.json')), log);
-    if (options.system !== false) system = new SystemControl(registry, options.system?.createAdapter ?? createSystemControl, log);
+    const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);
+    if (systemFactory) system = new SystemControl(registry, systemFactory, log);
+    panic = new PanicLock(registry, store, systemFactory, log);
     const router = new CommandRouter(registry, auth, log);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
@@ -93,7 +97,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
-        system?.stop();
+        system?.stop(); panic?.stop();
         await dictation?.stop();
         memory?.stop();
         await input?.stop();
