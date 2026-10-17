@@ -21,6 +21,9 @@ const fileIcon = name => { const ext = (name.split('.').pop() || 'file').slice(0
 let qrSvg = ''; let toastTimer;
 const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400); };
 
+// Standalone preview helper: ?tab=settings opens that tab (used by headless screenshot checks; harmless in the app).
+const wantTab = new URLSearchParams(location.search).get('tab');
+if (!window.orbit && wantTab) setTimeout(() => document.querySelector('.nav[data-tab="' + wantTab + '"]')?.click(), 0);
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.nav,.tab').forEach(e => e.classList.remove('on'));
   b.classList.add('on'); $(b.dataset.tab).classList.add('on');
