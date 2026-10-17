@@ -71,6 +71,12 @@
       <label class="row"><span><b>Start Orbit at login</b><small>So your phone can always reach this computer.</small></span><input type="checkbox" id="login" class="switch"></label>
       <div class="row"><span><b>Received files folder</b><small>Where files from your phone are saved.</small></span><button class="ghost small" id="open-inbox">Open folder</button></div>
     </div>
+    <div class="card list" id="ext-card" style="display:none">
+      <div class="row"><span><b>Browser extension</b><small id="ext-status">Lets your phone see and control this computer's browser tabs.</small></span><span class="dot" id="ext-dot"></span></div>
+      <div class="row"><span><b>Port</b><small id="ext-port"></small></span><button class="ghost small" id="ext-copy-port">Copy</button></div>
+      <div class="row"><span><b>Token</b><small id="ext-token" class="mono"></small></span><button class="ghost small" id="ext-copy-token">Copy</button></div>
+      <div class="row"><span><b>Setup</b><small>In Chrome or Edge: chrome://extensions, Developer mode, Load unpacked, pick Orbit's extension folder, then paste these on its setup page.</small></span></div>
+    </div>
   </section>
 </main>
 <div id="toast" class="toast"></div>

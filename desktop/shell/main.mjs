@@ -37,7 +37,7 @@ async function boot() {
     // Remote terminal: every session needs a Yes on a dialog shown at this PC (below), same as remote control.
     const terminal = process.platform === 'win32' ? { confirmation: electronApproval } : undefined;
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}) });
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), onExtensionConnection: () => push() });
     state = { phase: 'running', host, port: DEFAULT_PORT };
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
@@ -107,6 +107,7 @@ const snapshot = () => {
     pcName: hostname().slice(0, 64), files,
     devices: service ? service.credentials.list() : [],
     activity: service ? service.log.snapshot().slice(-60).reverse() : [],
+    browserExtension: service ? { port: service.browserExtension.port, token: service.browserExtension.token, connected: service.browserExtension.connected() } : undefined,
   };
 };
 const push = () => { if (win && !win.isDestroyed()) win.webContents.send('orbit:state', snapshot()); };

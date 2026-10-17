@@ -303,6 +303,18 @@ The planned experience includes:
 | Developer/terminal remote access                  | Yes    | Yes     |
 | AI-driven natural-language PC control *(planned)* | —      | —       |
 
+## Browser Extension (tab control)
+
+See and control your computer's browser tabs from your phone: every open tab listed, tap to bring one to the front, close tabs, and send links to open on the PC. Works with Chrome, Edge, and Brave.
+
+One-time setup:
+
+1. Update and start Orbit on your computer, then open Orbit's Settings - the Browser extension card shows a port and token.
+2. In Chrome or Edge, open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and pick the `extension/` folder from this repo.
+3. The extension's setup page asks for the port and token - copy them from Orbit's Settings. The extension badge turns green when connected.
+
+The extension talks only to the Orbit app on the same computer (loopback-only, token-authenticated). Nothing leaves your machine.
+
 ## AI Features
 
 | Capability                        |  Status |

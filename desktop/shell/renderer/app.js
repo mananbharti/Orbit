@@ -7,7 +7,8 @@ const api = window.orbit ?? (() => {
       { id: '1', name: 'Kaizen reel final.mp4', size: 48234496, direction: 'to-desktop', state: 'completed', progress: 1, updatedAt: Date.now() - 840000, device: 'iphone-17-pro', path: '/x' },
       { id: '2', name: 'notes.txt', size: 2048, direction: 'to-desktop', state: 'transferring', progress: .42, updatedAt: Date.now() - 60000, device: 'iphone-17-pro' },
       { id: '3', name: 'orbit-logo.png', size: 184320, direction: 'to-client', state: 'completed', progress: 1, updatedAt: Date.now() - 3600000, device: 'iphone-17-pro' }],
-    activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }] };
+    activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
+    browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
   return { state: async () => s, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false,
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/Orbit-1.0' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name };
@@ -41,6 +42,8 @@ $('choose-files').onclick = async () => {
   if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
 };
 $('open-inbox').onclick = () => api.openInbox();
+$('ext-copy-port').onclick = () => { navigator.clipboard.writeText($('ext-port').textContent); toast('Port copied'); };
+$('ext-copy-token').onclick = () => { navigator.clipboard.writeText($('ext-token').textContent); toast('Token copied'); };
 
 // Drag and drop anywhere on the Files tab.
 const dz = $('dropzone');
@@ -96,6 +99,15 @@ function render(s) {
   if (!ok) { $('pair').hidden = false; $('pair').textContent = 'Try again'; $('pair').onclick = () => api.retry(); } else { $('pair').textContent = 'Show pairing code'; $('pair').onclick = async () => { const r = await api.pair(); if (r.svg) { qrSvg = r.svg; render(await api.state()); } }; }
   $('hero-msg').textContent = open ? 'Scan with Orbit on your phone. This code works once.' : (s.devices.length ? s.pcName + ' is reachable by your phone.' : 'Codes work once and expire after two minutes.');
   $('meta').textContent = s.devices.length + (s.devices.length === 1 ? ' device paired' : ' devices paired');
+
+  // Browser extension
+  if (s.browserExtension) {
+    $('ext-card').style.display = '';
+    $('ext-port').textContent = String(s.browserExtension.port);
+    $('ext-token').textContent = s.browserExtension.token;
+    $('ext-dot').className = 'dot ' + (s.browserExtension.connected ? 'ok' : '');
+    $('ext-status').textContent = s.browserExtension.connected ? 'Connected. Your phone can see this browser\'s tabs.' : 'Not connected yet. Set it up below.';
+  }
 
   // Files
   const files = s.files || [];

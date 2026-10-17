@@ -65,7 +65,9 @@ export async function startDesktop(options: { directory: string; host: string; p
   audioMixer?: { createAdapter: () => AudioMixerAdapter } | false;
   /** Remote terminal: off unless a spawner is supplied; every session needs the computer owner's approval. */
   terminal?: { confirmation?: BiometricConfirmation; spawnShell?: SpawnShell };
-  input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation } }) {
+  input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation };
+  /** Called when the browser extension connects or drops; lets the shell refresh its settings surface. */
+  onExtensionConnection?: (connected: boolean) => void }) {
   const directory = privateDirectory(options.directory);
   const unlock = lockService(directory);
   const log = new ActivityLog();
@@ -123,7 +125,7 @@ export async function startDesktop(options: { directory: string; host: string; p
       power: action => system ? system.powerLocal(action) : Promise.reject(new Error('SYSTEM_UNAVAILABLE')),
     }, log);
     automations.start();
-    extensionServer = new ExtensionServer(directory);
+    extensionServer = new ExtensionServer(directory, options.onExtensionConnection);
     await extensionServer.start();
     tabs = new TabsService(registry, extensionServer);
     if (options.terminal) terminal = new TerminalService(registry, log, options.terminal.confirmation, options.terminal.spawnShell);
