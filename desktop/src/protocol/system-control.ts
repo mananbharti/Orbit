@@ -12,3 +12,10 @@ export const emptySystemSchema = z.strictObject({});
 
 export const brightnessSetSchema = z.strictObject({ level: z.number().int().min(0).max(100) });
 export const brightnessStateSchema = z.strictObject({ level: z.number().int().min(0).max(100).nullable() });
+
+export const displayThemeSchema = z.enum(['dark', 'light']);
+export type DisplayTheme = z.infer<typeof displayThemeSchema>;
+/** Null per field when the machine cannot report or change it. */
+export const modeStateSchema = z.strictObject({ theme: displayThemeSchema.nullable(), nightLight: z.boolean().nullable() });
+export const modeSetSchema = z.strictObject({ theme: displayThemeSchema.optional(), nightLight: z.boolean().optional() })
+  .refine(m => m.theme !== undefined || m.nightLight !== undefined, { message: 'nothing to set' });

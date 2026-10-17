@@ -1,6 +1,6 @@
 /** Windows power/volume/brightness through bounded PowerShell workers; depends on powershell.exe; never interpolates user data into scripts. */
 import { execFile } from 'node:child_process';
-import type { SystemControlAdapter } from './system-control.js';
+import type { DisplayMode, SystemControlAdapter } from './system-control.js';
 import { SystemControlUnavailable } from './system-control.js';
 import { windowsPowerShellEnv } from './powershell-env.js';
 
@@ -71,5 +71,19 @@ ${'MUTE'}`.replace('LEVEL', String(level)).replace('MUTE', typeof muted === 'boo
   async setBrightness(level: number): Promise<void> {
     if (!Number.isInteger(level) || level < 0 || level > 100) throw new SystemControlUnavailable('Brightness must be 0-100');
     await ps(`$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; if ($null -eq $m) { exit 3 }; $m.WmiSetBrightness(1, ${'LEVEL'})`.replace('LEVEL', String(level)));
+  }
+  async getDisplayMode(): Promise<DisplayMode> {
+    const out = await ps(`(Get-ItemPropertyValue -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme -ErrorAction SilentlyContinue)`);
+    const theme = out === '0' ? 'dark' : out === '1' ? 'light' : null;
+    // Night light state lives in an undocumented binary CloudStore blob; poking it risks corrupting Settings. Report unsupported.
+    return { theme, nightLight: null };
+  }
+  async setDisplayMode(mode: { theme?: 'dark' | 'light'; nightLight?: boolean }): Promise<void> {
+    if (mode.theme) {
+      // Computed from the enum, never interpolated user data. AppsUseLightTheme covers apps; SystemUsesLightTheme covers taskbar and shell.
+      const dword = mode.theme === 'light' ? '1' : '0';
+      await ps(`$p = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'; Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value ${'DWORD'}; Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value ${'DWORD'}`.replace(/DWORD/g, dword));
+    }
+    if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light cannot be toggled safely (undocumented registry state)');
   }
 }

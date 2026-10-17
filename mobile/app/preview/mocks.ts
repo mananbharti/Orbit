@@ -70,6 +70,7 @@ export const mockSystem: SystemApi = ({
   audioSessions: async () => [{ id: '4204', name: 'Spotify', volume: 80, muted: false }, { id: '512', name: 'Discord', volume: 35, muted: true }],
   setAudioSession: async () => {}, getVolume: async () => ({ level: 65, muted: false }), setVolume: async () => {},
   getBrightness: async () => 70, setBrightness: async () => {},
+  getMode: async () => ({ theme: 'dark', nightLight: null }), setMode: async () => {},
 }) as unknown as SystemApi;
 
 const phoneId = '3f9a1c2e-1111-4111-8111-aaaaaaaaaaaa';

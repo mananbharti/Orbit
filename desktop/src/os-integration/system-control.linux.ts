@@ -1,6 +1,6 @@
 /** Linux power/volume/brightness through standard session tools; depends on logind/pactl/brightnessctl; fails closed when absent. */
 import { execFile } from 'node:child_process';
-import type { SystemControlAdapter } from './system-control.js';
+import type { DisplayMode, SystemControlAdapter } from './system-control.js';
 import { SystemControlUnavailable } from './system-control.js';
 
 const TIMEOUT_MS = 10_000;
@@ -43,5 +43,16 @@ export class LinuxSystemControl implements SystemControlAdapter {
   async setBrightness(level: number): Promise<void> {
     if (!Number.isInteger(level) || level < 0 || level > 100) throw new SystemControlUnavailable('Brightness must be 0-100');
     await run('brightnessctl', ['set', `${level}%`]);
+  }
+  async getDisplayMode(): Promise<DisplayMode> {
+    try {
+      const out = await run('gsettings', ['get', 'org.gnome.desktop.interface', 'color-scheme']);
+      const theme = out.includes('prefer-dark') ? 'dark' : out.includes('default') ? 'light' : null;
+      return { theme, nightLight: null };
+    } catch { return { theme: null, nightLight: null }; }
+  }
+  async setDisplayMode(mode: { theme?: 'dark' | 'light'; nightLight?: boolean }): Promise<void> {
+    if (mode.theme) await run('gsettings', ['set', 'org.gnome.desktop.interface', 'color-scheme', mode.theme === 'dark' ? 'prefer-dark' : 'default']);
+    if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light is not supported on this system');
   }
 }

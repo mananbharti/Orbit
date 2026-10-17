@@ -103,7 +103,7 @@ Orbit 1.0 is being built phase by phase. What exists in this repo today:
 - **Router**: sends a request to a fast local model (Laya) or the Hermes agent.
 - **Tests**: automated tests for desktop, phone core and end-to-end (phone core against the real desktop over real TLS). CI runs all of them on every push.
 
-What is proven on real devices so far: QR pairing and the encrypted session between a Windows 11 PC and an iPhone (October 14, over a Windows hotspot). Everything else has passed automated tests (270 desktop, 106 phone core, 33 end-to-end) but is waiting on one structured real-device pass. Platform-honest limits are documented per feature: clipboard sync, photo backup and place triggers run while the phone app is open, and true iOS share-sheet extensions need a separate native target. There has been no independent security review. To run it yourself: [docs/BUILD-CHECKLIST.md](docs/BUILD-CHECKLIST.md), then the 27-step pass in [docs/TESTING.md](docs/TESTING.md); per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
+What is proven on real devices so far: QR pairing and the encrypted session between a Windows 11 PC and an iPhone (October 14, over a Windows hotspot). Everything else has passed automated tests (272 desktop, 108 phone core, 33 end-to-end) but is waiting on one structured real-device pass. Platform-honest limits are documented per feature: clipboard sync, photo backup and place triggers run while the phone app is open, and true iOS share-sheet extensions need a separate native target. There has been no independent security review. To run it yourself: [docs/BUILD-CHECKLIST.md](docs/BUILD-CHECKLIST.md), then the 27-step pass in [docs/TESTING.md](docs/TESTING.md); per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 ## What is Orbit?
 
@@ -292,7 +292,7 @@ The planned experience includes:
 | System volume & per-app audio mixer               | Yes    | Yes     |
 | Power control (shutdown/sleep/restart/lock)       | Yes    | Yes     |
 | Wake-on-LAN                                       | Yes    | N/A     |
-| Display brightness & mode control                 | Partial | Partial |
+| Display brightness & mode control                 | Yes    | Yes     |
 | Presentation mode (slides + laser pointer)        | Yes    | N/A     |
 | Browser tab control                               | Yes    | Yes     |
 | QR pairing + biometric confirmation               | Yes    | Yes     |
@@ -303,7 +303,7 @@ The planned experience includes:
 | Developer/terminal remote access                  | Yes    | Yes     |
 | AI-driven natural-language PC control *(planned)* | —      | —       |
 
-Brightness is get/set level end-to-end and returns null on desktops without a controllable backlight (most desktops). Display mode control (light/dark switching) is not built - status per feature lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
+Brightness is get/set level end-to-end and returns null on desktops without a controllable backlight (most desktops). Mode control switches the dark/light app theme (Windows registry, apps + taskbar; GNOME color-scheme on Linux); night light is deliberately not toggled programmatically - its state is an undocumented binary blob and writing it could corrupt Windows Settings. Per-feature status: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 ## Browser Extension (tab control)
 

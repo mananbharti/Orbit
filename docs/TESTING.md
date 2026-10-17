@@ -21,6 +21,7 @@ Clipboard:
 
 Control:
 7. Phone -> Control -> tap Lock. PC locks. Unlock, tap volume +/-. PC volume changes (watch the Windows volume HUD).
+7a. Control -> THEME: tap Dark. Windows apps and the taskbar switch to dark within a second; tap Light to switch back. On a desktop monitor without a backlight the BRIGHTNESS row stays hidden - expected.
 8. Play audio in two apps (e.g. Spotify + a browser video). APP VOLUME lists both; drag one down - only that app gets quieter. Mute one; unmute.
 9. Panic Lock (bottom, red): confirm. PC locks AND the phone returns to the pair screen. Pairing is gone on both sides; pair again to continue.
 

@@ -8,12 +8,15 @@ const powerResultSchema = z.strictObject({ status: z.literal('requested') });
 const volumeStateSchema = z.strictObject({ level: z.number().int().min(0).max(100), muted: z.boolean() });
 const brightnessResultSchema = z.strictObject({ level: z.number().int().min(0).max(100).nullable() });
 const appliedSchema = z.strictObject({ applied: z.literal(true) });
+const modeStateSchema = z.strictObject({ theme: z.enum(['dark', 'light']).nullable(), nightLight: z.boolean().nullable() });
 const panicResultSchema = z.strictObject({ status: z.enum(['locked', 'unpaired']) });
 const audioSessionSchema = z.strictObject({ id: z.string().regex(/^[0-9]{1,10}$/), name: z.string().min(1).max(128),
   volume: z.number().int().min(0).max(100), muted: z.boolean() });
 const audioSessionsResultSchema = z.strictObject({ sessions: z.array(audioSessionSchema).max(64) });
 
 export type PowerAction = 'lock' | 'sleep' | 'restart' | 'shutdown';
+export type DisplayTheme = 'dark' | 'light';
+export interface DisplayMode { theme: DisplayTheme | null; nightLight: boolean | null }
 export interface VolumeState { level: number; muted: boolean }
 export interface AudioSession { id: string; name: string; volume: number; muted: boolean }
 
@@ -52,5 +55,12 @@ export class SystemApi {
   }
   setBrightness(level: number): Promise<void> {
     return this.call('system.brightness.set', { level }, appliedSchema).then(() => {});
+  }
+  /** Display mode: dark/light app theme and night light; null per field when the computer cannot report or change it. */
+  getMode(): Promise<DisplayMode> {
+    return this.call('system.mode.get', {}, modeStateSchema) as Promise<DisplayMode>;
+  }
+  setMode(mode: { theme?: DisplayTheme; nightLight?: boolean }): Promise<void> {
+    return this.call('system.mode.set', { ...(mode.theme ? { theme: mode.theme } : {}), ...(typeof mode.nightLight === 'boolean' ? { nightLight: mode.nightLight } : {}) }, appliedSchema).then(() => {});
   }
 }

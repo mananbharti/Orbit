@@ -1,8 +1,8 @@
 import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { AudioSession, PowerAction, SystemApi } from '@orbit/core';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { AudioSession, DisplayMode, DisplayTheme, PowerAction, SystemApi } from '@orbit/core';
 import { Icon, type IconName } from '../components/Icon';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -19,6 +19,7 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   const [volume, setVolume] = useState<number>();
   const [muted, setMuted] = useState(false);
   const [brightness, setBrightness] = useState<number | null>();
+  const [mode, setMode] = useState<DisplayMode | null>();
   const [sessions, setSessions] = useState<AudioSession[]>([]);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
@@ -26,6 +27,7 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   useEffect(() => {
     api.getVolume().then(v => { setVolume(v.level); setMuted(v.muted); }).catch(() => {});
     api.getBrightness().then(setBrightness).catch(() => setBrightness(null));
+    api.getMode().then(setMode).catch(() => setMode(null));
     api.audioSessions().then(setSessions).catch(() => {});
   }, [api]);
 
@@ -70,8 +72,14 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
     run(() => api.setBrightness(next), `Brightness ${next}%`);
   };
 
+  const pickTheme = (theme: DisplayTheme): void => {
+    if (!mode || mode.theme === theme) return;
+    setMode({ ...mode, theme });
+    run(() => api.setMode({ theme }), theme === 'dark' ? 'Dark theme on your computer' : 'Light theme on your computer');
+  };
+
   return (
-    <View style={[styles.root, { backgroundColor: t.bg }]}>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={styles.root}>
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Control</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Power, sound and display on your computer.</Text>
@@ -120,6 +128,37 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
           ))}
         </>
       ) : null}
+      {mode && mode.theme !== null ? (
+        <>
+          <Text style={[styles.section, { color: t.sub }]}>THEME</Text>
+          <View style={[styles.card, { backgroundColor: t.card }]}>
+            {(['dark', 'light'] as const).map(themeOption => {
+              const active = mode.theme === themeOption;
+              return (
+                <Pressable key={themeOption} accessibilityRole="button" accessibilityLabel={`${themeOption === 'dark' ? 'Dark' : 'Light'} theme on your computer`}
+                  accessibilityState={{ selected: active }} onPress={() => pickTheme(themeOption)}
+                  style={({ pressed }) => [styles.themeChoice, { backgroundColor: active ? t.tint : t.fill, opacity: pressed ? 0.6 : 1 }]}>
+                  <Icon name={themeOption === 'dark' ? 'moon' : 'sun'} size={18} color={active ? '#fff' : t.text} />
+                  <Text style={{ color: active ? '#fff' : t.text, fontSize: 15, fontWeight: '600' }}>{themeOption === 'dark' ? 'Dark' : 'Light'}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {mode.nightLight !== null ? (
+            <View style={[styles.card, { backgroundColor: t.card }]}>
+              <View style={styles.meterWrap}>
+                <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>Night light</Text>
+                <Text style={{ color: t.sub, fontSize: 13 }}>Warmer colors in the evening.</Text>
+              </View>
+              <Pressable accessibilityRole="switch" accessibilityLabel="Night light" accessibilityState={{ checked: mode.nightLight }}
+                onPress={() => { const next = !mode.nightLight; setMode({ ...mode, nightLight: next }); run(() => api.setMode({ nightLight: next }), next ? 'Night light on' : 'Night light off'); }}
+                style={[styles.nightToggle, { backgroundColor: mode.nightLight ? t.tint : t.fill, justifyContent: mode.nightLight ? 'flex-end' : 'flex-start' }]}>
+                <View style={styles.nightKnob} />
+              </Pressable>
+            </View>
+          ) : null}
+        </>
+      ) : null}
       {brightness !== null && brightness !== undefined ? (
         <>
           <Text style={[styles.section, { color: t.sub }]}>BRIGHTNESS</Text>
@@ -157,11 +196,11 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
       ) : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
-    </View>
+    </ScrollView>
   );
 }
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: space.l, paddingTop: 70, gap: space.m },
+  root: { padding: space.l, paddingTop: 70, paddingBottom: 40, gap: space.m },
   title: { fontSize: 34, fontWeight: '700' },
   section: { fontSize: 13, fontWeight: '500', marginTop: space.s },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.m },
@@ -172,5 +211,8 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 22, fontWeight: '700' },
   meterWrap: { flex: 1, gap: 4 },
   meter: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  themeChoice: { flex: 1, borderRadius: radius - 4, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s },
+  nightToggle: { width: 46, height: 28, borderRadius: 14, padding: 2, flexDirection: 'row', alignItems: 'center' },
+  nightKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff' },
   panic: { borderRadius: radius, padding: space.m, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s },
 });

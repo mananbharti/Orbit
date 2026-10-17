@@ -4,7 +4,7 @@ import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { CommandContext } from '../command-router/command-context.js';
 import type { SystemControlAdapter } from '../os-integration/system-control.js';
 import { SystemControlUnavailable } from '../os-integration/system-control.js';
-import { brightnessSetSchema, emptySystemSchema, powerSchema, volumeSetSchema } from '../protocol/system-control.js';
+import { brightnessSetSchema, emptySystemSchema, modeSetSchema, powerSchema, volumeSetSchema } from '../protocol/system-control.js';
 import { ProtocolError } from '../protocol/errors.js';
 
 export class SystemControl {
@@ -16,7 +16,7 @@ export class SystemControl {
     const guard = (context: CommandContext): void => {
       if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
     };
-    type SystemEvent = 'system.power' | 'system.volume' | 'system.brightness';
+    type SystemEvent = 'system.power' | 'system.volume' | 'system.brightness' | 'system.mode';
     const call = async <T>(context: CommandContext, eventType: SystemEvent, fn: (a: SystemControlAdapter) => Promise<T>): Promise<T> => {
       guard(context);
       try {
@@ -41,6 +41,10 @@ export class SystemControl {
         execute: async (_payload, context) => call(context, 'system.brightness', async a => ({ level: await a.getBrightness() })) }),
       registry.register('system.brightness.set', { validate: payload => brightnessSetSchema.safeParse(payload).success,
         execute: async (payload, context) => { const b = brightnessSetSchema.parse(payload); await call(context, 'system.brightness', a => a.setBrightness(b.level)); return { applied: true }; } }),
+      registry.register('system.mode.get', { validate: payload => emptySystemSchema.safeParse(payload).success,
+        execute: async (_payload, context) => call(context, 'system.mode', async a => { const m = await a.getDisplayMode(); return { theme: m.theme, nightLight: m.nightLight }; }) }),
+      registry.register('system.mode.set', { validate: payload => modeSetSchema.safeParse(payload).success,
+        execute: async (payload, context) => { const m = modeSetSchema.parse(payload); await call(context, 'system.mode', a => a.setDisplayMode(m)); return { applied: true }; } }),
     ];
   }
 

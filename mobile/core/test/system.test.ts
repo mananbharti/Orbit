@@ -37,6 +37,18 @@ test('a desktop without a controllable backlight reports null', async () => {
   assert.equal(await api.getBrightness(), null);
   s.stop();
 });
+test('display mode commands carry the documented payloads and tolerate null fields', async () => {
+  const { s, api, calls } = await setup(type => type === 'system.mode.get' ? { theme: 'light', nightLight: null } : { applied: true });
+  assert.deepEqual(await api.getMode(), { theme: 'light', nightLight: null });
+  await api.setMode({ theme: 'dark' });
+  assert.deepEqual(calls.at(-1), { type: 'system.mode.set', payload: { theme: 'dark' } });
+  s.stop();
+});
+test('a computer without theme support reports null theme', async () => {
+  const { s, api } = await setup(() => ({ theme: null, nightLight: null }));
+  assert.deepEqual(await api.getMode(), { theme: null, nightLight: null });
+  s.stop();
+});
 test('panic returns the outcome and malformed replies are rejected', async () => {
   const { s, api, calls } = await setup(() => ({ status: 'locked' }));
   assert.equal(await api.panic(), 'locked');

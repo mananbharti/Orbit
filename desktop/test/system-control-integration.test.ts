@@ -21,18 +21,20 @@ async function fixture(t: TestContext, adapter: SystemControlAdapter) {
   return { client, service, paired };
 }
 
-function fakeAdapter(state: { calls: string[]; level: number; muted: boolean; brightness: number | null }): SystemControlAdapter {
+function fakeAdapter(state: { calls: string[]; level: number; muted: boolean; brightness: number | null; theme?: 'dark' | 'light' | null }): SystemControlAdapter {
   return {
     power: async action => { state.calls.push(`power:${action}`); },
     getVolume: async () => ({ level: state.level, muted: state.muted }),
     setVolume: async (level, muted) => { state.level = level; if (typeof muted === 'boolean') state.muted = muted; state.calls.push(`volume:${level}${state.muted ? ':muted' : ''}`); },
     getBrightness: async () => state.brightness,
     setBrightness: async level => { state.brightness = level; state.calls.push(`brightness:${level}`); },
+    getDisplayMode: async () => ({ theme: state.theme === undefined ? 'light' : state.theme, nightLight: null }),
+    setDisplayMode: async mode => { if (mode.theme) { state.theme = mode.theme; state.calls.push(`theme:${mode.theme}`); } },
   };
 }
 
 test('paired phone can lock, set volume and read brightness through System Control', { timeout: 30_000 }, async t => {
-  const state = { calls: [] as string[], level: 40, muted: false, brightness: 70 as number | null };
+  const state = { calls: [] as string[], level: 40, muted: false, brightness: 70 as number | null, theme: 'light' as 'dark' | 'light' | null };
   const f = await fixture(t, fakeAdapter(state));
   const power = await f.client.command('system.power', { action: 'lock' });
   assert.deepEqual(power.payload, { ok: true, result: { status: 'requested' } });
@@ -43,8 +45,32 @@ test('paired phone can lock, set volume and read brightness through System Contr
   const brightness = await f.client.command('system.brightness.get', {});
   assert.deepEqual(brightness.payload, { ok: true, result: { level: 70 } });
   await f.client.command('system.brightness.set', { level: 30 });
-  assert.deepEqual(state.calls, ['power:lock', 'volume:65:muted', 'brightness:30']);
+  const mode = await f.client.command('system.mode.get', {});
+  assert.deepEqual(mode.payload, { ok: true, result: { theme: 'light', nightLight: null } });
+  const setMode = await f.client.command('system.mode.set', { theme: 'dark' });
+  assert.deepEqual(setMode.payload, { ok: true, result: { applied: true } });
+  const after = await f.client.command('system.mode.get', {});
+  assert.deepEqual(after.payload, { ok: true, result: { theme: 'dark', nightLight: null } });
+  assert.deepEqual(state.calls, ['power:lock', 'volume:65:muted', 'brightness:30', 'theme:dark']);
   assert.equal(state.brightness, 30);
+  assert.equal(state.theme, 'dark');
+});
+
+test('a machine that cannot report its theme answers null without failing', { timeout: 30_000 }, async t => {
+  const state = { calls: [] as string[], level: 50, muted: false, brightness: 50 as number | null, theme: null as 'dark' | 'light' | null };
+  const f = await fixture(t, fakeAdapter(state));
+  const mode = await f.client.command('system.mode.get', {});
+  assert.deepEqual(mode.payload, { ok: true, result: { theme: null, nightLight: null } });
+});
+
+test('system.mode.set rejects an empty payload and a bad theme', { timeout: 30_000 }, async t => {
+  const state = { calls: [] as string[], level: 50, muted: false, brightness: 50 as number | null };
+  const f = await fixture(t, fakeAdapter(state));
+  const empty = await f.client.command('system.mode.set', {});
+  assert.equal(empty.payload.ok, false);
+  const bad = await f.client.command('system.mode.set', { theme: 'purple' });
+  assert.equal(bad.payload.ok, false);
+  assert.deepEqual(state.calls, []);
 });
 
 test('a desktop without a controllable backlight reports null brightness', { timeout: 30_000 }, async t => {
@@ -61,6 +87,8 @@ test('adapter failure surfaces as SYSTEM_UNAVAILABLE, not a crash', { timeout: 3
     setVolume: async () => { throw new Error('no mixer'); },
     getBrightness: async () => { throw new Error('no backlight'); },
     setBrightness: async () => { throw new Error('no backlight'); },
+    getDisplayMode: async () => { throw new Error('no theme'); },
+    setDisplayMode: async () => { throw new Error('no theme'); },
   };
   const f = await fixture(t, failing);
   const power = await f.client.command('system.power', { action: 'sleep' });
@@ -96,6 +124,7 @@ test('panic still unpairs when the machine cannot lock', { timeout: 30_000 }, as
     power: async () => { throw new Error('no OS hooks'); },
     getVolume: async () => ({ level: 0, muted: true }), setVolume: async () => {},
     getBrightness: async () => null, setBrightness: async () => {},
+    getDisplayMode: async () => ({ theme: null, nightLight: null }), setDisplayMode: async () => {},
   };
   const f = await fixture(t, failing);
   const panic = await f.client.command('system.panic', {});
