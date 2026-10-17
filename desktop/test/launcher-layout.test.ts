@@ -10,7 +10,15 @@ import { LauncherLayout } from '../src/app-launcher/launcher-layout.js';
 import { appPageSchema } from '../src/protocol/app-launcher.js';
 import type { JsonValue, ResponseMessage } from '../src/protocol/messages.js';
 import { core } from './helpers.js';
-import { MemoryLauncher } from './launcher.test.js';
+import type { AppLauncherAdapter, NativeApp } from '../src/os-integration/app-launcher.js';
+
+/** Local copy of the synthetic adapter - importing another test file would re-run its whole suite in this process. */
+class MemoryLauncher implements AppLauncherAdapter {
+  apps: NativeApp[] = [{ key: '/private/app-registration', name: 'Synthetic App', revision: 'one' }];
+  launches = 0;
+  async list(): Promise<NativeApp[]> { return this.apps.map(app => ({ ...app })); }
+  async launch(_app: NativeApp, authorize: () => void): Promise<void> { authorize(); this.launches++; }
+}
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'orbit-launcher-layout-'));
