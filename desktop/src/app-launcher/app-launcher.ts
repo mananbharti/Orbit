@@ -4,7 +4,7 @@ import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { CommandContext } from '../command-router/command-context.js';
 import type { AppLauncherAdapter, NativeApp } from '../os-integration/app-launcher.js';
 import { ProtocolError } from '../protocol/errors.js';
-import { APP_PAGE_SIZE, MAX_APPS, appNameSchema, listAppsSchema, launchAppSchema } from '../protocol/app-launcher.js';
+import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appNameSchema, listAppsSchema, launchAppSchema } from '../protocol/app-launcher.js';
 
 export class AppLauncher {
   private readonly secret = randomBytes(32);
@@ -31,6 +31,16 @@ export class AppLauncher {
           const apps = [...this.catalog].slice(start, start + APP_PAGE_SIZE).map(([appId, app]) => ({ appId, name: app.name }));
           return { catalogRevision: this.revision, apps,
             nextCursor: start + apps.length < this.catalog.size ? `${this.revision}:${start + apps.length}` : null };
+        }) }),
+      registry.register('launcher.icon', { validate: payload => appIconSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async signal => {
+          const { appId, catalogRevision } = appIconSchema.parse(payload);
+          if (catalogRevision !== this.revision) throw new ProtocolError('LAUNCHER_STALE_CATALOG');
+          const app = this.catalog.get(appId);
+          if (!app) throw new ProtocolError('LAUNCHER_NOT_FOUND');
+          this.authorize(context);
+          const icon = this.adapter?.icon ? await this.adapter.icon(app, signal) : null;
+          return { icon };
         }) }),
       registry.register('launcher.launch', { validate: payload => launchAppSchema.safeParse(payload).success,
         execute: (payload, context) => this.run(context, async signal => {

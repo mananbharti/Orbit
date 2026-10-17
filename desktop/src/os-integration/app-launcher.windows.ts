@@ -26,7 +26,7 @@ foreach ($item in $folder.Items()) {
   $hash = [System.Security.Cryptography.SHA256]::Create()
   try { $revision = ([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($descriptor)))).Replace('-', '').ToLowerInvariant() }
   finally { $hash.Dispose() }
-  $entries += @{ key = $key; name = [string]$item.Name; revision = $revision }
+  $entries += @{ key = $key; name = [string]$item.Name; revision = $revision; target = $target }
   if ($entries.Count -gt 2048) { exit 2 }
   if ($request.action -eq 'launch' -and $key -ceq $request.key -and $revision -ceq $request.revision) { $selected = $item }
 }
@@ -38,7 +38,28 @@ $selected.InvokeVerb('open')
 exit 0
 `;
 const entriesSchema = z.array(z.strictObject({ key: z.string().min(1).max(4_096), name: z.string().max(4_096),
-  revision: z.string().regex(/^[a-f0-9]{64}$/) })).max(MAX_APPS);
+  revision: z.string().regex(/^[a-f0-9]{64}$/), target: z.string().max(4_096).optional() })).max(MAX_APPS);
+
+/** Extracts one app's own icon as a 48x48 PNG (base64). Only ever runs on a target the list call itself discovered. */
+const ICON_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$request = [Console]::ReadLine() | ConvertFrom-Json
+if ([string]::IsNullOrWhiteSpace($request.target) -or -not (Test-Path -LiteralPath $request.target)) { [Console]::Write('null'); exit 0 }
+Add-Type -AssemblyName System.Drawing
+$icon = [System.Drawing.Icon]::ExtractAssociatedIcon($request.target)
+if ($null -eq $icon) { [Console]::Write('null'); exit 0 }
+try {
+  $bmp = New-Object System.Drawing.Bitmap 48, 48
+  try {
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    try { $g.InterpolationMode = 'HighQualityBicubic'; $g.DrawIcon($icon, (New-Object System.Drawing.Rectangle 0, 0, 48, 48)) } finally { $g.Dispose() }
+    $ms = New-Object System.IO.MemoryStream
+    try { $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [Console]::Write([Convert]::ToBase64String($ms.ToArray())) } finally { $ms.Dispose() }
+  } finally { $bmp.Dispose() }
+} finally { $icon.Dispose() }
+`;
 export class WindowsAppLauncher implements AppLauncherAdapter {
   constructor(private readonly run: LauncherTool = runLauncherTool) {}
   async list(signal: AbortSignal): Promise<NativeApp[]> {
@@ -48,5 +69,12 @@ export class WindowsAppLauncher implements AppLauncherAdapter {
   async launch(app: NativeApp, authorize: () => void, signal: AbortSignal): Promise<void> {
     await this.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', SCRIPT],
       { signal, input: JSON.stringify({ action: 'launch', key: app.key, revision: app.revision }), authorize, activation: true });
+  }
+  async icon(app: NativeApp, signal: AbortSignal): Promise<string | null> {
+    if (!app.target) return null;
+    const out = (await this.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', ICON_SCRIPT],
+      { signal, input: JSON.stringify({ action: 'icon', target: app.target }) })).trim();
+    if (out === 'null' || out.length === 0 || out.length > 90_000 || !/^[A-Za-z0-9+/=]+$/.test(out)) return null;
+    return out;
   }
 }

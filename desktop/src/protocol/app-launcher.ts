@@ -13,4 +13,8 @@ export const appPageSchema = z.strictObject({ catalogRevision: catalogRevisionSc
   apps: z.array(z.strictObject({ appId: appIdSchema, name: appNameSchema })).max(APP_PAGE_SIZE),
   nextCursor: z.string().max(48).nullable() });
 export const launchResultSchema = z.strictObject({ status: z.literal('requested') });
+export const appIconSchema = z.strictObject({ appId: appIdSchema, catalogRevision: catalogRevisionSchema });
+/** Base64 PNG at 48x48; null when the app has no extractable icon. */
+export const ICON_MAX_BASE64 = 90_000;
+export const appIconResultSchema = z.strictObject({ icon: z.string().base64().max(ICON_MAX_BASE64).nullable() });
 export type AppPage = z.infer<typeof appPageSchema>;

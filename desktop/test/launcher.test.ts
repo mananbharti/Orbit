@@ -12,6 +12,7 @@ import { core } from './helpers.js';
 export class MemoryLauncher implements AppLauncherAdapter {
   apps: NativeApp[] = [{ key: '/private/app-registration', name: 'Synthetic App', revision: 'one' }];
   launches = 0;
+  icon?: (app: NativeApp, signal: AbortSignal) => Promise<string | null>;
   beforeList?: () => Promise<void>;
   beforeLaunch?: () => Promise<void>;
   async list(): Promise<NativeApp[]> { await this.beforeList?.(); return this.apps.map(app => ({ ...app })); }
@@ -95,4 +96,23 @@ test('native failures are redacted, limits fail explicitly, and the module remai
   const page = appPageSchema.parse(result(await command('launcher.list', {})));
   adapter.beforeLaunch = async () => { throw new ProtocolError('LAUNCHER_UNKNOWN_OUTCOME'); };
   error(await command('launcher.launch', { appId: page.apps[0]!.appId, catalogRevision: page.catalogRevision }), 'LAUNCHER_UNKNOWN_OUTCOME');
+});
+
+test('icons come only from cataloged apps, only through the adapter, and never from wire paths', async t => {
+  const { adapter, command } = fixture(t);
+  adapter.icon = async app => (app.key === '/private/app-registration' ? 'aVBORw0KGgo=' : null);
+  const page = appPageSchema.parse(result(await command('launcher.list', {})));
+  const appId = page.apps[0]!.appId;
+  assert.deepEqual(result(await command('launcher.icon', { appId, catalogRevision: page.catalogRevision })), { icon: 'aVBORw0KGgo=' });
+  error(await command('launcher.icon', { appId, catalogRevision: randomUUID() }), 'LAUNCHER_STALE_CATALOG');
+  error(await command('launcher.icon', { appId: '0'.repeat(64), catalogRevision: page.catalogRevision }), 'LAUNCHER_NOT_FOUND');
+  error(await command('launcher.icon', { appId, catalogRevision: page.catalogRevision, target: 'C:\\evil.exe' }), 'INVALID_PAYLOAD');
+  const { appIconResultSchema } = await import('../src/protocol/app-launcher.js');
+  appIconResultSchema.parse(result(await command('launcher.icon', { appId, catalogRevision: page.catalogRevision })));
+});
+
+test('a launcher without icon support answers null', async t => {
+  const { command } = fixture(t);
+  const page = appPageSchema.parse(result(await command('launcher.list', {})));
+  assert.deepEqual(result(await command('launcher.icon', { appId: page.apps[0]!.appId, catalogRevision: page.catalogRevision })), { icon: null });
 });
