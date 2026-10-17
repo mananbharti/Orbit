@@ -97,6 +97,7 @@ export type AppEntry = z.infer<typeof appSchema>;
 export const appPageSchema = z.strictObject({ catalogRevision: z.string().uuid(), apps: z.array(appSchema).max(APP_PAGE_SIZE),
   nextCursor: z.string().max(48).nullable() });
 export const launchResultSchema = z.strictObject({ status: z.literal('requested') });
+export const appIconResultSchema = z.strictObject({ icon: z.string().base64().max(90_000).nullable() });
 
 // Clipboard (mirrors desktop/src/protocol/clipboard.ts). Plain text only, 8 KiB.
 export const MAX_CLIPBOARD_BYTES = 8 * 1024;

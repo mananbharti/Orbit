@@ -1,6 +1,6 @@
 /** Lists and launches apps on the desktop; depends on OrbitSession and Zod; never retries a launch and never sends paths or arguments. */
 import { InvalidDesktopReply } from './agent.js';
-import { MAX_APPS, appPageSchema, launchResultSchema, type AppEntry } from './protocol.js';
+import { MAX_APPS, appIconResultSchema, appPageSchema, launchResultSchema, type AppEntry } from './protocol.js';
 import { CommandError, NotSent, type OrbitSession } from './session.js';
 
 const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bounded native helper on the desktop
@@ -8,8 +8,20 @@ const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bound
 export class LauncherApi {
   private revision?: string;
   private apps: AppEntry[] = [];
+  private readonly icons = new Map<string, string | null>();
   constructor(private readonly session: OrbitSession) {
-    session.onStatus(() => { this.revision = undefined; this.apps = []; });
+    session.onStatus(() => { this.revision = undefined; this.apps = []; this.icons.clear(); });
+  }
+
+  /** The app's own icon as base64 PNG, or null when the desktop has none. Cached per connection. */
+  async icon(appId: string): Promise<string | null> {
+    if (this.icons.has(appId)) return this.icons.get(appId)!;
+    if (!this.revision || !this.apps.some(app => app.appId === appId)) throw new NotSent('Refresh the app list first');
+    const result: unknown = await this.session.command('launcher.icon', { appId, catalogRevision: this.revision }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = appIconResultSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    this.icons.set(appId, parsed.data.icon);
+    return parsed.data.icon;
   }
 
   /** Fetches the whole catalog. A catalog that changes mid-listing fails with LAUNCHER_STALE_CATALOG; list again. */

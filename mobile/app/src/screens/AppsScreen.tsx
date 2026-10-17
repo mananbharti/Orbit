@@ -1,7 +1,7 @@
 import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { OutcomeUnknown, type AppEntry, type LauncherApi } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -28,12 +28,30 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
   const [launching, setLaunching] = useState<string>();
   const [launched, setLaunched] = useState<string>();
   const [query, setQuery] = useState('');
+  const [icons, setIcons] = useState<Record<string, string | null>>({});
 
   const load = useCallback(async () => {
     setError(undefined);
     try { setApps(await api.list()); } catch (e) { setError(friendlyError(e)); }
   }, [api]);
   useEffect(() => { void load(); }, [load]);
+
+  // Real icons stream in after the grid is up: first screenful first, one request at a time.
+  useEffect(() => {
+    if (!apps) return;
+    let cancelled = false;
+    void (async () => {
+      for (const app of apps.slice(0, 96)) {
+        if (cancelled) return;
+        try {
+          const icon = await api.icon(app.appId);
+          if (cancelled || !icon) continue;
+          setIcons(prev => (prev[app.appId] ? prev : { ...prev, [app.appId]: icon }));
+        } catch { /* no icon: the letter tile stays */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apps, api]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -75,9 +93,10 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
             <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.name} on your computer`} disabled={!!launching}
               onPress={() => { void launch(item); }}
               style={({ pressed }) => [styles.tile, { opacity: pressed || busy ? 0.6 : 1 }]}>
-              <View style={[styles.icon, { backgroundColor: c1 }]}>
+              <View style={[styles.icon, icons[item.appId] ? styles.iconImage : { backgroundColor: c1 }]}>
                 {busy ? <ActivityIndicator color="#fff" size="small" /> :
                   done ? <Text style={styles.check}>✓</Text> :
+                    icons[item.appId] ? <Image source={{ uri: 'data:image/png;base64,' + icons[item.appId] }} style={styles.image} /> :
                     <Text style={styles.initials}>{initials(item.name)}</Text>}
               </View>
               <Text numberOfLines={2} style={[styles.name, { color: t.text }]}>{item.name}</Text>
@@ -92,8 +111,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 34, fontWeight: '700' },
   search: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
   tile: { flex: 1 / 4, alignItems: 'center', gap: 6 },
-  icon: { width: 60, height: 60, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+  icon: { width: 60, height: 60, borderRadius: 15, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  iconImage: { backgroundColor: 'transparent' },
+  image: { width: 60, height: 60 },
   initials: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.5 },
   check: { color: '#fff', fontSize: 26, fontWeight: '800' },
   name: { fontSize: 11.5, fontWeight: '500', textAlign: 'center', lineHeight: 14 },
