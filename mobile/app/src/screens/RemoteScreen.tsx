@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { InputApi, InputKey, KeyboardMacro, MacroStep } from '@orbit/core';
 import { friendlyError } from '../orbit';
+import { gyroAvailable, startGyroMouse } from '../gyro';
 import { radius, space, useTheme } from '../theme';
 
 const SPEED = 1.6;
@@ -22,6 +23,8 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
   const [typed, setTyped] = useState('');
   const [macros, setMacros] = useState<KeyboardMacro[]>([]);
   const [running, setRunning] = useState<string>();
+  const [gyro, setGyro] = useState(false);
+  const [gyroSupported, setGyroSupported] = useState(false);
   const [composing, setComposing] = useState<{ name: string; steps: MacroStep[]; mods: Set<MacroStep['modifiers'] extends (infer M)[] | undefined ? M : never>; key: InputKey } | null>(null);
 
   const runMacro = async (macro: KeyboardMacro): Promise<void> => {
@@ -49,6 +52,13 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
   const scrollLast = useRef(0);
   const active = state.status === 'active';
   useEffect(() => { if (active) void api.macros().then(setMacros).catch(() => {}); }, [api, active]);
+  useEffect(() => { void gyroAvailable().then(setGyroSupported); }, []);
+  useEffect(() => {
+    if (!gyro || !active) return;
+    const stop = startGyroMouse((dx, dy) => { try { api.push({ t: 'move', dx, dy }); } catch { /* session ended */ } });
+    return stop;
+  }, [gyro, active, api]);
+  useEffect(() => { if (!active) setGyro(false); }, [active]);
 
   useEffect(() => () => { void api.end(); }, [api]);
 
@@ -88,11 +98,20 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
         </>
       ) : (
         <>
-          <View {...pad.panHandlers} accessibilityLabel="Trackpad" style={[styles.pad, { backgroundColor: t.card }]}><Text style={{ color: t.sub }}>Drag to move · tap to click</Text></View>
+          <View {...(gyro ? {} : pad.panHandlers)} accessibilityLabel="Trackpad" style={[styles.pad, { backgroundColor: t.card }]}>
+            <Text style={{ color: t.sub }}>{gyro ? 'Tilt the phone to move the pointer' : 'Drag to move · tap to click'}</Text>
+            {gyro ? <Text style={{ color: t.tint, fontSize: 13, marginTop: 4 }}>Gyro on</Text> : null}
+          </View>
           <View style={styles.row}>
             <View {...scroll.panHandlers} accessibilityLabel="Scroll" style={[styles.scroll, { backgroundColor: t.card }]}><Text style={{ color: t.sub }}>Scroll</Text></View>
             <Pressable accessibilityRole="button" onPress={guard(() => api.push({ t: 'button', button: 'left', action: 'click' }))} style={[styles.key, { backgroundColor: t.fill }]}><Text style={{ color: t.text }}>Left click</Text></Pressable>
             <Pressable accessibilityRole="button" onPress={guard(() => api.push({ t: 'button', button: 'right', action: 'click' }))} style={[styles.key, { backgroundColor: t.fill }]}><Text style={{ color: t.text }}>Right click</Text></Pressable>
+            {gyroSupported ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Toggle gyro mouse" onPress={() => { setGyro(on => !on); void Haptics.selectionAsync(); }}
+                style={[styles.key, { backgroundColor: gyro ? t.tint : t.fill }]}>
+                <Text style={{ color: gyro ? '#fff' : t.text }}>Gyro</Text>
+              </Pressable>
+            ) : null}
           </View>
           <View style={styles.row}>
             {KEYS.map(k => <Pressable key={k.key} accessibilityRole="button" onPress={guard(() => api.push({ t: 'key', key: k.key }))} style={[styles.key, { backgroundColor: t.fill }]}><Text style={{ color: t.text }}>{k.label}</Text></Pressable>)}

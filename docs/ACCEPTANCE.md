@@ -34,7 +34,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 8 | Customizable launcher grid | Implemented: grid + search + long-press pin/unpin/move earlier-later; pins persisted on the desktop (stable app ids across restarts), shared by all phones | Yes (layout store, commands, id stability, corrupt-file recovery) | Pending | - |
 | 9 | Context-aware launcher scenes | Partial: named scenes (save/edit/delete, one-tap launch-all, per-app failure reporting) persisted on the desktop; context triggers (time/place) not built | Yes (commands, persistence, partial-failure semantics) | Pending | - |
 | 10 | Full mouse/touchpad control | Implemented (A5) | Yes | Pending | Windows + Linux only |
-| 11 | Gyroscope mouse mode | Not started | - | - | - |
+| 11 | Gyroscope mouse mode | Implemented: Gyro toggle on the Remote screen; rotation rate -> cursor velocity with tremor dead zone, ~30 updates/s | UI layer only (no unit tests - sensor glue); protocol path fully tested | Pending (sensitivity + axis signs need on-hand tuning) | Web preview hides the toggle; needs the dev-client build |
 | 12 | Full keyboard + custom macros | Implemented: remote keyboard + letters/digits/F-keys now sendable with modifiers; named macros saved on the desktop, one tap runs every chord in one batch inside the approved control session | Yes (store, commands, VK translation, batching) | Pending | Letters/F-keys as remote-keyboard buttons pending; macros need an approved control session by design |
 | 13 | System volume + per-app mixer | Implemented | Yes | Pending | Sessions addressed by PID |
 | 14 | Power control (shutdown/sleep/restart/lock) | Implemented | Yes | Pending | - |
