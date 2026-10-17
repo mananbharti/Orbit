@@ -6,6 +6,7 @@ import { ActivityScreen } from './screens/ActivityScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { AppsScreen } from './screens/AppsScreen';
 import { ClipboardScreen } from './screens/ClipboardScreen';
+import { ControlScreen } from './screens/ControlScreen';
 import { FilesScreen } from './screens/FilesScreen';
 import { RemoteScreen } from './screens/RemoteScreen';
 import { PairScreen } from './screens/PairScreen';
@@ -30,6 +31,7 @@ function Shell() {
   const [activity, setActivity] = useState(false);
   const [apps, setApps] = useState(false);
   const [clip, setClip] = useState(false);
+  const [control, setControl] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [remote, setRemote] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -73,11 +75,12 @@ function Shell() {
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;
   else if (filesOpen) body = <FilesScreen api={connected.files} onBack={() => setFilesOpen(false)} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
+  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} />;
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
-  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} onOpen={t => setOpen(t.taskId)} onRepair={repair} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onMemory={() => setMemoryOpen(true)} onSettings={() => setSettings(true)} />;
-  const screenKey = booting ? 'boot' : !connected ? 'pair' : settings ? 'settings' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
+  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} onOpen={t => setOpen(t.taskId)} onRepair={repair} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} />;
+  const screenKey = booting ? 'boot' : !connected ? 'pair' : settings ? 'settings' : control ? 'control' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <ScreenTransition key={screenKey}>{body}</ScreenTransition>

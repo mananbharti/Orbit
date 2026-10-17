@@ -1,0 +1,40 @@
+/** Power, volume and brightness control of the paired desktop; depends on OrbitSession and Zod. */
+import { InvalidDesktopReply } from './agent.js';
+import { z } from 'zod';
+import type { JsonValue } from './protocol.js';
+import { NotSent, type OrbitSession } from './session.js';
+
+const powerResultSchema = z.strictObject({ status: z.literal('requested') });
+const volumeStateSchema = z.strictObject({ level: z.number().int().min(0).max(100), muted: z.boolean() });
+const brightnessResultSchema = z.strictObject({ level: z.number().int().min(0).max(100).nullable() });
+const appliedSchema = z.strictObject({ applied: z.literal(true) });
+
+export type PowerAction = 'lock' | 'sleep' | 'restart' | 'shutdown';
+export interface VolumeState { level: number; muted: boolean }
+
+export class SystemApi {
+  constructor(private readonly session: OrbitSession) {}
+  private async call(type: string, payload: Record<string, JsonValue>, schema: z.ZodTypeAny): Promise<unknown> {
+    if (this.session.status !== 'connected') throw new NotSent('Not connected');
+    const result: unknown = await this.session.command(type, payload, { timeoutMs: 15_000 });
+    const parsed = schema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data;
+  }
+  power(action: PowerAction): Promise<void> {
+    return this.call('system.power', { action }, powerResultSchema).then(() => {});
+  }
+  getVolume(): Promise<VolumeState> {
+    return this.call('system.volume.get', {}, volumeStateSchema) as Promise<VolumeState>;
+  }
+  setVolume(level: number, muted?: boolean): Promise<void> {
+    return this.call('system.volume.set', { level, ...(typeof muted === 'boolean' ? { muted } : {}) }, appliedSchema).then(() => {});
+  }
+  /** Null when the computer has no controllable backlight (most desktops). */
+  getBrightness(): Promise<number | null> {
+    return (this.call('system.brightness.get', {}, brightnessResultSchema) as Promise<{ level: number | null }>).then(r => r.level);
+  }
+  setBrightness(level: number): Promise<void> {
+    return this.call('system.brightness.set', { level }, appliedSchema).then(() => {});
+  }
+}

@@ -13,7 +13,7 @@ import { radius, space, useTheme } from '../theme';
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onMemory, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onMemory: () => void; onSettings: () => void }) {
+export function TasksScreen({ store, api, dictation, name, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void }) {
   const t = useTheme();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState('');

@@ -10,6 +10,14 @@ const paths = {
   apps: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   activity: 'M3 12h4l3-8 4 16 3-8h4',
   settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M6 15v4',
+  lock: 'M6 11V8a6 6 0 1 1 12 0v3M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+  refresh: 'M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6',
+  power: 'M12 3v9M18.36 6.64a9 9 0 1 1-12.72 0',
+  speaker: 'M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
+  mute: 'M4 9v6h4l5 4V5L8 9H4zM22 9l-6 6M16 9l6 6',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  control: 'M4 8h10M18 8h2M4 16h2M10 16h10M14 6v4M6 14v4',
 } as const;
 export type IconName = keyof typeof paths;
 

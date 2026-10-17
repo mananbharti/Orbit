@@ -1,5 +1,5 @@
 /** Fake data and fake APIs so every screen can be drawn without a computer, a phone or a network. Preview only; never imported by the real app. */
-import type { AgentApi, AppEntry, AuditEntry, ClipboardApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
+import type { AgentApi, AppEntry, AuditEntry, ClipboardApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, SystemApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const NOW = 1_760_000_000_000;
@@ -42,3 +42,7 @@ export const mockFiles = (transferring = true): FileApi => ({ ...store({ offers:
   refreshOffers: async () => {}, watch: async () => {}, upload: async () => {}, download: async () => {}, cancel: async () => {}, retry: async () => {} }) as unknown as FileApi;
 export const mockMemory = (): MemoryApi => ({ recall: async () => [], remember: async () => '', forget: async () => true }) as unknown as MemoryApi;
 export const mockInput = (): InputApi => ({ ...store({ status: 'idle' }), begin: async () => {}, end: async () => {}, push: () => {} }) as unknown as InputApi;
+export const mockSystem: SystemApi = ({
+  power: async () => {}, getVolume: async () => ({ level: 65, muted: false }), setVolume: async () => {},
+  getBrightness: async () => 70, setBrightness: async () => {},
+}) as unknown as SystemApi;

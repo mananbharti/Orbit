@@ -12,6 +12,7 @@ const BY_CODE: Partial<Record<string, string>> = {
   AGENT_LEDGER_IO: 'The computer could not save the task. Check its disk.',
   UNAUTHENTICATED: 'This phone is not signed in to the computer. Pair again.',
   LAUNCHER_UNAVAILABLE: 'The computer cannot list its apps right now.',
+  SYSTEM_UNAVAILABLE: 'The computer could not do that on this system.',
   LAUNCHER_STALE_CATALOG: 'The app list changed. Refresh it and try again.',
   LAUNCHER_NOT_FOUND: 'That app is no longer available.',
   LAUNCHER_UNKNOWN_OUTCOME: 'Not sure the app opened. Check your computer.',

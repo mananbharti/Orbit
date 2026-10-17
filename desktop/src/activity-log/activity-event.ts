@@ -9,7 +9,7 @@ export interface ActivityEvent {
     | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable' | 'file.state'
     | 'input.started' | 'input.ended' | 'input.release_failed'
     | 'dictation.started' | 'dictation.finished' | 'pairing.revoked'
-    | 'memory.remembered' | 'memory.forgotten';
+    | 'memory.remembered' | 'memory.forgotten' | 'system.power' | 'system.volume' | 'system.brightness';
   deviceId?: string;
   sessionId?: string;
   requestId?: string;
