@@ -13,6 +13,6 @@ npm run dev
 
 The project uses Next.js static export (`output: "export"`). Run `npm run build`; the deployable site is written to `out/`. Vercel can build the repository with the default Next.js settings.
 
-Orbit is in early development. Phases 1–5 of the desktop service cover local pairing, its encrypted command channel, clipboard sync, file transfer, and app launching. Orbit Mobile is a later phase; input adapters are not wired to the service, and power/session controls are future work. The landing page labels its UI art as product direction and gives each roadmap feature a current status.
+Orbit is in private device testing. The desktop service and the phone app cover pairing over an encrypted channel, clipboard sync, file transfer, app launching, remote input, device controls and agent tasks. The landing page labels its UI art as product direction and gives each feature a current status.
 
 Download links point to the launch information panel, and notification links open GitHub's repository notification settings. There is no app download or separate email waitlist endpoint yet.
