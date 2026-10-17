@@ -32,6 +32,10 @@ The dev client must be rebuilt once to pick up photo-backup, location, and share
 - Walk docs/TESTING.md steps 1-27 in order. Report anything that fails with the exact step number.
 - Foreground-only notes (platform limits, not bugs): clipboard sync, photo backup, and place triggers run while Orbit is open on the phone; each catches up on the next open.
 
+## Design review without devices
+
+See [docs/previews.md](previews.md) to render every phone screen and shell tab in a browser with sample data.
+
 ## If something breaks
 - Desktop window -> Activity tab shows every command the phone sent and what happened.
 - Phone: kill and reopen Orbit; it reconnects to the last computer on its own.
