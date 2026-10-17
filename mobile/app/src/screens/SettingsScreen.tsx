@@ -1,11 +1,11 @@
 import * as Haptics from 'expo-haptics';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { BackButton } from '../components/BackButton';
 import { radius, space, useTheme, useThemePref, type ThemePref } from '../theme';
 
 const options: { value: ThemePref; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }];
 
-export function SettingsScreen({ name, onBack, onRepair }: { name: string; onBack: () => void; onRepair: () => void }) {
+export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void }) {
   const t = useTheme();
   const { pref, setPref } = useThemePref();
   return (
@@ -25,6 +25,16 @@ export function SettingsScreen({ name, onBack, onRepair }: { name: string; onBac
         })}
       </View>
       <Text style={{ color: t.sub, fontSize: 13 }}>Auto follows your phone's light or dark setting.</Text>
+      <Text style={[styles.section, { color: t.sub }]}>CLIPBOARD</Text>
+      <View style={[styles.card, { backgroundColor: t.card }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: t.text, fontSize: 17 }}>Auto-sync clipboard</Text>
+            <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>Copy on one device, paste on the other, while Orbit is open.</Text>
+          </View>
+          <Switch value={autoSync} onValueChange={v => { onAutoSync(v); void Haptics.selectionAsync(); }} trackColor={{ true: t.good }} />
+        </View>
+      </View>
       <Text style={[styles.section, { color: t.sub }]}>COMPUTER</Text>
       <View style={[styles.card, { backgroundColor: t.card }]}>
         <Text style={{ color: t.text, fontSize: 17 }}>{name}</Text>

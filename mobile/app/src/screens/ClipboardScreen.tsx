@@ -14,7 +14,7 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
 
-  useEffect(() => { api.start().catch(e => setError(friendlyError(e))); return () => { void api.stop(); }; }, [api]);
+  useEffect(() => { api.start().catch(e => setError(friendlyError(e))); }, [api]); // the app-level subscription keeps running after this screen closes
 
   const send = async (value: string): Promise<void> => {
     setError(undefined); setNote(undefined);
@@ -39,10 +39,10 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
     <View style={[styles.root, { backgroundColor: t.bg }]}>
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Clipboard</Text>
-      <Text style={{ color: t.sub, fontSize: 15 }}>Share text with your computer while this screen is open. Orbit never reads your clipboard unless you tap a button.</Text>
+      <Text style={{ color: t.sub, fontSize: 15 }}>Clipboard syncs automatically while Orbit is open on both devices. Turn this off in Settings anytime.</Text>
       {state.incoming ? (
         <View style={[styles.card, { backgroundColor: t.card }]}>
-          <Text style={[styles.label, { color: t.sub }]}>Copied on your computer</Text>
+          <Text style={[styles.label, { color: t.sub }]}>Copied on your computer - already on this phone</Text>
           <Text numberOfLines={6} style={{ color: t.text, fontSize: 16, lineHeight: 21 }}>{state.incoming.text}</Text>
           <Pressable accessibilityRole="button" onPress={() => { void copyIncoming(); }} style={[styles.button, { backgroundColor: t.tint }]}>
             <Text style={styles.buttonText}>Copy to this phone</Text></Pressable>

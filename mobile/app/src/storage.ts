@@ -22,3 +22,11 @@ export async function loadThemePref(): Promise<'auto' | 'light' | 'dark'> {
 export async function saveThemePref(pref: 'auto' | 'light' | 'dark'): Promise<void> {
   try { await SecureStore.setItemAsync(THEME_KEY, pref); } catch { /* preference is cosmetic; ignore */ }
 }
+
+const CLIP_AUTO_KEY = 'orbit.clipboard-autosync.v1';
+export async function loadClipboardAuto(): Promise<boolean> {
+  try { return (await SecureStore.getItemAsync(CLIP_AUTO_KEY)) !== 'off'; } catch { return true; }
+}
+export async function saveClipboardAuto(on: boolean): Promise<void> {
+  try { await SecureStore.setItemAsync(CLIP_AUTO_KEY, on ? 'on' : 'off'); } catch { /* cosmetic; ignore */ }
+}

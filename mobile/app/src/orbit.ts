@@ -31,6 +31,8 @@ export function connect(paired: PairedDesktop): Connected {
   const memory = new MemoryApi(session);
   const dictation = new DictationApi(session);
   void session.start().catch(() => { /* status listeners report it; the session retries or asks to re-pair */ });
+  // Clipboard sync is app-wide, not screen-bound: subscribe now so computer -> phone lands instantly.
+  void clipboard.start().catch(() => { /* retried on the next reconnect */ });
   return { paired, session, store, api, launcher, clipboard, files, input, memory, dictation };
 }
 
