@@ -21,3 +21,4 @@ export * from './devices.js';
 export * from './automation.js';
 export * from './terminal.js';
 export { isSharedFileUrl, sharedFileName } from './share-intake.js';
+export { TabsApi, browserTabSchema, type BrowserTab } from './tabs.js';

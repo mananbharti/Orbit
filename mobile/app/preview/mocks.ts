@@ -113,3 +113,13 @@ export const mockTerminal: TerminalApi = { begin: async () => ({ cwd: 'C:\\Users
   interrupt: async () => {}, end: async () => {}, onOutput: () => () => {}, dispose: () => {},
   activeSessionId: 'a1a1a1a1-1111-4111-8111-aaaaaaaaaaaa' } as unknown as TerminalApi;
 export { terminalLines };
+
+export const mockTabs: import('@orbit/core').TabsApi = {
+  status: async () => ({ connected: true }),
+  list: async () => ({ tabs: [
+    { id: 101, title: 'GitHub - mananbharti/orbit', url: 'https://github.com/mananbharti/orbit', active: true, windowId: 1 },
+    { id: 102, title: 'Orbit - heyorbit.xyz', url: 'https://heyorbit.xyz', active: false, windowId: 1 },
+    { id: 103, title: 'Expo documentation', url: 'https://docs.expo.dev/versions/latest/', active: false, windowId: 2 },
+  ] }),
+  open: async () => {}, close: async () => {}, activate: async () => {},
+} as unknown as import('@orbit/core').TabsApi;

@@ -21,6 +21,7 @@ const paths = {
   present: 'M3 4h18v11H3zM12 15v3M9 21h6M12 8.5l3.5 2-3.5 2z',
   automations: 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3.5 2',
   terminal: 'M4 17l6-5-6-5M12 19h8',
+  tabs: 'M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2zM2 9h20M6 5v4',
 } as const;
 export type IconName = keyof typeof paths;
 

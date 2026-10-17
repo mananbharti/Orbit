@@ -52,4 +52,6 @@ Remote:
 
 23. Share into Orbit (needs a dev-client rebuild first): in Photos or Files, share any file and choose Orbit in "Open in...". Orbit opens, the banner says it is sending the shared file, and it lands in received/<Type> on the PC. With Orbit killed, share again, then open Orbit and connect: the queued file sends on its own.
 
+24. Browser tabs (needs the desktop app updated): on the PC, open chrome://extensions, turn on Developer mode, Load unpacked -> pick the orbit repo's extension folder. The extension's setup page asks for the port and token shown in Orbit's Settings on the PC. Phone Home -> Tabs: your PC browser's tabs appear. Tap one: that tab comes to the front on the PC. Close one from the phone. Type a link (e.g. wikipedia.org) and Open: it opens on the PC.
+
 Report anything that fails with the exact step number.

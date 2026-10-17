@@ -15,12 +15,13 @@ import { DevicesScreen } from '../src/screens/DevicesScreen';
 import { ComputersScreen } from '../src/screens/ComputersScreen';
 import { AutomationsScreen } from '../src/screens/AutomationsScreen';
 import { TerminalScreen } from '../src/screens/TerminalScreen';
+import { TabsScreen } from '../src/screens/TabsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockTabs, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -35,6 +36,7 @@ function Screen({ name }: { name: string }) {
     case 'clipboard': return <ClipboardScreen api={mockClipboard()} onBack={noop} />;
     case 'files': return <FilesScreen api={mockFiles()} onBack={noop} />;
     case 'files-backup': return <FilesScreen api={mockFiles()} onBack={noop} backup={{ available: true, enabled: true, progress: { done: 3, total: 12, running: true }, onToggle: noop }} />;
+    case 'tabs': return <TabsScreen api={mockTabs} onBack={noop} />;
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;
     case 'remote': return <RemoteScreen api={mockInput()} onBack={noop} />;
     case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
