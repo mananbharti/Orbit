@@ -2,7 +2,7 @@ import { BackButton } from '../components/BackButton';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import type { FileApi, TransferManifest } from '@orbit/core';
 import { sinkForDownload, sourceFromUri } from '../files';
 import { friendlyError } from '../orbit';
@@ -12,7 +12,8 @@ const size = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n
 const label = { preparing: 'Preparing', offered: 'Waiting for your computer', transferring: 'Transferring', paused: 'Paused', verifying: 'Verifying',
   completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', expired: 'Expired' } as const;
 
-export function FilesScreen({ api, onBack }: { api: FileApi; onBack: () => void }) {
+export function FilesScreen({ api, onBack, backup }: { api: FileApi; onBack: () => void;
+  backup?: { available: boolean; enabled: boolean; progress: { done: number; total: number; running: boolean }; onToggle: (on: boolean) => void } }) {
   const t = useTheme();
   const state = useSyncExternalStore(api.subscribe, api.getState);
   const [error, setError] = useState<string>();
@@ -41,6 +42,21 @@ export function FilesScreen({ api, onBack }: { api: FileApi; onBack: () => void 
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Files</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Send a file you choose to your computer, or receive one it offers. Every file is checked end to end before it is kept.</Text>
+      {backup?.available ? (
+        <View style={[styles.card, { backgroundColor: t.card }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ color: t.text, fontSize: 17 }}>Back up new photos</Text>
+              <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>
+                {backup.progress.running ? `Backing up ${backup.progress.done} of ${backup.progress.total}...`
+                  : backup.enabled ? 'On. New photos land in received/Images on your computer while Orbit is open.'
+                  : 'New photos copy to your computer while Orbit is open.'}
+              </Text>
+            </View>
+            <Switch value={backup.enabled} onValueChange={v => { backup.onToggle(v); void Haptics.selectionAsync(); }} trackColor={{ true: t.good }} />
+          </View>
+        </View>
+      ) : null}
       <Pressable accessibilityRole="button" disabled={running} onPress={() => { void pick(); }}
         style={[styles.button, { backgroundColor: running ? t.fill : t.tint }]}>
         <Text style={styles.buttonText}>Choose a file to send</Text></Pressable>

@@ -16,6 +16,7 @@ import { TasksScreen } from './screens/TasksScreen';
 import { loadAppLock, loadClipboardAuto, loadPairedList, removePaired, saveAppLock, saveClipboardAuto, savePairedList, upsertPaired } from './storage';
 import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
+import { PhotoBackup, photoBackupAvailable, photoBackupEnabled, photoBackupPermitted, setPhotoBackupEnabled, type BackupProgress } from './photo-backup';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
@@ -40,6 +41,8 @@ function Shell() {
   const [switchingId, setSwitchingId] = useState<string>();
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [backupOn, setBackupOn] = useState(false);
+  const [backupProgress, setBackupProgress] = useState<BackupProgress>({ done: 0, total: 0, running: false });
   const [sceneOptions, setSceneOptions] = useState<{ id: string; name: string }[]>([]);
   const [booting, setBooting] = useState(true);
   const [locked, setLocked] = useState(false);
@@ -89,6 +92,13 @@ function Shell() {
     return () => { handle.stop(); autoRef.current = undefined; };
   }, [connected, showBanner]);
   useEffect(() => { autoRef.current?.setEnabled(autoSync); }, [autoSync]);
+  useEffect(() => { void photoBackupEnabled().then(setBackupOn); }, []);
+  useEffect(() => {
+    if (!connected || !backupOn) return;
+    const backup = new PhotoBackup(connected, setBackupProgress);
+    backup.start();
+    return () => backup.stop();
+  }, [connected, backupOn]);
   const onAutoSync = useCallback((on: boolean) => { setAutoSync(on); void saveClipboardAuto(on); }, []);
   useEffect(() => () => { connected?.store.dispose(); connected?.clipboard.dispose(); connected?.files.dispose(); connected?.input.dispose(); connected?.session.stop(); }, [connected]);
 
@@ -156,7 +166,9 @@ function Shell() {
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
   else if (present) body = <PresentScreen api={connected.input} onBack={() => setPresent(false)} />;
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;
-  else if (filesOpen) body = <FilesScreen api={connected.files} onBack={() => setFilesOpen(false)} />;
+  else if (filesOpen) body = <FilesScreen api={connected.files} onBack={() => setFilesOpen(false)}
+    backup={{ available: photoBackupAvailable(), enabled: backupOn, progress: backupProgress,
+      onToggle: on => { void (async () => { if (on && !(await photoBackupPermitted())) { showBanner('Orbit needs access to your photos'); return; } await setPhotoBackupEnabled(on); setBackupOn(on); })(); } }} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
   else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { if (activeId) void forgetComputer(activeId); }} />;
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
