@@ -40,7 +40,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 14 | Power control (shutdown/sleep/restart/lock) | Implemented | Yes | Pending | - |
 | 15 | Wake-on-LAN | Implemented: MACs in pairing payload + phone magic-packet sender + Wake button when PC is unreachable | Yes (packet bytes, MAC filtering, pairing pass-through) | Pending | Needs the desktop BIOS/NIC WoL enabled; iOS sends via react-native-udp (native module, dev-client build) |
 | 16 | Display brightness + mode control | Partial: brightness done (null on desktops without backlight); mode control pending | Yes | Pending | Most desktops have no controllable backlight |
-| 17 | Presentation mode | Not started | - | - | - |
+| 17 | Presentation mode | Implemented: Present screen with slide nav, Start/Black/White/End deck keys, laser pad (Ctrl+left-drag via held-key events) inside the approved control session | Yes (held-key op translation, schema) | Pending | Laser verified against PowerPoint's Ctrl+drag convention; needs real-device check |
 | 18 | Browser tab control | Not started | - | - | Likely needs a browser extension |
 | 19 | QR pairing + biometric confirmation | Partial: QR pairing done; biometric confirm pending | Yes (pairing) | Pending | - |
 | 20 | Per-device permission scoping | Partial: scope system exists on desktop; UI pending | Yes (scopes) | Pending | - |

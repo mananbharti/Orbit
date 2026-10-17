@@ -62,6 +62,8 @@ test('macros survive a restart; a corrupt file starts empty', t => {
 
 test('letters, digits and function keys are valid input events with real Windows VK codes', () => {
   for (const key of ['a', 'z', '0', '9', 'f1', 'f12']) assert.equal(inputEventSchema.safeParse({ t: 'key', key }).success, true);
+  for (const action of ['tap', 'down', 'up']) assert.equal(inputEventSchema.safeParse({ t: 'key', key: 'v', modifiers: ['ctrl'], action }).success, true);
+  assert.equal(inputEventSchema.safeParse({ t: 'key', key: 'v', action: 'hold' }).success, false);
   assert.deepEqual(toOps({ t: 'key', key: 'v', modifiers: ['ctrl', 'shift'] }), [
     { k: 'key', vk: 0x11, flags: 0 }, { k: 'key', vk: 0x10, flags: 0 },
     { k: 'key', vk: 0x56, flags: 0 }, { k: 'key', vk: 0x56, flags: 2 },

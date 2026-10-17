@@ -170,7 +170,7 @@ export type InputEvent =
   | { t: 'move'; dx: number; dy: number }
   | { t: 'button'; button: 'left' | 'right' | 'middle'; action: 'down' | 'up' | 'click' }
   | { t: 'scroll'; dx: number; dy: number }
-  | { t: 'key'; key: InputKey; modifiers?: InputModifier[] }
+  | { t: 'key'; key: InputKey; modifiers?: InputModifier[]; action?: 'tap' | 'down' | 'up' }
   | { t: 'text'; text: string };
 export const inputBeginSchema = z.strictObject({ controlSessionId: z.string().uuid(), nextSequence: z.number().int().min(1), heartbeatTimeoutMs: z.number().int().positive() });
 export const inputSentSchema = z.strictObject({ nextSequence: z.number().int().min(2) });

@@ -13,7 +13,9 @@ export const inputEventSchema = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('move'), dx: step, dy: step }),
   z.strictObject({ t: z.literal('button'), button: z.enum(['left', 'right', 'middle']), action: z.enum(['down', 'up', 'click']) }),
   z.strictObject({ t: z.literal('scroll'), dx: step, dy: step }),
-  z.strictObject({ t: z.literal('key'), key: z.enum(KEYS), modifiers: z.array(z.enum(MODIFIERS)).max(4).optional() }),
+  // tap (default) is a full press; down/up hold or release the chord so pointers like PowerPoint's Ctrl+drag laser can exist.
+  z.strictObject({ t: z.literal('key'), key: z.enum(KEYS), modifiers: z.array(z.enum(MODIFIERS)).max(4).optional(),
+    action: z.enum(['tap', 'down', 'up']).optional() }),
   // Printable text only: no control characters, no lone surrogates.
   z.strictObject({ t: z.literal('text'), text: z.string().min(1).max(MAX_TEXT_CHARS).refine(s => !/[\x00-\x1f\x7f\uD800-\uDFFF]/u.test(s)) }),
 ]);

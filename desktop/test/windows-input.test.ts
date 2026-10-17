@@ -64,3 +64,13 @@ test('approval prompt allows only on an explicit ALLOW, denies everything else',
   assert.equal(await run(f => f.raw.stdout.write('ALLOW\n'), 'power.shutdown'), false, 'only approves remote control');
   assert.equal(await windowsApproval(() => { throw new Error('no powershell'); }).verify(msg('input.begin'), ctx), false);
 });
+
+test('held chords split into down and up so pointers like the slideshow laser can exist', () => {
+  assert.deepEqual(toOps({ t: 'key', key: 'v', modifiers: ['ctrl'], action: 'down' }), [
+    { k: 'key', vk: 0x11, flags: 0 }, { k: 'key', vk: 0x56, flags: 0 }]);
+  assert.deepEqual(toOps({ t: 'key', key: 'v', modifiers: ['ctrl'], action: 'up' }), [
+    { k: 'key', vk: 0x56, flags: 2 }, { k: 'key', vk: 0x11, flags: 2 }]);
+  // a tap is unchanged: full press with release, modifiers out in reverse
+  assert.deepEqual(toOps({ t: 'key', key: 'v', modifiers: ['ctrl'] }), [
+    { k: 'key', vk: 0x11, flags: 0 }, { k: 'key', vk: 0x56, flags: 0 }, { k: 'key', vk: 0x56, flags: 2 }, { k: 'key', vk: 0x11, flags: 2 }]);
+});

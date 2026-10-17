@@ -14,7 +14,7 @@ import { radius, space, useTheme } from '../theme';
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; wakePreview?: boolean }) {
+export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; wakePreview?: boolean }) {
   const t = useTheme();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState('');
@@ -53,7 +53,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
         {!paused && !offline ? <Pressable accessibilityRole="button" hitSlop={10} onPress={confirmPause}><Text style={{ color: t.bad, fontSize: 15 }}>Stop agent</Text></Pressable> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips} contentContainerStyle={{ gap: space.s, paddingRight: space.l }}>
-        {([['Remote', 'remote', onRemote], ['Files', 'files', onFiles], ['Clipboard', 'clipboard', onClipboard], ['Memory', 'memory', onMemory], ['Apps', 'apps', onApps], ['Activity', 'activity', onActivity], ['Settings', 'settings', onSettings]] as [string, IconName, () => void][]).map(([label, icon, press]) => (
+        {([['Remote', 'remote', onRemote], ['Present', 'present', onPresent], ['Files', 'files', onFiles], ['Clipboard', 'clipboard', onClipboard], ['Memory', 'memory', onMemory], ['Apps', 'apps', onApps], ['Activity', 'activity', onActivity], ['Settings', 'settings', onSettings]] as [string, IconName, () => void][]).map(([label, icon, press]) => (
           <PressableScale key={label} accessibilityRole="button" accessibilityLabel={label} onPress={press}>
             <Glass radius={18} style={styles.chip}>
               <Icon name={icon} size={16} color={t.tint} />

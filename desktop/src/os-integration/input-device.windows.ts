@@ -29,8 +29,12 @@ export function toOps(event: InputEvent): Op[] {
     case 'key': {
       const [vk, ext] = VK[event.key]!;
       const mods = [...new Set(event.modifiers ?? [])].map(m => MOD[m]!);
-      return [...mods.map(m => ({ k: 'key' as const, vk: m, flags: 0 })), { k: 'key', vk, flags: ext ? EXT : 0 }, { k: 'key', vk, flags: (ext ? EXT : 0) | KEYUP },
-        ...[...mods].reverse().map(m => ({ k: 'key' as const, vk: m, flags: KEYUP }))];
+      const flags = ext ? EXT : 0;
+      const down = [...mods.map(m => ({ k: 'key' as const, vk: m, flags: 0 })), { k: 'key' as const, vk, flags }];
+      const up = [{ k: 'key' as const, vk, flags: flags | KEYUP }, ...[...mods].reverse().map(m => ({ k: 'key' as const, vk: m, flags: KEYUP }))];
+      if (event.action === 'down') return down;
+      if (event.action === 'up') return up;
+      return [...down, ...up];
     }
     case 'text': {
       const ops: Op[] = [];
