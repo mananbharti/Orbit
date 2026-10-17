@@ -9,6 +9,7 @@ import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { JsonValue } from '../protocol/messages.js';
 import { ProtocolError } from '../protocol/errors.js';
 import * as protocol from '../protocol/file-transfer.js';
+import { organizedDestination } from './organize.js';
 import { TransferStore, type TransferRecord } from './transfer-store.js';
 import { decodeChunk, hashFile, publishFile, readChunk, recoverPartial, regularFile, removePartial, selectedFile, sha256, writeChunk } from './file-storage.js';
 
@@ -111,12 +112,25 @@ export class FileTransfer {
         if (await hashFile(path, undefined, lease.abort.signal) !== record.manifest.sha256) throw new ProtocolError('FILE_INTEGRITY');
         this.requireLease(record, lease.id, context);
         if (record.manifest.direction === 'to-desktop') {
+          if (!record.destination) {
+            record.destination = organizedDestination(this.store.inbox, record.manifest.name);
+            this.store.save(record, false); // remember the organized spot before publishing, so a replay finds it
+          }
           const paths = this.store.paths(record);
           if (existsSync(paths.destination)) {
             regularFile(paths.destination);
             const a = statSync(paths.partial); const b = statSync(paths.destination);
             if (a.ino !== b.ino || a.dev !== b.dev) throw new ProtocolError('FILE_IO');
-          } else publishFile(paths.partial, paths.destination);
+          } else {
+            try { publishFile(paths.partial, paths.destination); }
+            catch (error) {
+              // Lost a same-name race: pick the next free name and publish there.
+              if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+              record.destination = organizedDestination(this.store.inbox, record.manifest.name);
+              this.store.save(record, false);
+              publishFile(paths.partial, this.store.paths(record).destination);
+            }
+          }
         }
         record.state = 'completed';
         this.store.save(record);

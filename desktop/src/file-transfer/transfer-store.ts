@@ -8,6 +8,7 @@ import { ProtocolError } from '../protocol/errors.js';
 import { createPartial, receivingPaths, recoverPartial, regularFile, removePartial, safeDirectory } from './file-storage.js';
 
 const recordSchema = z.strictObject({ manifest: manifestSchema, owner: id, state: stateSchema, nextOffset: offset,
+  destination: z.string().min(1).max(512).optional(),
   updatedAt: z.number().int().nonnegative(), sourcePath: z.string().optional(), error: z.string().regex(/^FILE_[A-Z_]+$/).optional() });
 export type TransferRecord = z.infer<typeof recordSchema>;
 export class TransferStore {
@@ -36,7 +37,10 @@ export class TransferStore {
     }
     this.cleanup();
   }
-  paths(record: TransferRecord) { return receivingPaths(this.inbox, record.manifest.transferId, record.manifest.name); }
+  paths(record: TransferRecord) {
+    const base = receivingPaths(this.inbox, record.manifest.transferId, record.manifest.name);
+    return record.destination ? { partial: base.partial, destination: record.destination } : base;
+  }
   save(record: TransferRecord, touch = true): void {
     if (touch) record.updatedAt = this.now();
     atomicWrite(join(this.directory, `${record.manifest.transferId}.json`), JSON.stringify(recordSchema.parse(record)));

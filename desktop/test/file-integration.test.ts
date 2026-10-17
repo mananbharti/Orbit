@@ -133,3 +133,24 @@ test('an upload crosses proactive renewal and reconciles its checkpoint on the n
   const row = service.files.store.records.get(id)!;
   assert.deepEqual(readFileSync(service.files.store.paths(row).destination), bytes);
 });
+
+test('received files land organized by type, and a same-name transfer steps aside instead of overwriting', { timeout: 30_000 }, async t => {
+  const { root, files, service } = await fixture(t);
+  const first = join(root, 'Invoice-October.pdf'); writeFileSync(first, Buffer.alloc(64_000, 11));
+  const firstId = await files.upload(first);
+  await waitFor(() => files.store.records.get(firstId)?.state === 'completed', 15_000);
+  const firstRow = service.files.store.records.get(firstId)!;
+  const firstDest = service.files.store.paths(firstRow).destination;
+  assert.match(firstDest, /Documents[\/\\]Invoice-October\.pdf$/);
+  assert.equal(readFileSync(firstDest).length, 64_000);
+
+  // Same file name again: the second delivery must not touch the first.
+  writeFileSync(first, Buffer.alloc(64_000, 22));
+  const secondId = await files.upload(first);
+  await waitFor(() => files.store.records.get(secondId)?.state === 'completed', 15_000);
+  const secondDest = service.files.store.paths(service.files.store.records.get(secondId)!).destination;
+  assert.notEqual(secondDest, firstDest); // never overwrites the first delivery
+  assert.deepEqual(readFileSync(firstDest), Buffer.alloc(64_000, 11));
+  assert.match(secondDest, /Invoice-October \(2\)\.pdf$/);
+  assert.deepEqual(readFileSync(secondDest), Buffer.alloc(64_000, 22));
+});

@@ -29,7 +29,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 3 | Direct file transfer (no cloud) | Implemented (chunked, resumable, hash-verified) | Yes | Pending | - |
 | 4 | Native share-sheet integration | Not started | - | - | iOS share extension needs a native build |
 | 5 | Drag-and-drop drop zone (desktop) | Implemented (A1) | Yes | Pending | - |
-| 6 | Auto-organize transferred files | In progress | - | - | - |
+| 6 | Auto-organize transferred files | Implemented: received files land in inbox/<Type> (Documents, Images, Videos, Audio, Archives, Apps, Other), same-name deliveries step to " (2)" | Yes | Pending | - |
 | 7 | Photo auto-backup to PC | Not started | - | - | - |
 | 8 | Customizable launcher grid | Partial: grid + search done; pin/reorder pending | Yes (grid) | Pending | - |
 | 9 | Context-aware launcher scenes | Not started | - | - | - |
