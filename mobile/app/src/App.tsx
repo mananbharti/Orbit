@@ -188,7 +188,8 @@ function Shell() {
   else if (terminalOpen) body = <TerminalScreen api={connected.terminal} onBack={() => setTerminalOpen(false)} />;
   else if (tabsOpen) body = <TabsScreen api={connected.tabs} onBack={() => setTabsOpen(false)} />;
   else if (automationsOpen) body = <AutomationsScreen api={connected.automation} scenes={sceneOptions} onBack={() => setAutomationsOpen(false)} />;
-  else if (devicesOpen) body = <DevicesScreen api={connected.devices} onBack={() => setDevicesOpen(false)} />;
+  else if (devicesOpen) body = <DevicesScreen api={connected.devices} onBack={() => setDevicesOpen(false)}
+    onUnpairSelf={() => { setDevicesOpen(false); if (activeId) void forgetComputer(activeId); }} />;
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
   else if (present) body = <PresentScreen api={connected.input} onBack={() => setPresent(false)} />;
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;

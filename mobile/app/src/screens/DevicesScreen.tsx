@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { DeviceInfo, DevicesApi, Scope } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { BackButton } from '../components/BackButton';
@@ -18,7 +18,7 @@ const SCOPE_LABELS: { scope: Scope; label: string; hint: string }[] = [
 
 const shortId = (id: string): string => id.slice(0, 8);
 
-export function DevicesScreen({ api, onBack, initialSelected }: { api: DevicesApi; onBack: () => void; initialSelected?: string }) {
+export function DevicesScreen({ api, onBack, initialSelected, onUnpairSelf }: { api: DevicesApi; onBack: () => void; initialSelected?: string; onUnpairSelf?: () => void }) {
   const t = useTheme();
   const [devices, setDevices] = useState<DeviceInfo[] | undefined>();
   const [error, setError] = useState('');
@@ -55,6 +55,16 @@ export function DevicesScreen({ api, onBack, initialSelected }: { api: DevicesAp
                 <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>{current.scopes === 'all' ? 'Full access' : `Limited to ${current.scopes.length} ${current.scopes.length === 1 ? 'permission' : 'permissions'}`}</Text>
                 {current.scopes !== 'all' ? <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>{current.scopes.map(s => SCOPE_LABELS.find(l => l.scope === s)?.label ?? s).join(', ')}</Text> : null}
               </View>
+              {onUnpairSelf ? (
+                <Pressable accessibilityRole="button" onPress={() => {
+                  Alert.alert('Unpair this iPhone?', 'This phone will forget the computer and need a new pairing code to reconnect.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Unpair', style: 'destructive', onPress: () => { void api.revoke(current.deviceId).catch(() => undefined).finally(() => onUnpairSelf()); } },
+                  ]);
+                }} style={{ alignItems: 'center', paddingVertical: space.xs }}>
+                  <Text style={{ color: t.bad, fontSize: 15 }}>Unpair this iPhone</Text>
+                </Pressable>
+              ) : null}
             </>
           ) : null}
           <Text style={[styles.section, { color: t.sub }]}>OTHER DEVICES</Text>
@@ -103,6 +113,19 @@ export function DevicesScreen({ api, onBack, initialSelected }: { api: DevicesAp
                 )) : null}
               </View>
               <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>Changes apply immediately and survive restarts on the computer.</Text>
+              <Pressable accessibilityRole="button" disabled={saving} onPress={() => {
+                Alert.alert('Forget this device?', 'It will need to pair with the computer again from scratch.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Forget', style: 'destructive', onPress: () => { void (async () => {
+                    setSaving(true); setError('');
+                    try { setDevices(await api.revoke(editing.deviceId)); setSelected(undefined); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+                    catch (e) { setError(friendlyError(e)); }
+                    finally { setSaving(false); }
+                  })(); } },
+                ]);
+              }} style={[styles.card, { backgroundColor: t.card, alignItems: 'center' }]}>
+                <Text style={{ color: t.bad, fontSize: 17 }}>Forget this device</Text>
+              </Pressable>
             </>
           ) : null}
         </>

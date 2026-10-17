@@ -33,5 +33,6 @@ export const scopeSchema = z.enum(SCOPES);
 export const deviceInfoSchema = z.strictObject({ deviceId: z.string().uuid(),
   scopes: z.union([z.array(scopeSchema).min(1).max(SCOPES.length), z.literal('all')]) });
 export const pairDevicesResultSchema = z.strictObject({ current: z.string().uuid(), devices: z.array(deviceInfoSchema).max(128) });
+export const revokeDeviceSchema = z.strictObject({ deviceId: z.string().uuid() });
 export const setDeviceScopesSchema = z.strictObject({ deviceId: z.string().uuid(),
   scopes: z.union([z.array(scopeSchema).min(1).max(SCOPES.length), z.literal('all')]) });

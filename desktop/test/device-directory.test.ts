@@ -57,3 +57,46 @@ test('device-directory rejects unknown devices, self-scoping, and unauthenticate
   await assert.rejects(handler.execute({ deviceId: OTHER, scopes: ['clipboard'] }, context(OTHER, false)), (error: ProtocolError) => error.code === 'UNAUTHENTICATED');
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('device-directory revokes another device immediately', async () => {
+  const { registry, store, dir } = setup();
+  new DeviceDirectory(registry, store);
+  store.enroll(); const other = store.enroll();
+  const handler = registry.get('pair.revoke')!;
+  const result = await handler.execute({ deviceId: other.deviceId }, context()) as { devices: { deviceId: string }[] };
+  assert.equal(result.devices.length, 1);
+  assert.equal(store.list().some(d => d.deviceId === other.deviceId), false);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('device-directory rejects revoking an unknown device', async () => {
+  const { registry, store, dir } = setup();
+  new DeviceDirectory(registry, store);
+  store.enroll();
+  const handler = registry.get('pair.revoke')!;
+  await assert.rejects(() => handler.execute({ deviceId: OTHER }, context()), (e: unknown) => e instanceof ProtocolError && e.code === 'PAIR_NOT_FOUND');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('device-directory defers self-revoke so the reply lands first', async () => {
+  const { registry, store, dir } = setup();
+  new DeviceDirectory(registry, store);
+  const self = store.enroll();
+  const handler = registry.get('pair.revoke')!;
+  const result = await handler.execute({ deviceId: self.deviceId }, context(self.deviceId)) as { devices: { deviceId: string }[] };
+  assert.equal(result.devices.length, 0); // the reply already reflects the unpair
+  assert.equal(store.list().length, 1);   // but the credential still exists this tick
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(store.list().length, 0);   // and is gone after the deferred revoke
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('device-directory revoke requires authorization', async () => {
+  const { registry, store, dir } = setup();
+  new DeviceDirectory(registry, store);
+  store.enroll(); const other = store.enroll();
+  const handler = registry.get('pair.revoke')!;
+  await assert.rejects(() => handler.execute({ deviceId: other.deviceId }, context(undefined, false)), (e: unknown) => e instanceof ProtocolError && e.code === 'UNAUTHENTICATED');
+  assert.equal(store.list().length, 2);
+  rmSync(dir, { recursive: true, force: true });
+});

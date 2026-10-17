@@ -58,4 +58,6 @@ Remote:
 
 26. Full keyboard: Remote -> start control -> "Full keyboard". Tap Q, W, a couple of letters: they type on the PC. Tap Ctrl then A: it selects all (modifier applies to the next key only, then clears). Tap F5: the focused app refreshes. Digits row types numbers. "Hide keyboard" folds it away.
 
+27. Forget a device: Settings -> Devices -> tap another device -> "Forget this device" -> Forget. It disappears from the list and from the computer's Orbit window; that device can no longer connect without a fresh pairing code. "Unpair this iPhone" on the top card unpairs this phone and returns Orbit to the pair screen.
+
 Report anything that fails with the exact step number.

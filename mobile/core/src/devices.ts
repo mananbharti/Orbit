@@ -35,6 +35,16 @@ export class DevicesApi {
     this.devices = parsed.data.devices;
     return this.getDevices();
   }
+
+  /** Removes a device's pairing from the computer entirely. Returns the fresh list (already excluding it). */
+  async revoke(deviceId: string): Promise<DeviceInfo[]> {
+    const result: unknown = await this.session.command('pair.revoke', { deviceId }, { timeoutMs: DEVICES_TIMEOUT_MS });
+    const parsed = pairDevicesResultSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    this.current = parsed.data.current;
+    this.devices = parsed.data.devices;
+    return this.getDevices();
+  }
 }
 
 /** Every permission, in a stable order for display. */
