@@ -4,7 +4,7 @@ import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { CommandContext } from '../command-router/command-context.js';
 import type { AppLauncherAdapter, NativeApp } from '../os-integration/app-launcher.js';
 import { ProtocolError } from '../protocol/errors.js';
-import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appNameSchema, listAppsSchema, launchAppSchema } from '../protocol/app-launcher.js';
+import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appIconsSchema, appNameSchema, listAppsSchema, launchAppSchema } from '../protocol/app-launcher.js';
 
 export class AppLauncher {
   private readonly secret = randomBytes(32);
@@ -41,6 +41,22 @@ export class AppLauncher {
           this.authorize(context);
           const icon = this.adapter?.icon ? await this.adapter.icon(app, signal) : null;
           return { icon };
+        }) }),
+      registry.register('launcher.icons', { validate: payload => appIconsSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async signal => {
+          const { appIds, catalogRevision } = appIconsSchema.parse(payload);
+          if (catalogRevision !== this.revision) throw new ProtocolError('LAUNCHER_STALE_CATALOG');
+          this.authorize(context);
+          // Stay well under the 64KB message cap: unknown apps are omitted and the response stops growing past ~48KB; the phone asks again for whatever is missing.
+          const icons: Record<string, string | null> = {}; let bytes = 0;
+          for (const appId of appIds) {
+            const app = this.catalog.get(appId);
+            if (!app) continue;
+            const icon = this.adapter?.icon ? await this.adapter.icon(app, signal).catch(() => null) : null;
+            if (bytes + (icon?.length ?? 0) > 48_000) break;
+            icons[appId] = icon; bytes += icon?.length ?? 0;
+          }
+          return { icons };
         }) }),
       registry.register('launcher.launch', { validate: payload => launchAppSchema.safeParse(payload).success,
         execute: (payload, context) => this.run(context, async signal => {

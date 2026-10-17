@@ -79,3 +79,31 @@ test('launcher commands get a longer timeout than the default', async () => {
   assert.deepEqual(await new LauncherApi(s).list(), []);
   s.stop();
 });
+
+test('icons batch into one command per 8 apps and cache per app', async () => {
+  const ids = Array.from({ length: 10 }, (_, i) => String(i).repeat(64));
+  const { s, api, calls } = await setup((type, p) => type === 'launcher.list'
+    ? { catalogRevision: REV, apps: ids.map((appId, i) => ({ appId, name: `App ${i}` })), nextCursor: null }
+    : { icons: Object.fromEntries((p.appIds as string[]).map(id => [id, Buffer.from(`png-${id[0]}`).toString('base64')])) });
+  await api.list();
+  const icons = await api.icons(ids);
+  assert.equal(icons.size, 10);
+  assert.equal(Buffer.from(icons.get(ids[3]!)!, 'base64').toString(), 'png-3');
+  const batches = calls.filter(c => c.type === 'launcher.icons');
+  assert.equal(batches.length, 2); // 8 + 2, not 10 round trips
+  assert.equal(batches[0]!.payload.appIds.length, 8);
+  await api.icons(ids); // fully cached: no new commands
+  assert.equal(calls.filter(c => c.type === 'launcher.icons').length, 2);
+  s.stop();
+});
+test('apps cut from a batch response are simply fetched again; unknown apps cache as null', async () => {
+  const ids = ['a'.repeat(64), 'b'.repeat(64)];
+  const { s, api } = await setup((type, _p) => type === 'launcher.list'
+    ? { catalogRevision: REV, apps: [{ appId: ids[0], name: 'One' }], nextCursor: null }
+    : { icons: {} }); // desktop cut everything (byte budget)
+  await api.list();
+  const icons = await api.icons([...ids, 'c'.repeat(64)]);
+  assert.equal(icons.has(ids[0]!), false); // cut: still uncached, retried next call
+  assert.equal(icons.get('c'.repeat(64)), null); // unknown on the desktop list: null
+  s.stop();
+});

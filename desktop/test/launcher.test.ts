@@ -116,3 +116,31 @@ test('a launcher without icon support answers null', async t => {
   const page = appPageSchema.parse(result(await command('launcher.list', {})));
   assert.deepEqual(result(await command('launcher.icon', { appId: page.apps[0]!.appId, catalogRevision: page.catalogRevision })), { icon: null });
 });
+
+test('batched icons return in one command; unknown apps are omitted and stale revisions fail', async t => {
+  const { adapter, command } = fixture(t);
+  adapter.apps = Array.from({ length: 4 }, (_, index) => ({ key: `/private/app-${index}`, name: `App ${index}`, revision: 'one' }));
+  adapter.icon = async app => (app.key.endsWith('-2') ? null : Buffer.from(`png-${app.key}`).toString('base64'));
+  const page = appPageSchema.parse(result(await command('launcher.list', {})));
+  const ids = page.apps.map(app => app.appId);
+  const { appIconsResultSchema } = await import('../src/protocol/app-launcher.js');
+  const batch = appIconsResultSchema.parse(result(await command('launcher.icons', { appIds: [...ids, 'f'.repeat(64)], catalogRevision: page.catalogRevision })));
+  assert.equal(Object.keys(batch.icons).length, 4);
+  assert.equal(batch.icons[ids[2]!], null);
+  assert.equal(Buffer.from(batch.icons[ids[0]!]!, 'base64').toString(), 'png-/private/app-0');
+  error(await command('launcher.icons', { appIds: ids, catalogRevision: randomUUID() }), 'LAUNCHER_STALE_CATALOG');
+  error(await command('launcher.icons', { appIds: Array.from({ length: 9 }, () => 'a'.repeat(64)), catalogRevision: page.catalogRevision }), 'INVALID_PAYLOAD');
+  error(await command('launcher.icons', { appIds: [], catalogRevision: page.catalogRevision }), 'INVALID_PAYLOAD');
+});
+
+test('the icon batch stays inside the message budget: oversized icons cut the response, not the socket', async t => {
+  const { adapter, command } = fixture(t);
+  adapter.apps = Array.from({ length: 6 }, (_, index) => ({ key: `/private/big-${index}`, name: `Big ${index}`, revision: 'one' }));
+  adapter.icon = async () => Buffer.alloc(20_000, 65).toString('base64'); // ~26.7KB each: three fit, the rest are cut
+  const page = appPageSchema.parse(result(await command('launcher.list', {})));
+  const ids = page.apps.map(app => app.appId);
+  const batch = result(await command('launcher.icons', { appIds: ids, catalogRevision: page.catalogRevision })) as { icons: Record<string, string> };
+  const returned = Object.keys(batch.icons).length;
+  assert.ok(returned >= 1 && returned < 6, `expected a partial batch, got ${returned}`);
+  assert.ok(Object.values(batch.icons).every(icon => icon.length === Buffer.alloc(20_000, 65).toString('base64').length));
+});

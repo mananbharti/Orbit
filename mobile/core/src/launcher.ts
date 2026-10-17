@@ -1,6 +1,6 @@
 /** Lists and launches apps on the desktop; depends on OrbitSession and Zod; never retries a launch and never sends paths or arguments. */
 import { InvalidDesktopReply } from './agent.js';
-import { MAX_APPS, appIconResultSchema, appPageSchema, launchResultSchema, type AppEntry } from './protocol.js';
+import { ICON_BATCH_SIZE, MAX_APPS, appIconResultSchema, appIconsResultSchema, appPageSchema, launchResultSchema, type AppEntry } from './protocol.js';
 import { CommandError, NotSent, type OrbitSession } from './session.js';
 
 const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bounded native helper on the desktop
@@ -8,20 +8,47 @@ const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bound
 export class LauncherApi {
   private revision?: string;
   private apps: AppEntry[] = [];
-  private readonly icons = new Map<string, string | null>();
+  private readonly iconCache = new Map<string, string | null>();
   constructor(private readonly session: OrbitSession) {
-    session.onStatus(() => { this.revision = undefined; this.apps = []; this.icons.clear(); });
+    session.onStatus(() => { this.revision = undefined; this.apps = []; this.iconCache.clear(); });
   }
 
   /** The app's own icon as base64 PNG, or null when the desktop has none. Cached per connection. */
   async icon(appId: string): Promise<string | null> {
-    if (this.icons.has(appId)) return this.icons.get(appId)!;
+    if (this.iconCache.has(appId)) return this.iconCache.get(appId)!;
     if (!this.revision || !this.apps.some(app => app.appId === appId)) throw new NotSent('Refresh the app list first');
     const result: unknown = await this.session.command('launcher.icon', { appId, catalogRevision: this.revision }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
     const parsed = appIconResultSchema.safeParse(result);
     if (!parsed.success) throw new InvalidDesktopReply();
-    this.icons.set(appId, parsed.data.icon);
+    this.iconCache.set(appId, parsed.data.icon);
     return parsed.data.icon;
+  }
+
+  /** Fetches icons for several apps in one round trip (the desktop serializes native work, so batches are far faster than per-app calls). Unknown apps are cached as null; apps cut by the response byte budget simply stay uncached for the next call. */
+  async icons(appIds: string[]): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    const missing: string[] = [];
+    for (const appId of appIds) {
+      if (this.iconCache.has(appId)) out.set(appId, this.iconCache.get(appId)!);
+      else missing.push(appId);
+    }
+    if (!missing.length) return out;
+    if (!this.revision) throw new NotSent('Refresh the app list first');
+    const known = new Set(this.apps.map(app => app.appId));
+    const request = missing.filter(appId => known.has(appId));
+    for (const appId of missing) if (!known.has(appId)) { this.iconCache.set(appId, null); out.set(appId, null); }
+    for (let i = 0; i < request.length; i += ICON_BATCH_SIZE) {
+      const batch = request.slice(i, i + ICON_BATCH_SIZE);
+      const result: unknown = await this.session.command('launcher.icons', { appIds: batch, catalogRevision: this.revision }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+      const parsed = appIconsResultSchema.safeParse(result);
+      if (!parsed.success) throw new InvalidDesktopReply();
+      for (const appId of batch) {
+        if (!(appId in parsed.data.icons)) continue; // cut by the byte budget: try again next time
+        const icon = parsed.data.icons[appId]!;
+        this.iconCache.set(appId, icon); out.set(appId, icon);
+      }
+    }
+    return out;
   }
 
   /** Fetches the whole catalog. A catalog that changes mid-listing fails with LAUNCHER_STALE_CATALOG; list again. */

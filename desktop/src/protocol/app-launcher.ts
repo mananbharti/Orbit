@@ -17,4 +17,8 @@ export const appIconSchema = z.strictObject({ appId: appIdSchema, catalogRevisio
 /** Base64 PNG at 48x48; null when the app has no extractable icon. */
 export const ICON_MAX_BASE64 = 90_000;
 export const appIconResultSchema = z.strictObject({ icon: z.string().base64().max(ICON_MAX_BASE64).nullable() });
+/** One icon request per app would take one round trip each; a batch of 8 fits the 64KB message cap with headroom. */
+export const ICON_BATCH_SIZE = 8;
+export const appIconsSchema = z.strictObject({ appIds: z.array(appIdSchema).min(1).max(ICON_BATCH_SIZE), catalogRevision: catalogRevisionSchema });
+export const appIconsResultSchema = z.strictObject({ icons: z.record(appIdSchema, z.string().base64().max(ICON_MAX_BASE64).nullable()) });
 export type AppPage = z.infer<typeof appPageSchema>;

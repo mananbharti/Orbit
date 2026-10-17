@@ -36,18 +36,21 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
   }, [api]);
   useEffect(() => { void load(); }, [load]);
 
-  // Real icons stream in after the grid is up: first screenful first, one request at a time.
+  // Real icons stream in after the grid is up: first screenful first, in batches of 8 per round trip.
   useEffect(() => {
     if (!apps) return;
     let cancelled = false;
     void (async () => {
-      for (const app of apps.slice(0, 96)) {
+      const ids = apps.slice(0, 96).map(a => a.appId);
+      for (let i = 0; i < ids.length; i += 8) {
         if (cancelled) return;
         try {
-          const icon = await api.icon(app.appId);
-          if (cancelled || !icon) continue;
-          setIcons(prev => (prev[app.appId] ? prev : { ...prev, [app.appId]: icon }));
-        } catch { /* no icon: the letter tile stays */ }
+          const batch = await api.icons(ids.slice(i, i + 8));
+          if (cancelled) continue;
+          const filled: Record<string, string> = {};
+          batch.forEach((icon: string | null, appId: string) => { if (icon) filled[appId] = icon; });
+          if (Object.keys(filled).length) setIcons(prev => ({ ...filled, ...prev }));
+        } catch { /* no icons: the letter tiles stay */ }
       }
     })();
     return () => { cancelled = true; };

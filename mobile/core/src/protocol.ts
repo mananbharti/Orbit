@@ -98,6 +98,8 @@ export const appPageSchema = z.strictObject({ catalogRevision: z.string().uuid()
   nextCursor: z.string().max(48).nullable() });
 export const launchResultSchema = z.strictObject({ status: z.literal('requested') });
 export const appIconResultSchema = z.strictObject({ icon: z.string().base64().max(90_000).nullable() });
+export const ICON_BATCH_SIZE = 8;
+export const appIconsResultSchema = z.strictObject({ icons: z.record(z.string().regex(/^[a-f0-9]{64}$/), z.string().base64().max(90_000).nullable()) });
 
 // Clipboard (mirrors desktop/src/protocol/clipboard.ts). Plain text only, 8 KiB.
 export const MAX_CLIPBOARD_BYTES = 8 * 1024;
