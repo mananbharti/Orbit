@@ -48,4 +48,6 @@ Remote:
 
 21. Terminal: Home -> Terminal -> Start session. The PC shows an approval dialog - approve it. Run: dir (or ls). Output streams in. Run: cd Documents - the path above the output moves. Run: cd nowhere - an error line appears and the path does NOT move. Run: ping localhost -n 20 (Windows) or ping localhost (Mac/Linux), then tap the stop square: it dies within a second. Tap End session, then Start session and choose Deny on the PC: the phone says it was declined, no session opens.
 
+22. Photo backup: Files -> turn on "Back up new photos", allow photo access. The first run uploads your whole library (takes a while; progress shows under the toggle). Check received/Images on the PC: photos arrive full size. Take a new photo and keep Orbit open about a minute: it appears in received/Images. Take another photo with Orbit closed, then open Orbit: it backs up on its own within a minute.
+
 Report anything that fails with the exact step number.
