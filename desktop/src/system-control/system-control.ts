@@ -9,10 +9,10 @@ import { ProtocolError } from '../protocol/errors.js';
 
 export class SystemControl {
   private readonly unregister: (() => void)[];
+  private adapterInstance?: SystemControlAdapter;
 
   constructor(registry: CommandRegistry, private readonly createAdapter: () => SystemControlAdapter, private readonly log: ActivityLog) {
-    let adapter: SystemControlAdapter | undefined;
-    const ready = (): SystemControlAdapter => (adapter ??= this.createAdapter());
+    const ready = (): SystemControlAdapter => (this.adapterInstance ??= this.createAdapter());
     const guard = (context: CommandContext): void => {
       if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
     };
@@ -42,6 +42,11 @@ export class SystemControl {
       registry.register('system.brightness.set', { validate: payload => brightnessSetSchema.safeParse(payload).success,
         execute: async (payload, context) => { const b = brightnessSetSchema.parse(payload); await call(context, 'system.brightness', a => a.setBrightness(b.level)); return { applied: true }; } }),
     ];
+  }
+
+  /** Power action initiated by the computer itself (a schedule), not by a phone: no session exists to authorize. */
+  async powerLocal(action: 'sleep' | 'lock'): Promise<void> {
+    await (this.adapterInstance ??= this.createAdapter()).power(action);
   }
 
   stop(): void { for (const unregister of this.unregister.splice(0)) unregister(); }

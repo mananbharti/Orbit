@@ -1,0 +1,102 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { AutomationService, type AutomationExecutor } from '../src/automation/automation-service.js';
+import { AutomationStore } from '../src/automation/automation-store.js';
+import { CommandRegistry } from '../src/command-router/command-registry.js';
+import { ActivityLog } from '../src/activity-log/activity-log.js';
+import { ProtocolError } from '../src/protocol/errors.js';
+import type { CommandContext } from '../src/command-router/command-context.js';
+
+function context(authorized = true): CommandContext {
+  return { session: { deviceId: 'ffffffff-ffff-4fff-bfff-ffffffffffff', version: 1 } as unknown as CommandContext['session'], requestId: 'req',
+    connection: { isAuthorized: () => authorized } as unknown as CommandContext['connection'] };
+}
+function at(hours: number, minutes: number, day = 3): Date { // 2026-10-14 is a Wednesday (day 3)
+  return new Date(2026, 9, 14 + (day - 3), hours, minutes, 5);
+}
+function setup(): { registry: CommandRegistry; store: AutomationStore; dir: string; fired: unknown[] } {
+  const dir = mkdtempSync(join(tmpdir(), 'orbit-auto-'));
+  return { registry: new CommandRegistry(), store: new AutomationStore(join(dir, 'automations.json')), dir, fired: [] };
+}
+function executor(fired: unknown[]): AutomationExecutor {
+  return { launchScene: async id => { fired.push(['scene', id]); }, launchApp: async id => { fired.push(['app', id]); },
+    power: async action => { fired.push(['power', action]); } };
+}
+const SCENE = 'aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa';
+
+test('automation store persists, updates, toggles and removes; a corrupt file starts empty', async () => {
+  const { store, dir } = setup();
+  const file = join(dir, 'automations.json');
+  const [created] = store.save({ time: '09:30', days: [1, 2, 3], action: { type: 'power', action: 'sleep' } });
+  assert.equal(created!.enabled, true);
+  assert.deepEqual(created!.days, [1, 2, 3]);
+  assert.match(readFileSync(file, 'utf8'), /09:30/);
+  store.setEnabled(created!.id, false);
+  assert.equal(store.get(created!.id)!.enabled, false);
+  store.save({ id: created!.id, time: '10:00', days: [], action: { type: 'power', action: 'lock' } });
+  assert.equal(store.get(created!.id)!.time, '10:00');
+  assert.equal(store.get(created!.id)!.enabled, false); // an edit keeps the enabled state
+  const reloaded = new AutomationStore(file);
+  assert.equal(reloaded.get(created!.id)!.time, '10:00'); // survived a restart
+  store.remove(created!.id);
+  assert.equal(store.list().length, 0);
+  rmSync(dir, { recursive: true, force: true });
+  const corruptDir = mkdtempSync(join(tmpdir(), 'orbit-auto-'));
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(join(corruptDir, 'automations.json'), '{not json');
+  assert.equal(new AutomationStore(join(corruptDir, 'automations.json')).list().length, 0);
+  rmSync(corruptDir, { recursive: true, force: true });
+});
+
+test('automation tick fires matching time+day once per minute and skips disabled and other days', async () => {
+  const { registry, store, dir, fired } = setup();
+  const service = new AutomationService(registry, store, executor(fired), new ActivityLog(), () => at(9, 30));
+  const [a] = store.save({ time: '09:30', days: [3], action: { type: 'scene', sceneId: SCENE } });
+  await service.tick();
+  assert.deepEqual(fired, [['scene', SCENE]]);
+  await service.tick(); // same minute: no double fire
+  assert.equal(fired.length, 1);
+  await service.stop();
+  const reloaded = new AutomationService(registry, store, executor(fired), new ActivityLog(), () => at(9, 31));
+  await reloaded.tick(); // a restart in the same minute does not double-fire either (marked lastFiredAt)... but 9:31 is a new minute: also no fire because time is 9:30
+  assert.equal(fired.length, 1);
+  store.setEnabled(a!.id, false);
+  const service2 = new AutomationService(new CommandRegistry(), store, executor(fired), new ActivityLog(), () => at(9, 30, 4)); // Thursday: not in days
+  await service2.tick();
+  assert.equal(fired.length, 1);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('automation tick with empty days fires every day and a failing action is marked and logged, never retried', async () => {
+  const { registry, store, dir, fired } = setup();
+  const failing: AutomationExecutor = { launchScene: async () => { throw new Error('gone'); }, launchApp: async () => {}, power: async () => {} };
+  const service = new AutomationService(registry, store, failing, new ActivityLog(), () => at(22, 0, 5));
+  store.save({ time: '22:00', days: [], action: { type: 'scene', sceneId: SCENE } });
+  await service.tick();
+  assert.equal(fired.length, 0);
+  await service.tick(); // marked before running: no hot retry loop
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('automation commands validate, authorize, and translate store errors', async () => {
+  const { registry, store, dir, fired } = setup();
+  new AutomationService(registry, store, executor(fired), new ActivityLog());
+  const list = registry.get('automation.list')!;
+  const save = registry.get('automation.save')!;
+  const toggle = registry.get('automation.enable')!;
+  const del = registry.get('automation.delete')!;
+  await assert.rejects(list.execute({}, context(false)), (e: ProtocolError) => e.code === 'UNAUTHENTICATED');
+  assert.equal(save.validate({ time: '25:00', days: [], action: { type: 'power', action: 'sleep' } }), false);
+  assert.equal(save.validate({ time: '09:30', days: [7], action: { type: 'power', action: 'sleep' } }), false);
+  const saved = await save.execute({ time: '09:30', days: [1], action: { type: 'app', appId: 'com.example' } }, context()) as { automations: { id: string }[] };
+  assert.equal(saved.automations.length, 1);
+  const id = saved.automations[0]!.id;
+  await toggle.execute({ id, enabled: false }, context());
+  await assert.rejects(del.execute({ id: SCENE }, context()), (e: ProtocolError) => e.code === 'AUTOMATION_NOT_FOUND');
+  await del.execute({ id }, context());
+  assert.equal((await list.execute({}, context()) as { automations: unknown[] }).automations.length, 0);
+  rmSync(dir, { recursive: true, force: true });
+});

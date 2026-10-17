@@ -44,6 +44,20 @@ export const sessionResponseSchema = z.strictObject({ version: z.literal(1),
   deviceId: idSchema, sessionId: idSchema, expiresAt: z.number().int().positive(), sessionToken: tokenSchema,
   scopes: z.array(z.string().max(24)).max(16).optional() }); // older desktops echo the device's scopes
 
+export const automationTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export const automationDaySchema = z.number().int().min(0).max(6);
+export const automationActionSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('scene'), sceneId: idSchema }),
+  z.strictObject({ type: z.literal('app'), appId: z.string().min(1).max(200) }),
+  z.strictObject({ type: z.literal('power'), action: z.enum(['sleep', 'lock']) }),
+]);
+export const automationSchema = z.strictObject({ id: idSchema, time: automationTimeSchema,
+  days: z.array(automationDaySchema).max(7), enabled: z.boolean(), action: automationActionSchema,
+  lastFiredAt: z.number().int().nonnegative().optional() });
+export type Automation = z.infer<typeof automationSchema>;
+export type AutomationAction = Automation['action'];
+export const automationListResultSchema = z.strictObject({ automations: z.array(automationSchema).max(32) });
+
 /** The seven permissions a desktop can grant a device; mirrors the desktop wire contract. */
 export const SCOPES = ['agent', 'clipboard', 'files', 'launcher', 'input', 'dictation', 'memory'] as const;
 export type Scope = (typeof SCOPES)[number];
@@ -66,7 +80,7 @@ export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENT
   'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_STALE_LAYOUT', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_SCENE_CONFLICT', 'LAUNCHER_UNKNOWN_OUTCOME',
   'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE', 'INPUT_CONFLICT', 'INPUT_NOT_FOUND',
   'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE',
-  'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES'] as const;
+  'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES', 'AUTOMATION_NOT_FOUND', 'AUTOMATION_LIMIT'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),

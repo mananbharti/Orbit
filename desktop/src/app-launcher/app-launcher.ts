@@ -184,6 +184,24 @@ export class AppLauncher {
     this.jobs.add(job);
     return job;
   }
+  /** Local (computer-initiated) launch for scheduled actions: no phone session exists, so no authorization callback is needed. */
+  async launchLocal(appId: string): Promise<void> {
+    if (!this.adapter) this.adapter = this.createAdapter();
+    if (!this.catalog.size) await this.refresh(this.abort.signal);
+    const app = this.catalog.get(appId);
+    if (!app) throw new Error('AUTOMATION_APP_GONE');
+    await this.adapter.launch(app, () => { /* the computer's own schedule needs no confirmation */ }, this.abort.signal);
+  }
+
+  /** Local scene launch: every app in order, one failure never blocks the rest. Throws only if the scene is gone. */
+  async launchSceneLocal(sceneId: string): Promise<void> {
+    const scene = this.scenes?.get(sceneId);
+    if (!scene) throw new Error('AUTOMATION_SCENE_GONE');
+    for (const appId of scene.appIds) {
+      try { await this.launchLocal(appId); } catch { /* keep launching the rest */ }
+    }
+  }
+
   private async refresh(signal: AbortSignal): Promise<void> {
     this.adapter ??= this.createAdapter();
     const entries = await this.adapter.list(signal);

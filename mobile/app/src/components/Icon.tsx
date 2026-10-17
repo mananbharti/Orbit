@@ -19,6 +19,7 @@ const paths = {
   sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   control: 'M4 8h10M18 8h2M4 16h2M10 16h10M14 6v4M6 14v4',
   present: 'M3 4h18v11H3zM12 15v3M9 21h6M12 8.5l3.5 2-3.5 2z',
+  automations: 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3.5 2',
 } as const;
 export type IconName = keyof typeof paths;
 

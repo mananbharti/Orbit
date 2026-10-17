@@ -44,4 +44,6 @@ Remote:
 
 19. Computers (needs two PCs, or one PC + the preview): Settings -> Computers shows every paired computer with a check on the active one. Pair a second PC (Add a computer). Tap the other computer: Face ID, "Switching...", then the Home header shows its name. Tap the name on Home: the Computers screen opens. Forget the inactive one: tap Forget, then "Tap again to forget": it leaves the list. Forget the active one: you land on the Computers list (or the pair screen if none are left). Kill and reopen the app: it connects to the last active computer.
 
+20. Automations: Home -> Automations -> New automation. Pick Sleep, set the time two minutes from now, leave Weekdays (or Every day), Save. Watch the PC sleep at that minute. Turn the switch off, delete the automation. Make one for Open Work scene at a near time: the scene's apps open on their own. Restart the PC app after one fires: it does not fire again.
+
 Report anything that fails with the exact step number.

@@ -1,6 +1,6 @@
 /** Wires the shared core to the phone: one session, one task store, one paired desktop. */
 import * as Crypto from 'expo-crypto';
-import { AgentApi, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, OrbitSession, SystemApi, TaskStore, createLocator, describeError, pairWithQr, type PairedDesktop } from '@orbit/core';
+import { AgentApi, AutomationApi, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, OrbitSession, SystemApi, TaskStore, createLocator, describeError, pairWithQr, type PairedDesktop } from '@orbit/core';
 import { fileEnv } from './files';
 import { updatePaired } from './storage';
 import { createNativeDiscovery, createNativeTransport } from './native-transport';
@@ -11,7 +11,7 @@ const transport = createNativeTransport(uuid);
 const discovery = createNativeDiscovery();
 const locator = createLocator({ transport, discover: discovery.discover, localAddress: discovery.localAddress });
 
-export interface Connected { paired: PairedDesktop; session: OrbitSession; store: TaskStore; api: AgentApi; launcher: LauncherApi; clipboard: ClipboardApi; files: FileApi; input: InputApi; memory: MemoryApi; dictation: DictationApi; system: SystemApi; devices: DevicesApi }
+export interface Connected { paired: PairedDesktop; session: OrbitSession; store: TaskStore; api: AgentApi; launcher: LauncherApi; clipboard: ClipboardApi; files: FileApi; input: InputApi; memory: MemoryApi; dictation: DictationApi; system: SystemApi; devices: DevicesApi; automation: AutomationApi }
 
 export async function pair(qrText: string): Promise<PairedDesktop> {
   return pairWithQr(qrText, transport); // the caller upserts it into the paired list once the owner confirms
@@ -31,10 +31,11 @@ export function connect(paired: PairedDesktop): Connected {
   const dictation = new DictationApi(session);
   const system = new SystemApi(session);
   const devices = new DevicesApi(session);
+  const automation = new AutomationApi(session);
   void session.start().catch(() => { /* status listeners report it; the session retries or asks to re-pair */ });
   // Clipboard sync is app-wide, not screen-bound: subscribe now so computer -> phone lands instantly.
   void clipboard.start().catch(() => { /* retried on the next reconnect */ });
-  return { paired, session, store, api, launcher, clipboard, files, input, memory, dictation, system, devices };
+  return { paired, session, store, api, launcher, clipboard, files, input, memory, dictation, system, devices, automation };
 }
 
 /** Stops the session and disposes per-connection state without unpairing; the computer stays in the paired list. */

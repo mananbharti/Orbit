@@ -26,6 +26,8 @@ import type { AppLauncherAdapter } from './os-integration/app-launcher.js';
 import { InputControl } from './input-simulation/input-control.js';
 import { KeyboardMacroStore } from './input-simulation/keyboard-macros.js';
 import { DeviceDirectory } from './security-pairing/device-directory.js';
+import { AutomationService } from './automation/automation-service.js';
+import { AutomationStore } from './automation/automation-store.js';
 import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
 import { MemoryService } from './memory/memory-service.js';
@@ -74,6 +76,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let system: SystemControl | undefined;
   let panic: PanicLock | undefined;
   let devices: DeviceDirectory | undefined;
+  let automations: AutomationService | undefined;
   let mixer: AudioMixer | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
@@ -106,6 +109,12 @@ export async function startDesktop(options: { directory: string; host: string; p
       endpoint: `wss://${host}:${address.port}/v1/channel`, certificate: identity.certificate };
     const pairing = new PairingService({ ...hint, macAddresses, certificateFingerprint: certificateFingerprint(identity.certificate) }, store, log);
     devices = new DeviceDirectory(registry, store);
+    automations = new AutomationService(registry, new AutomationStore(join(directory, 'automations.json')), {
+      launchScene: sceneId => launcher!.launchSceneLocal(sceneId),
+      launchApp: appId => launcher!.launchLocal(appId),
+      power: action => system ? system.powerLocal(action) : Promise.reject(new Error('SYSTEM_UNAVAILABLE')),
+    }, log);
+    automations.start();
     transportOptions.pairing = pairing;
     if (options.discovery !== false) discovery = advertiseDesktop(hint,
       () => log.record({ severity: 'warn', eventType: 'discovery.error', outcome: 'failed' }));
@@ -115,6 +124,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
+        await automations?.stop();
         devices?.stop(); system?.stop(); panic?.stop(); mixer?.stop();
         await dictation?.stop();
         memory?.stop();
@@ -128,6 +138,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         } }
       } };
   } catch (error) {
+    await automations?.stop();
     await dictation?.stop();
     await input?.stop();
     await agent?.stop();

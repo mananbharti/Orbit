@@ -24,6 +24,8 @@ const BY_CODE: Partial<Record<string, string>> = {
   BUSY: 'The computer is busy. Try again in a moment.',
   PAIR_NOT_FOUND: 'That device is no longer paired.',
   PAIR_SELF_SCOPES: 'This phone cannot change its own permissions.',
+  AUTOMATION_NOT_FOUND: 'That automation no longer exists.',
+  AUTOMATION_LIMIT: 'The computer has too many automations. Delete one first.',
 };
 
 export function describeError(error: unknown): string {
