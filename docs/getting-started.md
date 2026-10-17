@@ -1,6 +1,6 @@
 # Getting started
 
-Status: written from the code, not from a real install. Nothing here has been run on a real phone yet. Expect rough edges and report them.
+The short path for a real install is [BUILD-CHECKLIST.md](BUILD-CHECKLIST.md) (desktop window, iPhone dev-client rebuild, pairing, browser extension, test pass). This page covers the same ground with more detail, plus the headless/CLI options.
 
 ## What you need
 - Node 24 on the computer.
@@ -8,12 +8,13 @@ Status: written from the code, not from a real install. Nothing here has been ru
 - Optional: a Hermes agent server for the agent features (see `hermes.md`).
 
 ## Run the desktop side
+The normal way is the Orbit window:
 ```
 cd desktop
 npm ci
-npm test            # should be all green before you trust it
-npm start           # builds and starts the desktop service
+npm run app         # builds and opens the Orbit app (pairing code, activity, settings)
 ```
+Headless (servers, SSH) also works: `npm start` runs the service without the window.
 Settings are environment variables:
 
 | Variable | Meaning |
@@ -27,13 +28,14 @@ Settings are environment variables:
 | ORBIT_TLS_CERT, ORBIT_TLS_KEY | use your own certificate |
 
 ## Pair a phone
-1. Start the desktop service. It prints a pairing QR.
+1. In the Orbit window, choose "Show pairing code" (the headless service prints a QR instead).
 2. Open the phone app, choose Pair, scan the QR.
-3. The phone pins the computer's certificate. Later connections to anything else are refused.
+3. The phone pins the computer's certificate. Later connections to anything else are refused. Codes work once and expire after two minutes.
 
-## Owner console commands
-- `devices` lists paired phones.
-- `revoke <id>` removes one phone immediately.
+## Managing devices
+- The phone manages itself and others: Settings -> Devices for permissions, "Forget this device", and "Unpair this iPhone".
+- The Orbit window lists paired devices too and can revoke any of them.
+- Headless: `devices` lists paired phones, `revoke <id>` removes one immediately.
 
 ## Stop everything
 The phone has a "Stop agent" button (safe mode). It survives a restart and is written to the activity log.
