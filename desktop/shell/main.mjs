@@ -10,6 +10,7 @@ const { startDesktop } = await import(pathToFileURL(join(here, '..', 'dist', 'sr
 const { pickLanAddress, defaultRouteAddress } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'lan-address.js')).href);
 const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { createClipboard } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-clipboard.js')).href);
+const { WindowsInputDevice } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'input-device.windows.js')).href);
 const { hostname } = await import('node:os');
 
 // Chromium's disk caches are useless for a local UI and fail with "Access is denied" when a previous
@@ -30,8 +31,11 @@ async function boot() {
   const host = process.env.ORBIT_HOST || pickLanAddress(undefined, await defaultRouteAddress());
   if (!host) { state = { phase: 'offline' }; return; }
   try {
+    // Remote mouse/keyboard: Windows only, and every session needs a Yes on a dialog shown at this PC (below).
+    const remoteInput = process.platform === 'win32'
+      ? { createDevice: () => new WindowsInputDevice(), confirmation: electronApproval } : undefined;
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64) });
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}) });
     state = { phase: 'running', host, port: DEFAULT_PORT };
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
@@ -74,6 +78,20 @@ function notifyNewTransfers(rows) {
     }
   }
 }
+
+// PC-side approval for phone remote control: a focused native dialog, default Deny, 30s timeout.
+const electronApproval = { verify: async (message, context) => {
+  if (!message.type.startsWith('input.')) return false;
+  if (!win || win.isDestroyed()) return false;
+  const device = String(context?.session?.deviceId ?? 'unknown').slice(0, 8);
+  win.show(); win.focus();
+  const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'Orbit',
+    message: 'Allow remote control?',
+    detail: `Your phone (device ${device}) wants to move the mouse and type on this computer.\n\nChoose Deny unless you just started this on your phone.`,
+    buttons: ['Allow', 'Deny'], defaultId: 1, cancelId: 1, noLink: true,
+    signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 30000); return c.signal; })() }).catch(() => ({ response: 1 }));
+  return response === 0;
+} };
 
 const snapshot = () => {
   const files = fileRows();
