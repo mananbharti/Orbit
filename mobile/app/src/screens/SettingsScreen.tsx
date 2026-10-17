@@ -5,7 +5,7 @@ import { radius, space, useTheme, useThemePref, type ThemePref } from '../theme'
 
 const options: { value: ThemePref; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }];
 
-export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void }) {
+export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, appLock, onAppLock, biometrics }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void; appLock: boolean; onAppLock: (on: boolean) => void; biometrics: boolean }) {
   const t = useTheme();
   const { pref, setPref } = useThemePref();
   return (
@@ -33,6 +33,16 @@ export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync }:
             <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>Copy on one device, paste on the other, while Orbit is open.</Text>
           </View>
           <Switch value={autoSync} onValueChange={v => { onAutoSync(v); void Haptics.selectionAsync(); }} trackColor={{ true: t.good }} />
+        </View>
+      </View>
+      <Text style={[styles.section, { color: t.sub }]}>SECURITY</Text>
+      <View style={[styles.card, { backgroundColor: t.card }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: t.text, fontSize: 17 }}>Require Face ID</Text>
+            <Text style={{ color: t.sub, fontSize: 13, lineHeight: 18 }}>{biometrics ? 'Ask for Face ID before Orbit connects to your computer.' : 'This phone has no face or fingerprint enrolled, so Orbit cannot gate the connection.'}</Text>
+          </View>
+          <Switch value={appLock && biometrics} disabled={!biometrics} onValueChange={v => { onAppLock(v); void Haptics.selectionAsync(); }} trackColor={{ true: t.good }} />
         </View>
       </View>
       <Text style={[styles.section, { color: t.sub }]}>COMPUTER</Text>

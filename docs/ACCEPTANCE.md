@@ -42,7 +42,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 16 | Display brightness + mode control | Partial: brightness done (null on desktops without backlight); mode control pending | Yes | Pending | Most desktops have no controllable backlight |
 | 17 | Presentation mode | Implemented: Present screen with slide nav, Start/Black/White/End deck keys, laser pad (Ctrl+left-drag via held-key events) inside the approved control session | Yes (held-key op translation, schema) | Pending | Laser verified against PowerPoint's Ctrl+drag convention; needs real-device check |
 | 18 | Browser tab control | Not started | - | - | Likely needs a browser extension |
-| 19 | QR pairing + biometric confirmation | Partial: QR pairing done; biometric confirm pending | Yes (pairing) | Pending | - |
+| 19 | QR pairing + biometric confirmation | Implemented: Face ID/Touch ID gate before connecting or pairing (on by default), Settings toggle, graceful open when the phone has no biometrics | UI layer (native module glue); pairing protocol already tested | Pending | Desktop already requires Windows approval for control sessions; this adds the phone-side gate |
 | 20 | Per-device permission scoping | Partial: scope system exists on desktop; UI pending | Yes (scopes) | Pending | - |
 | 21 | Activity log + panic lock | Implemented | Yes | Pending | - |
 | 22 | Automation / scheduled actions | Not started | - | - | - |

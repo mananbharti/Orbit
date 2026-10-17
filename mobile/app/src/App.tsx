@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { connect, forget, pair, type Connected } from './orbit';
 import { ActivityScreen } from './screens/ActivityScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
@@ -13,7 +13,8 @@ import { PresentScreen } from './screens/PresentScreen';
 import { PairScreen } from './screens/PairScreen';
 import { TaskDetailScreen } from './screens/TaskDetailScreen';
 import { TasksScreen } from './screens/TasksScreen';
-import { loadClipboardAuto, loadPaired, saveClipboardAuto } from './storage';
+import { loadAppLock, loadClipboardAuto, loadPaired, saveAppLock, saveClipboardAuto } from './storage';
+import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -27,6 +28,10 @@ function Shell() {
   const t = useTheme();
   const [settings, setSettings] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [appLock, setAppLock] = useState(true);
+  const [biometrics, setBiometrics] = useState(false);
+  const pendingPaired = useRef<Parameters<typeof connect>[0] | undefined>(undefined);
   const [connected, setConnected] = useState<Connected>();
   const [open, setOpen] = useState<string>();
   const [activity, setActivity] = useState(false);
@@ -48,7 +53,15 @@ function Shell() {
 
   useEffect(() => {
     void loadClipboardAuto().then(setAutoSync);
-    void loadPaired().then(paired => { if (paired) setConnected(connect(paired)); }).finally(() => setBooting(false));
+    void loadAppLock().then(setAppLock);
+    void biometricAvailable().then(setBiometrics);
+    void loadPaired().then(async paired => {
+      if (!paired) return;
+      if (await loadAppLock() && !(await authenticate('Unlock Orbit to connect to your computer'))) {
+        pendingPaired.current = paired; setLocked(true); return;
+      }
+      setConnected(connect(paired));
+    }).finally(() => setBooting(false));
   }, []);
   useEffect(() => {
     if (!connected) return;
@@ -65,14 +78,32 @@ function Shell() {
 
   const onScanned = useCallback(async (text: string) => {
     const paired = await pair(text);
+    if (appLock && !(await authenticate('Confirm it is you to pair this computer'))) {
+      pendingPaired.current = paired; setLocked(true); return;
+    }
     setConnected(connect(paired));
+  }, [appLock]);
+  const unlock = useCallback(async () => {
+    if (await authenticate('Unlock Orbit to connect to your computer')) {
+      setLocked(false);
+      if (pendingPaired.current) { setConnected(connect(pendingPaired.current)); pendingPaired.current = undefined; }
+    }
   }, []);
   const repair = useCallback(() => { void forget(connected).then(() => { setConnected(undefined); setOpen(undefined); }); }, [connected]);
 
   let body;
   if (booting) body = <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
+  else if (locked) body = (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+      <Text style={{ color: t.text, fontSize: 20, fontWeight: '700' }}>Orbit is locked</Text>
+      <Text style={{ color: t.sub, fontSize: 15, textAlign: 'center', paddingHorizontal: 40 }}>Confirm it is you to connect to your computer.</Text>
+      <Pressable accessibilityRole="button" onPress={() => { void unlock(); }} style={{ backgroundColor: t.tint, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '600' }}>Unlock</Text>
+      </Pressable>
+    </View>
+  );
   else if (!connected) body = <PairScreen onScanned={onScanned} />;
-  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} />;
+  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} />;
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
   else if (present) body = <PresentScreen api={connected.input} onBack={() => setPresent(false)} />;
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;

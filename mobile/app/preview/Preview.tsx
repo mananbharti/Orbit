@@ -35,7 +35,7 @@ function Screen({ name }: { name: string }) {
     case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
-    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} />;
+    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} />;
     case 'pair': return <PairScreen onScanned={async () => {}} />;
     default: return <TasksScreen store={mockStore()} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onPresent={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
   }

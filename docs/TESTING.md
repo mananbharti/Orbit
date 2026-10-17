@@ -36,6 +36,7 @@ Remote:
 13. Phone -> Remote: tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
 14. MACROS: tap "+ Macro", name it "Paste plain", tap Ctrl + Shift, pick V, "Add step", Save. Open Notepad on the PC, copy formatted text from a browser, tap the Paste plain chip: plain text lands. Long-press the chip -> Delete. Restart the PC app: macros persist. tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
 
+17. App lock: kill the phone app, reopen it - Face ID is asked before it connects. Cancel the prompt: the app sits on a locked screen, no connection. Tap Unlock. Settings -> Require Face ID off, reopen: connects straight away. Turn it back on.
 16. Gyro mouse: Remote -> start control -> tap Gyro. Hold the phone like a remote and tilt: the PC cursor follows. Small hand tremor should NOT move it. If it moves the wrong way, tell me which axis is inverted.
 15. Present: open a PowerPoint deck on the PC. Phone home -> Present -> Start presenting (approve on PC). Tap "Start deck" (slideshow begins), > (next slide), Black screen, White screen, End deck. Touch-drag the laser pad: the red laser dot moves on screen.
 

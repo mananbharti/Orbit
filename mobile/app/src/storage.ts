@@ -30,3 +30,11 @@ export async function loadClipboardAuto(): Promise<boolean> {
 export async function saveClipboardAuto(on: boolean): Promise<void> {
   try { await SecureStore.setItemAsync(CLIP_AUTO_KEY, on ? 'on' : 'off'); } catch { /* cosmetic; ignore */ }
 }
+
+const LOCK_KEY = 'orbit.app-lock.v1';
+export async function loadAppLock(): Promise<boolean> {
+  try { return (await SecureStore.getItemAsync(LOCK_KEY)) !== 'off'; } catch { return true; } // on by default: pairing is a powerful credential
+}
+export async function saveAppLock(on: boolean): Promise<void> {
+  try { await SecureStore.setItemAsync(LOCK_KEY, on ? 'on' : 'off'); } catch { /* preference; ignore */ }
+}
