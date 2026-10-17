@@ -212,7 +212,7 @@ export function AppsScreen({ api, onBack, desktopServiceId }: { api: LauncherApi
           <Text style={{ color: t.sub, fontSize: 13 }}>Tap apps below to include them in this scene.</Text>
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.s }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space.s }}>
           {scenes.map(scene => (
             <Pressable key={scene.id} accessibilityRole="button" accessibilityLabel={`Launch scene ${scene.name}`} disabled={!!launchingScene}
               onPress={() => { void runScene(scene); }} onLongPress={() => manageScene(scene)}

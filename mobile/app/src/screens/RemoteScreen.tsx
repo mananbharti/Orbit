@@ -178,7 +178,7 @@ export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; 
                     style={[styles.key, { backgroundColor: on ? t.tint : t.fill }]}><Text style={{ color: on ? '#fff' : t.text }}>{m.label}</Text></Pressable>;
                 })}
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6 }}>
                 {MACRO_KEYS.map(k => (
                   <Pressable key={k} accessibilityRole="button" onPress={() => setComposing({ ...composing, key: k })}
                     style={[styles.macroKey, { backgroundColor: composing.key === k ? t.tint : t.fill }]}>
