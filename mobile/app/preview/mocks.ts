@@ -34,7 +34,10 @@ export function mockStore(connection: TaskStoreState['connection'] = 'connected'
 }
 export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
 export const mockDictation = {} as unknown as DictationApi;
-export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {} }) as unknown as LauncherApi;
+export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [] }) as unknown as LauncherApi;
+/** The apps screen with two favourites pinned at the top, as the owner arranged them. */
+export const mockLauncherPinned = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [apps[4]!.appId, apps[3]!.appId],
+  pin: async (id: string) => [id], unpin: async () => [], reorder: async (ids: string[]) => ids }) as unknown as LauncherApi;
 export const mockClipboard = (incoming = true): ClipboardApi => ({ ...store({ active: true, ...(incoming ? { incoming: { text: 'Meeting moved to 4pm, room 2B', revision: 3 } } : {}) }),
   history: async () => ({ entries: [
     { id: '11111111-1111-4111-8111-111111111111', text: 'Meeting moved to 4pm, room 2B', at: Date.now() - 4 * 60000, source: 'pc' as const },

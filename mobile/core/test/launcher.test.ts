@@ -20,27 +20,27 @@ async function setup(handler: (type: string, payload: any) => unknown) {
 
 test('list follows cursors and returns all apps', async () => {
   const { s, api, calls } = await setup((_t, p) => p.cursor
-    ? { catalogRevision: REV, apps: [{ appId: B, name: 'Two' }], nextCursor: null }
-    : { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: `${REV}:1` });
+    ? { catalogRevision: REV, apps: [{ appId: B, name: 'Two' }], nextCursor: null, pinned: [] }
+    : { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: `${REV}:1`, pinned: [] });
   assert.deepEqual((await api.list()).map(a => a.name), ['One', 'Two']);
   assert.equal(calls.length, 2);
   s.stop();
 });
 test('a catalog that changes during listing is reported as stale', async () => {
   const { s, api } = await setup((_t, p) => p.cursor
-    ? { catalogRevision: '99999999-9999-4999-8999-999999999999', apps: [], nextCursor: null }
-    : { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: `${REV}:1` });
+    ? { catalogRevision: '99999999-9999-4999-8999-999999999999', apps: [], nextCursor: null, pinned: [] }
+    : { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: `${REV}:1`, pinned: [] });
   await assert.rejects(api.list(), (e: CommandError) => e.code === 'LAUNCHER_STALE_CATALOG');
   s.stop();
 });
 test('a repeating cursor cannot loop forever', async () => {
-  const { s, api } = await setup(() => ({ catalogRevision: REV, apps: [], nextCursor: `${REV}:1` }));
+  const { s, api } = await setup(() => ({ catalogRevision: REV, apps: [], nextCursor: `${REV}:1`, pinned: [] }));
   await assert.rejects(api.list(), (e: CommandError) => e.code === 'LAUNCHER_LIMIT');
   s.stop();
 });
 test('launch only works for listed apps and sends the catalog revision', async () => {
   const { s, api, calls } = await setup(type => type === 'launcher.list'
-    ? { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null } : { status: 'requested' });
+    ? { catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null, pinned: [] } : { status: 'requested' });
   await assert.rejects(api.launch(A), NotSent);
   await api.list();
   await assert.rejects(api.launch(B), NotSent);
@@ -50,7 +50,7 @@ test('launch only works for listed apps and sends the catalog revision', async (
 });
 test('a stale-catalog launch forgets the catalog so the next launch needs a fresh list', async () => {
   let stale = true;
-  const { t, s, api } = await setup(() => ({ catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null }));
+  const { t, s, api } = await setup(() => ({ catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null, pinned: [] }));
   await api.list();
   t.last.onSend = text => { const m = parseSent(text); if (stale) t.last.fail(m.requestId, 'LAUNCHER_STALE_CATALOG'); else t.last.reply(m.requestId, { status: 'requested' }); };
   await assert.rejects(api.launch(A), (e: CommandError) => e.code === 'LAUNCHER_STALE_CATALOG');
@@ -59,7 +59,7 @@ test('a stale-catalog launch forgets the catalog so the next launch needs a fres
   s.stop();
 });
 test('a reconnect forgets the catalog', async () => {
-  const { t, s, api } = await setup(() => ({ catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null }));
+  const { t, s, api } = await setup(() => ({ catalogRevision: REV, apps: [{ appId: A, name: 'One' }], nextCursor: null, pinned: [] }));
   await api.list();
   t.last.drop();
   await new Promise(r => setTimeout(r, 40));
@@ -75,7 +75,7 @@ test('launcher commands get a longer timeout than the default', async () => {
   const t = new FakeTransport();
   const s = new OrbitSession(paired, t, { uuid, commandTimeoutMs: 20, retryBaseMs: 5, random: () => 0 });
   await s.start();
-  t.last.onSend = text => setTimeout(() => { const m = parseSent(text); t.last.reply(m.requestId, { catalogRevision: REV, apps: [], nextCursor: null }); }, 60);
+  t.last.onSend = text => setTimeout(() => { const m = parseSent(text); t.last.reply(m.requestId, { catalogRevision: REV, apps: [], nextCursor: null, pinned: [] }); }, 60);
   assert.deepEqual(await new LauncherApi(s).list(), []);
   s.stop();
 });
@@ -83,7 +83,7 @@ test('launcher commands get a longer timeout than the default', async () => {
 test('icons batch into one command per 8 apps and cache per app', async () => {
   const ids = Array.from({ length: 10 }, (_, i) => String(i).repeat(64));
   const { s, api, calls } = await setup((type, p) => type === 'launcher.list'
-    ? { catalogRevision: REV, apps: ids.map((appId, i) => ({ appId, name: `App ${i}` })), nextCursor: null }
+    ? { catalogRevision: REV, apps: ids.map((appId, i) => ({ appId, name: `App ${i}` })), nextCursor: null, pinned: [] }
     : { icons: Object.fromEntries((p.appIds as string[]).map(id => [id, Buffer.from(`png-${id[0]}`).toString('base64')])) });
   await api.list();
   const icons = await api.icons(ids);
@@ -99,11 +99,36 @@ test('icons batch into one command per 8 apps and cache per app', async () => {
 test('apps cut from a batch response are simply fetched again; unknown apps cache as null', async () => {
   const ids = ['a'.repeat(64), 'b'.repeat(64)];
   const { s, api } = await setup((type, _p) => type === 'launcher.list'
-    ? { catalogRevision: REV, apps: [{ appId: ids[0], name: 'One' }], nextCursor: null }
+    ? { catalogRevision: REV, apps: [{ appId: ids[0], name: 'One' }], nextCursor: null, pinned: [] }
     : { icons: {} }); // desktop cut everything (byte budget)
   await api.list();
   const icons = await api.icons([...ids, 'c'.repeat(64)]);
   assert.equal(icons.has(ids[0]!), false); // cut: still uncached, retried next call
   assert.equal(icons.get('c'.repeat(64)), null); // unknown on the desktop list: null
+  s.stop();
+});
+
+test('pin, unpin and reorder talk to the desktop and track the pinned order', async () => {
+  let pins: string[] = [];
+  const { s, api, calls } = await setup((type, p) => {
+    if (type === 'launcher.list') return { catalogRevision: REV, apps: [{ appId: A, name: 'One' }, { appId: B, name: 'Two' }], nextCursor: null, pinned: pins };
+    if (type === 'launcher.pin') pins = [...pins, p.appId];
+    if (type === 'launcher.unpin') pins = pins.filter(id => id !== p.appId);
+    if (type === 'launcher.reorder') pins = p.appIds;
+    return { pinned: pins };
+  });
+  await api.list();
+  assert.deepEqual(await api.pin(B), [B]);
+  assert.deepEqual(await api.pin(A), [B, A]);
+  assert.deepEqual(api.getPinned(), [B, A]);
+  assert.deepEqual(await api.reorder([A, B]), [A, B]);
+  assert.deepEqual(await api.unpin(B), [A]);
+  assert.deepEqual(calls.map(c => c.type), ['launcher.list', 'launcher.pin', 'launcher.pin', 'launcher.reorder', 'launcher.unpin']);
+  s.stop();
+});
+test('a malformed layout reply is rejected instead of corrupting local state', async () => {
+  const { s, api } = await setup(() => ({ pinned: 'not-an-array' }));
+  await assert.rejects(api.pin(A), InvalidDesktopReply);
+  assert.deepEqual(api.getPinned(), []);
   s.stop();
 });

@@ -1,13 +1,30 @@
 /** Routes App Launcher catalog and activation requests; depends on authenticated contexts and a native adapter; owns no windows, scenes or process lifecycle. */
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { CommandContext } from '../command-router/command-context.js';
 import type { AppLauncherAdapter, NativeApp } from '../os-integration/app-launcher.js';
 import { ProtocolError } from '../protocol/errors.js';
-import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appIconsSchema, appNameSchema, listAppsSchema, launchAppSchema } from '../protocol/app-launcher.js';
+import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appIconsSchema, appNameSchema, listAppsSchema, launchAppSchema, pinAppSchema, reorderAppsSchema } from '../protocol/app-launcher.js';
+import { atomicWrite } from '../security-pairing/atomic-file.js';
+import type { LauncherLayout } from './launcher-layout.js';
+
+/** App ids must stay stable across restarts or pinned favourites would dangle: the HMAC secret lives next to the other private state. */
+function loadOrCreateSecret(path?: string): Buffer {
+  if (path) {
+    if (existsSync(path)) {
+      const stored = readFileSync(path, 'utf8').trim();
+      if (/^[a-f0-9]{64}$/.test(stored)) return Buffer.from(stored, 'hex');
+    }
+    const secret = randomBytes(32);
+    atomicWrite(path, secret.toString('hex'));
+    return secret;
+  }
+  return randomBytes(32);
+}
 
 export class AppLauncher {
-  private readonly secret = randomBytes(32);
+  private readonly secret: Buffer;
   private readonly abort = new AbortController();
   private readonly unregister: (() => void)[];
   private readonly jobs = new Set<Promise<unknown>>();
@@ -16,7 +33,9 @@ export class AppLauncher {
   private busy = false;
   private adapter?: AppLauncherAdapter;
 
-  constructor(registry: CommandRegistry, private readonly createAdapter: () => AppLauncherAdapter) {
+  constructor(registry: CommandRegistry, private readonly createAdapter: () => AppLauncherAdapter,
+    private readonly layout?: LauncherLayout, secretPath?: string) {
+    this.secret = loadOrCreateSecret(secretPath);
     this.unregister = [
       registry.register('launcher.list', { validate: payload => listAppsSchema.safeParse(payload).success,
         execute: (payload, context) => this.run(context, async signal => {
@@ -29,7 +48,7 @@ export class AppLauncher {
           } else await this.refresh(signal);
           this.authorize(context);
           const apps = [...this.catalog].slice(start, start + APP_PAGE_SIZE).map(([appId, app]) => ({ appId, name: app.name }));
-          return { catalogRevision: this.revision, apps,
+          return { catalogRevision: this.revision, apps, pinned: this.layout?.list() ?? [],
             nextCursor: start + apps.length < this.catalog.size ? `${this.revision}:${start + apps.length}` : null };
         }) }),
       registry.register('launcher.icon', { validate: payload => appIconSchema.safeParse(payload).success,
@@ -69,6 +88,30 @@ export class AppLauncher {
           this.authorize(context);
           await this.adapter!.launch(app, () => this.authorize(context), signal);
           return { status: 'requested' };
+        }) }),
+      registry.register('launcher.pin', { validate: payload => pinAppSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async () => {
+          if (!this.layout) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { appId } = pinAppSchema.parse(payload);
+          this.authorize(context);
+          if (!this.catalog.has(appId)) throw new ProtocolError('LAUNCHER_NOT_FOUND');
+          try { return { pinned: this.layout.pin(appId) }; }
+          catch { throw new ProtocolError('LAUNCHER_LIMIT'); }
+        }) }),
+      registry.register('launcher.unpin', { validate: payload => pinAppSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async () => {
+          if (!this.layout) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { appId } = pinAppSchema.parse(payload);
+          this.authorize(context);
+          return { pinned: this.layout.unpin(appId) };
+        }) }),
+      registry.register('launcher.reorder', { validate: payload => reorderAppsSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async () => {
+          if (!this.layout) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { appIds } = reorderAppsSchema.parse(payload);
+          this.authorize(context);
+          try { return { pinned: this.layout.reorder(appIds) }; }
+          catch { throw new ProtocolError('LAUNCHER_STALE_LAYOUT'); }
         }) }),
     ];
   }

@@ -12,10 +12,10 @@ import { RemoteScreen } from '../src/screens/RemoteScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockLauncherPinned, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -25,6 +25,7 @@ function Screen({ name }: { name: string }) {
     case 'task-detail': return <TaskDetailScreen store={mockStore()} taskId={tasks[0]!.taskId} onBack={noop} />;
     case 'activity': return <ActivityScreen api={mockAgent()} onBack={noop} />;
     case 'apps': return <AppsScreen api={mockLauncher()} onBack={noop} />;
+    case 'apps-pinned': return <AppsScreen api={mockLauncherPinned()} onBack={noop} />;
     case 'clipboard': return <ClipboardScreen api={mockClipboard()} onBack={noop} />;
     case 'files': return <FilesScreen api={mockFiles()} onBack={noop} />;
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;

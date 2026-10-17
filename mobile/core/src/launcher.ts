@@ -1,6 +1,7 @@
 /** Lists and launches apps on the desktop; depends on OrbitSession and Zod; never retries a launch and never sends paths or arguments. */
 import { InvalidDesktopReply } from './agent.js';
-import { ICON_BATCH_SIZE, MAX_APPS, appIconResultSchema, appIconsResultSchema, appPageSchema, launchResultSchema, type AppEntry } from './protocol.js';
+import type { JsonValue } from './protocol.js';
+import { ICON_BATCH_SIZE, MAX_APPS, appIconResultSchema, appIconsResultSchema, appPageSchema, launchResultSchema, launcherLayoutSchema, type AppEntry } from './protocol.js';
 import { CommandError, NotSent, type OrbitSession } from './session.js';
 
 const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bounded native helper on the desktop
@@ -8,10 +9,27 @@ const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bound
 export class LauncherApi {
   private revision?: string;
   private apps: AppEntry[] = [];
+  private pinned: string[] = [];
   private readonly iconCache = new Map<string, string | null>();
   constructor(private readonly session: OrbitSession) {
-    session.onStatus(() => { this.revision = undefined; this.apps = []; this.iconCache.clear(); });
+    session.onStatus(() => { this.revision = undefined; this.apps = []; this.pinned = []; this.iconCache.clear(); });
   }
+
+  /** Ordered pinned app ids, as of the last list()/pin()/unpin()/reorder(). */
+  getPinned(): string[] { return [...this.pinned]; }
+
+  private async layout(type: 'launcher.pin' | 'launcher.unpin' | 'launcher.reorder', payload: JsonValue): Promise<string[]> {
+    const result: unknown = await this.session.command(type, payload, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = launcherLayoutSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    this.pinned = parsed.data.pinned;
+    return this.getPinned();
+  }
+  /** Adds an app to the pinned favourites (no-op when already pinned). */
+  async pin(appId: string): Promise<string[]> { return this.layout('launcher.pin', { appId }); }
+  async unpin(appId: string): Promise<string[]> { return this.layout('launcher.unpin', { appId }); }
+  /** New favourite order; the desktop rejects anything that is not a permutation of its current pins. */
+  async reorder(pinned: string[]): Promise<string[]> { return this.layout('launcher.reorder', { appIds: pinned }); }
 
   /** The app's own icon as base64 PNG, or null when the desktop has none. Cached per connection. */
   async icon(appId: string): Promise<string | null> {
@@ -65,6 +83,7 @@ export class LauncherApi {
       const page = parsed.data;
       if (revision && page.catalogRevision !== revision) throw new CommandError('LAUNCHER_STALE_CATALOG');
       revision = page.catalogRevision;
+      this.pinned = page.pinned;
       apps.push(...page.apps);
       if (apps.length > MAX_APPS || (page.nextCursor && seen.has(page.nextCursor))) throw new CommandError('LAUNCHER_LIMIT');
       cursor = page.nextCursor;

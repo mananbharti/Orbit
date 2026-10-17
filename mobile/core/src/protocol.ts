@@ -55,7 +55,7 @@ export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENT
   'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED', 'CLIPBOARD_NOT_FOUND',
   'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA', 'FILE_OFFSET', 'FILE_INTEGRITY',
   'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
-  'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_UNKNOWN_OUTCOME',
+  'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_STALE_LAYOUT', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_UNKNOWN_OUTCOME',
   'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE',
   'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -97,8 +97,10 @@ export const APP_PAGE_SIZE = 32;
 export const MAX_APPS = 2_048;
 export const appSchema = z.strictObject({ appId: z.string().regex(/^[a-f0-9]{64}$/), name: z.string().min(1).max(256) });
 export type AppEntry = z.infer<typeof appSchema>;
+export const MAX_PINS = 24;
 export const appPageSchema = z.strictObject({ catalogRevision: z.string().uuid(), apps: z.array(appSchema).max(APP_PAGE_SIZE),
-  nextCursor: z.string().max(48).nullable() });
+  nextCursor: z.string().max(48).nullable(), pinned: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PINS) });
+export const launcherLayoutSchema = z.strictObject({ pinned: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PINS) });
 export const launchResultSchema = z.strictObject({ status: z.literal('requested') });
 export const appIconResultSchema = z.strictObject({ icon: z.string().base64().max(90_000).nullable() });
 export const ICON_BATCH_SIZE = 8;

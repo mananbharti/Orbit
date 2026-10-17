@@ -19,6 +19,7 @@ import type { ClipboardAdapter } from './os-integration/clipboard.js';
 import { TransferStore } from './file-transfer/transfer-store.js';
 import { FileTransfer } from './file-transfer/file-transfer.js';
 import { AppLauncher } from './app-launcher/app-launcher.js';
+import { LauncherLayout } from './app-launcher/launcher-layout.js';
 import { createAppLauncher } from './os-integration/create-app-launcher.js';
 import type { AppLauncherAdapter } from './os-integration/app-launcher.js';
 import { InputControl } from './input-simulation/input-control.js';
@@ -78,7 +79,8 @@ export async function startDesktop(options: { directory: string; host: string; p
     clipboard = new ClipboardSync(registry, options.clipboard?.createAdapter ?? createClipboard, log, options.clipboard?.pollMs, new ClipboardHistory(join(directory, 'clipboard-history.json')));
     const inbox = options.inbox ? privateDirectory(options.inbox) : join(directory, 'received');
     files = new FileTransfer(new TransferStore(directory, inbox, 'to-desktop'), registry, log, owner => store.isActive(owner));
-    launcher = new AppLauncher(registry, options.launcher?.createAdapter ?? createAppLauncher);
+    launcher = new AppLauncher(registry, options.launcher?.createAdapter ?? createAppLauncher,
+      new LauncherLayout(join(directory, 'launcher-pins.json')), join(directory, 'launcher-secret'));
     if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'));
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation);
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);

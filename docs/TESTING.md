@@ -26,6 +26,7 @@ Control:
 
 Launcher:
 10. Phone -> Apps: real icons stream in (8 at a time). Search "edge", tap it - Edge opens on the PC.
+11. Long-press Spotify -> Pin to top. A PINNED row appears above the grid. Long-press it again -> Move later. Close and reopen the app (and restart Orbit on the PC): the pinned row is still there, same order.
 
 Wake-on-LAN (one-time PC setup first: Device Manager -> your network adapter -> Power Management -> allow this device to wake the computer; BIOS: enable Wake on LAN):
 12. Pair, then sleep or shut down the PC (Control -> Sleep). Wait until the phone shows "Looking for your computer". Tap "Wake <PC name>". The PC powers on; the phone reconnects on its own within ~30s.
