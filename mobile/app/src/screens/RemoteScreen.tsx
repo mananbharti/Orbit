@@ -11,12 +11,15 @@ const SPEED = 1.6;
 const KEYS: { key: InputKey; label: string }[] = [{ key: 'escape', label: 'Esc' }, { key: 'tab', label: 'Tab' }, { key: 'backspace', label: '⌫' },
   { key: 'enter', label: 'Return' }, { key: 'left', label: '←' }, { key: 'up', label: '↑' }, { key: 'down', label: '↓' }, { key: 'right', label: '→' }];
 const MODS: { key: NonNullable<MacroStep['modifiers']>[number]; label: string }[] = [{ key: 'ctrl', label: 'Ctrl' }, { key: 'shift', label: 'Shift' }, { key: 'alt', label: 'Alt' }, { key: 'meta', label: 'Win' }];
+const LETTER_ROWS: string[] = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+const DIGITS: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+const F_KEYS: string[] = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'];
 const MACRO_KEYS: InputKey[] = [...'abcdefghijklmnopqrstuvwxyz'.split(''), ...'0123456789'.split(''),
   'enter', 'tab', 'escape', 'space', 'backspace', 'delete', 'up', 'down', 'left', 'right',
   'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'] as InputKey[];
 function chordLabel(step: MacroStep): string { return [...(step.modifiers ?? []).map(m => MODS.find(x => x.key === m)!.label), step.key.toUpperCase()].join('+'); }
 
-export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => void }) {
+export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; onBack: () => void; initialShowKeys?: boolean }) {
   const t = useTheme();
   const state = useSyncExternalStore(api.subscribe, api.getState);
   const [error, setError] = useState<string>();
@@ -24,6 +27,8 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
   const [macros, setMacros] = useState<KeyboardMacro[]>([]);
   const [running, setRunning] = useState<string>();
   const [gyro, setGyro] = useState(false);
+  const [showKeys, setShowKeys] = useState(!!initialShowKeys);
+  const [armed, setArmed] = useState<Set<string>>(new Set());
   const [gyroSupported, setGyroSupported] = useState(false);
   const [composing, setComposing] = useState<{ name: string; steps: MacroStep[]; mods: Set<MacroStep['modifiers'] extends (infer M)[] | undefined ? M : never>; key: InputKey } | null>(null);
 
@@ -116,6 +121,38 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
           <View style={styles.row}>
             {KEYS.map(k => <Pressable key={k.key} accessibilityRole="button" onPress={guard(() => api.push({ t: 'key', key: k.key }))} style={[styles.key, { backgroundColor: t.fill }]}><Text style={{ color: t.text }}>{k.label}</Text></Pressable>)}
           </View>
+          <Pressable accessibilityRole="button" onPress={() => { setShowKeys(on => !on); setArmed(new Set()); void Haptics.selectionAsync(); }}
+            style={[styles.key, { backgroundColor: showKeys ? t.tint : t.fill, alignSelf: 'flex-start' }]}>
+            <Text style={{ color: showKeys ? '#fff' : t.text }}>{showKeys ? 'Hide keyboard' : 'Full keyboard'}</Text>
+          </Pressable>
+          {showKeys ? (
+            <View style={{ gap: space.s }}>
+              <View style={styles.row}>
+                {MODS.map(m => {
+                  const on = armed.has(m.key);
+                  return <Pressable key={m.key} accessibilityRole="button" accessibilityLabel={`${m.label} modifier`} onPress={() => {
+                    setArmed(prev => { const next = new Set(prev); if (next.has(m.key)) next.delete(m.key); else next.add(m.key); return next; });
+                    void Haptics.selectionAsync();
+                  }} style={[styles.key, { backgroundColor: on ? t.tint : t.fill }]}><Text style={{ color: on ? '#fff' : t.text }}>{m.label}</Text></Pressable>;
+                })}
+                <Text style={{ color: t.sub, fontSize: 12, flex: 1 }}>{armed.size ? 'Applies to the next key you tap' : 'Tap a modifier, then a key'}</Text>
+              </View>
+              <View style={styles.row}>
+                {F_KEYS.map(k => <Pressable key={k} accessibilityRole="button" accessibilityLabel={`Function key ${k}`} onPress={guard(() => { api.push({ t: 'key', key: k as InputKey, ...(armed.size ? { modifiers: [...armed] as MacroStep['modifiers'] } : {}) }); setArmed(new Set()); })}
+                  style={[styles.smallKey, { backgroundColor: t.fill }]}><Text style={{ color: t.text, fontSize: 12 }}>{k.toUpperCase()}</Text></Pressable>)}
+              </View>
+              <View style={styles.row}>
+                {DIGITS.map(k => <Pressable key={k} accessibilityRole="button" onPress={guard(() => { api.push({ t: 'key', key: k as InputKey, ...(armed.size ? { modifiers: [...armed] as MacroStep['modifiers'] } : {}) }); setArmed(new Set()); })}
+                  style={[styles.smallKey, { backgroundColor: t.fill }]}><Text style={{ color: t.text, fontSize: 14 }}>{k}</Text></Pressable>)}
+              </View>
+              {LETTER_ROWS.map(row => (
+                <View key={row} style={styles.row}>
+                  {[...row].map(k => <Pressable key={k} accessibilityRole="button" accessibilityLabel={`Key ${k}`} onPress={guard(() => { api.push({ t: 'key', key: k as InputKey, ...(armed.size ? { modifiers: [...armed] as MacroStep['modifiers'] } : {}) }); setArmed(new Set()); })}
+                    style={[styles.smallKey, { backgroundColor: t.fill }]}><Text style={{ color: t.text, fontSize: 14 }}>{k.toUpperCase()}</Text></Pressable>)}
+                </View>
+              ))}
+            </View>
+          ) : null}
           <Text style={{ color: t.sub, fontSize: 13, fontWeight: '600' }}>MACROS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.s }}>
             {macros.map(macro => (
@@ -195,5 +232,6 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
   macroChip: { borderRadius: 18, paddingVertical: 9, paddingHorizontal: 14 },
   macroKey: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+  smallKey: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   composer: { borderRadius: radius, padding: space.m, gap: space.s },
 });

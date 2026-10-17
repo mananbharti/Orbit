@@ -56,4 +56,6 @@ Remote:
 
 25. Place scenes: Apps -> long-press a scene -> "When I arrive here" (allow location). The scene chip gets an "arrives" marker. Leave the area with Orbit open, come back: within about a minute of arriving, the phone says it opened the scene and those apps launch on the PC. Long-press again -> "Remove place trigger" turns it off. (Works while Orbit is open; iOS does not let apps watch location in the background.)
 
+26. Full keyboard: Remote -> start control -> "Full keyboard". Tap Q, W, a couple of letters: they type on the PC. Tap Ctrl then A: it selects all (modifier applies to the next key only, then clears). Tap F5: the focused app refreshes. Digits row types numbers. "Hide keyboard" folds it away.
+
 Report anything that fails with the exact step number.

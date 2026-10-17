@@ -21,7 +21,7 @@ import { TasksScreen } from '../src/screens/TasksScreen';
 import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockTabs, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'remote-keys', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -40,6 +40,7 @@ function Screen({ name }: { name: string }) {
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;
     case 'remote': return <RemoteScreen api={mockInput()} onBack={noop} />;
     case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
+    case 'remote-keys': return <RemoteScreen api={mockInputMacros()} onBack={noop} initialShowKeys />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} />;
