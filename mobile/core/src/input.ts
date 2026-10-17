@@ -1,6 +1,6 @@
 /** Phone side of remote mouse and keyboard: one confirmed session, batched events, steady heartbeat; depends on OrbitSession; never starts without the computer owner's confirmation. */
 import { InvalidDesktopReply } from './agent.js';
-import { MAX_INPUT_EVENTS, MAX_POINTER_STEP, MAX_TEXT_CHARS, inputBeginSchema, inputSentSchema, type InputEvent } from './protocol.js';
+import { MAX_INPUT_EVENTS, MAX_POINTER_STEP, MAX_TEXT_CHARS, inputBeginSchema, inputSentSchema, keyboardMacrosSchema, type InputEvent, type KeyboardMacro, type MacroStep } from './protocol.js';
 import { CommandError, NotSent, type OrbitSession } from './session.js';
 
 export type InputStatus = 'idle' | 'waiting' | 'active' | 'ended';
@@ -51,6 +51,30 @@ export class InputApi {
     } else this.queue.push(normalised);
     void this.flush();
   }
+    /** Saved keyboard macros, as stored on the desktop. */
+  async macros(): Promise<KeyboardMacro[]> {
+    const parsed = keyboardMacrosSchema.safeParse(await this.session.command('input.macros', {}, { timeoutMs: 20_000 }));
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.macros;
+  }
+  /** Creates a macro (no id) or replaces it. */
+  async saveMacro(name: string, steps: MacroStep[], id?: string): Promise<KeyboardMacro[]> {
+    const parsed = keyboardMacrosSchema.safeParse(await this.session.command('input.macro.save', { name, steps, ...(id ? { id } : {}) }, { timeoutMs: 20_000 }));
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.macros;
+  }
+  async deleteMacro(id: string): Promise<KeyboardMacro[]> {
+    const parsed = keyboardMacrosSchema.safeParse(await this.session.command('input.macro.delete', { id }, { timeoutMs: 20_000 }));
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.macros;
+  }
+  /** Runs a macro inside the current control session: every chord goes out as one batch, in order. */
+  runMacro(macro: KeyboardMacro): Promise<void> {
+    if (!this.lease) throw new NotSent('Not controlling the computer');
+    for (const step of macro.steps) this.queue.push({ t: 'key', key: step.key, ...(step.modifiers?.length ? { modifiers: [...step.modifiers] } : {}) });
+    return this.flush();
+  }
+
   /** Resolves when everything queued so far has been applied (or the session failed). */
   flush(): Promise<void> {
     this.flushing ??= (async () => {

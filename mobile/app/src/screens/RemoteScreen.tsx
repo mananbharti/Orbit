@@ -1,23 +1,54 @@
 import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { InputApi, InputKey } from '@orbit/core';
+import { Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { InputApi, InputKey, KeyboardMacro, MacroStep } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
 const SPEED = 1.6;
 const KEYS: { key: InputKey; label: string }[] = [{ key: 'escape', label: 'Esc' }, { key: 'tab', label: 'Tab' }, { key: 'backspace', label: '⌫' },
   { key: 'enter', label: 'Return' }, { key: 'left', label: '←' }, { key: 'up', label: '↑' }, { key: 'down', label: '↓' }, { key: 'right', label: '→' }];
+const MODS: { key: NonNullable<MacroStep['modifiers']>[number]; label: string }[] = [{ key: 'ctrl', label: 'Ctrl' }, { key: 'shift', label: 'Shift' }, { key: 'alt', label: 'Alt' }, { key: 'meta', label: 'Win' }];
+const MACRO_KEYS: InputKey[] = [...'abcdefghijklmnopqrstuvwxyz'.split(''), ...'0123456789'.split(''),
+  'enter', 'tab', 'escape', 'space', 'backspace', 'delete', 'up', 'down', 'left', 'right',
+  'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'] as InputKey[];
+function chordLabel(step: MacroStep): string { return [...(step.modifiers ?? []).map(m => MODS.find(x => x.key === m)!.label), step.key.toUpperCase()].join('+'); }
 
 export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => void }) {
   const t = useTheme();
   const state = useSyncExternalStore(api.subscribe, api.getState);
   const [error, setError] = useState<string>();
   const [typed, setTyped] = useState('');
+  const [macros, setMacros] = useState<KeyboardMacro[]>([]);
+  const [running, setRunning] = useState<string>();
+  const [composing, setComposing] = useState<{ name: string; steps: MacroStep[]; mods: Set<MacroStep['modifiers'] extends (infer M)[] | undefined ? M : never>; key: InputKey } | null>(null);
+
+  const runMacro = async (macro: KeyboardMacro): Promise<void> => {
+    setRunning(macro.id); setError(undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try { await api.runMacro(macro); } catch (e) { setError(friendlyError(e)); }
+    finally { setRunning(undefined); }
+  };
+  const manageMacro = (macro: KeyboardMacro): void => {
+    Alert.alert(macro.name, macro.steps.map(chordLabel).join('  then  '), [
+      { text: 'Delete macro', style: 'destructive', onPress: () => { void api.deleteMacro(macro.id).then(setMacros).catch(e => setError(friendlyError(e))); } },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+  const saveMacro = async (): Promise<void> => {
+    if (!composing || !composing.name.trim() || !composing.steps.length) return;
+    setError(undefined);
+    try {
+      setMacros(await api.saveMacro(composing.name.trim(), composing.steps));
+      setComposing(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) { setError(friendlyError(e)); }
+  };
   const last = useRef({ x: 0, y: 0, moved: false });
   const scrollLast = useRef(0);
   const active = state.status === 'active';
+  useEffect(() => { if (active) void api.macros().then(setMacros).catch(() => {}); }, [api, active]);
 
   useEffect(() => () => { void api.end(); }, [api]);
 
@@ -66,6 +97,64 @@ export function RemoteScreen({ api, onBack }: { api: InputApi; onBack: () => voi
           <View style={styles.row}>
             {KEYS.map(k => <Pressable key={k.key} accessibilityRole="button" onPress={guard(() => api.push({ t: 'key', key: k.key }))} style={[styles.key, { backgroundColor: t.fill }]}><Text style={{ color: t.text }}>{k.label}</Text></Pressable>)}
           </View>
+          <Text style={{ color: t.sub, fontSize: 13, fontWeight: '600' }}>MACROS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.s }}>
+            {macros.map(macro => (
+              <Pressable key={macro.id} accessibilityRole="button" accessibilityLabel={`Run macro ${macro.name}`} disabled={!!running}
+                onPress={() => { void runMacro(macro); }} onLongPress={() => manageMacro(macro)}
+                style={[styles.macroChip, { backgroundColor: t.tint + '1f', opacity: running && running !== macro.id ? 0.5 : 1 }]}>
+                <Text style={{ color: t.tint, fontSize: 15, fontWeight: '600' }}>{running === macro.id ? 'Running…' : macro.name}</Text>
+              </Pressable>
+            ))}
+            <Pressable accessibilityRole="button" accessibilityLabel="New macro" onPress={() => setComposing({ name: '', steps: [], mods: new Set(), key: 'v' })}
+              style={[styles.macroChip, { backgroundColor: t.fill }]}>
+              <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>+ Macro</Text>
+            </Pressable>
+          </ScrollView>
+          {composing ? (
+            <View style={[styles.composer, { backgroundColor: t.card }]}>
+              <TextInput value={composing.name} onChangeText={name => setComposing({ ...composing, name })} placeholder="Macro name (e.g. Paste plain)" placeholderTextColor={t.sub}
+                maxLength={40} style={{ color: t.text, fontSize: 16, padding: space.s, backgroundColor: t.fill, borderRadius: 10 }} accessibilityLabel="Macro name" />
+              <View style={styles.row}>
+                {MODS.map(m => {
+                  const on = composing.mods.has(m.key);
+                  return <Pressable key={m.key} accessibilityRole="button" onPress={() => { const mods = new Set(composing.mods); if (on) mods.delete(m.key); else mods.add(m.key); setComposing({ ...composing, mods }); }}
+                    style={[styles.key, { backgroundColor: on ? t.tint : t.fill }]}><Text style={{ color: on ? '#fff' : t.text }}>{m.label}</Text></Pressable>;
+                })}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                {MACRO_KEYS.map(k => (
+                  <Pressable key={k} accessibilityRole="button" onPress={() => setComposing({ ...composing, key: k })}
+                    style={[styles.macroKey, { backgroundColor: composing.key === k ? t.tint : t.fill }]}>
+                    <Text style={{ color: composing.key === k ? '#fff' : t.text, fontSize: 14, fontWeight: '600' }}>{k.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Pressable accessibilityRole="button" onPress={() => setComposing({ ...composing, steps: [...composing.steps, { key: composing.key, ...(composing.mods.size ? { modifiers: [...composing.mods] } : {}) }].slice(0, 8) })}
+                style={[styles.macroChip, { backgroundColor: t.fill, alignSelf: 'flex-start' }]}>
+                <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>+ Add step: {chordLabel({ key: composing.key, modifiers: [...composing.mods] })}</Text>
+              </Pressable>
+              {composing.steps.length ? (
+                <View style={styles.row}>
+                  {composing.steps.map((step, i) => (
+                    <Pressable key={i} accessibilityRole="button" accessibilityLabel={`Remove step ${chordLabel(step)}`} onPress={() => setComposing({ ...composing, steps: composing.steps.filter((_, j) => j !== i) })}
+                      style={[styles.macroChip, { backgroundColor: t.fill }]}>
+                      <Text style={{ color: t.text, fontSize: 14 }}>{chordLabel(step)}  ×</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              <View style={styles.row}>
+                <Pressable accessibilityRole="button" disabled={!composing.name.trim() || !composing.steps.length} onPress={() => { void saveMacro(); }}
+                  style={[styles.macroChip, { backgroundColor: composing.name.trim() && composing.steps.length ? t.tint : t.fill }]}>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Save macro</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={() => setComposing(null)} style={[styles.macroChip, { backgroundColor: t.fill }]}>
+                  <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
           <TextInput value={typed} onChangeText={v => { if (v.length > typed.length) guard(() => api.push({ t: 'text', text: v.slice(typed.length) }))(); setTyped(v.length > 40 ? '' : v); }}
             placeholder="Type to send keystrokes" placeholderTextColor={t.sub} autoCorrect={false} autoCapitalize="none"
             style={{ color: t.text, fontSize: 17, padding: space.m, backgroundColor: t.card, borderRadius: radius }} accessibilityLabel="Keyboard" />
@@ -85,4 +174,7 @@ const styles = StyleSheet.create({
   key: { paddingHorizontal: space.l, paddingVertical: 14, borderRadius: radius },
   button: { paddingVertical: 14, borderRadius: radius, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  macroChip: { borderRadius: 18, paddingVertical: 9, paddingHorizontal: 14 },
+  macroKey: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+  composer: { borderRadius: radius, padding: space.m, gap: space.s },
 });

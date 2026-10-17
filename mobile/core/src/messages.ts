@@ -17,6 +17,8 @@ const BY_CODE: Partial<Record<string, string>> = {
   LAUNCHER_NOT_FOUND: 'That app is no longer available.',
   LAUNCHER_STALE_LAYOUT: 'The pinned apps changed somewhere else. Reopen Apps to see the latest.',
   LAUNCHER_SCENE_CONFLICT: 'A scene with that name already exists.',
+  INPUT_CONFLICT: 'A macro with that name already exists.',
+  INPUT_NOT_FOUND: 'That macro no longer exists.',
   LAUNCHER_UNKNOWN_OUTCOME: 'Not sure the app opened. Check your computer.',
   LAUNCHER_LIMIT: 'The computer has too many apps to list.',
   BUSY: 'The computer is busy. Try again in a moment.',

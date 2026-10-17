@@ -56,7 +56,7 @@ export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENT
   'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA', 'FILE_OFFSET', 'FILE_INTEGRITY',
   'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
   'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_STALE_LAYOUT', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_SCENE_CONFLICT', 'LAUNCHER_UNKNOWN_OUTCOME',
-  'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE',
+  'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE', 'INPUT_CONFLICT', 'INPUT_NOT_FOUND',
   'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -152,8 +152,19 @@ export const MAX_INPUT_EVENTS = 32;
 export const MAX_POINTER_STEP = 2_000;
 export const MAX_TEXT_CHARS = 64;
 export const INPUT_KEYS = ['enter', 'backspace', 'delete', 'tab', 'escape', 'space', 'up', 'down', 'left', 'right', 'home', 'end', 'pageup', 'pagedown',
-  'volumeup', 'volumedown', 'mute', 'playpause', 'next', 'previous'] as const;
+  'volumeup', 'volumedown', 'mute', 'playpause', 'next', 'previous',
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'] as const;
 export type InputKey = (typeof INPUT_KEYS)[number];
+
+// Keyboard macros (mirrors desktop/src/protocol/input.ts).
+export const MAX_MACROS = 24;
+export const MAX_MACRO_STEPS = 8;
+export const macroStepSchema = z.strictObject({ key: z.enum(INPUT_KEYS), modifiers: z.array(z.enum(['shift', 'ctrl', 'alt', 'meta'])).max(4).optional() });
+export type MacroStep = z.infer<typeof macroStepSchema>;
+export const keyboardMacroSchema = z.strictObject({ id: z.string().uuid(), name: z.string().min(1).max(40),
+  steps: z.array(macroStepSchema).min(1).max(MAX_MACRO_STEPS) });
+export type KeyboardMacro = z.infer<typeof keyboardMacroSchema>;
+export const keyboardMacrosSchema = z.strictObject({ macros: z.array(keyboardMacroSchema).max(MAX_MACROS) });
 export type InputModifier = 'shift' | 'ctrl' | 'alt' | 'meta';
 export type InputEvent =
   | { t: 'move'; dx: number; dy: number }

@@ -12,10 +12,10 @@ import { RemoteScreen } from '../src/screens/RemoteScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'control', 'settings', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -31,6 +31,7 @@ function Screen({ name }: { name: string }) {
     case 'files': return <FilesScreen api={mockFiles()} onBack={noop} />;
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;
     case 'remote': return <RemoteScreen api={mockInput()} onBack={noop} />;
+    case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} />;
     case 'pair': return <PairScreen onScanned={async () => {}} />;

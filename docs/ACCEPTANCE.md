@@ -35,7 +35,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 9 | Context-aware launcher scenes | Partial: named scenes (save/edit/delete, one-tap launch-all, per-app failure reporting) persisted on the desktop; context triggers (time/place) not built | Yes (commands, persistence, partial-failure semantics) | Pending | - |
 | 10 | Full mouse/touchpad control | Implemented (A5) | Yes | Pending | Windows + Linux only |
 | 11 | Gyroscope mouse mode | Not started | - | - | - |
-| 12 | Full keyboard + custom macros | Partial: remote keyboard done; macros pending | Yes (keyboard) | Pending | - |
+| 12 | Full keyboard + custom macros | Implemented: remote keyboard + letters/digits/F-keys now sendable with modifiers; named macros saved on the desktop, one tap runs every chord in one batch inside the approved control session | Yes (store, commands, VK translation, batching) | Pending | Letters/F-keys as remote-keyboard buttons pending; macros need an approved control session by design |
 | 13 | System volume + per-app mixer | Implemented | Yes | Pending | Sessions addressed by PID |
 | 14 | Power control (shutdown/sleep/restart/lock) | Implemented | Yes | Pending | - |
 | 15 | Wake-on-LAN | Implemented: MACs in pairing payload + phone magic-packet sender + Wake button when PC is unreachable | Yes (packet bytes, MAC filtering, pairing pass-through) | Pending | Needs the desktop BIOS/NIC WoL enabled; iOS sends via react-native-udp (native module, dev-client build) |

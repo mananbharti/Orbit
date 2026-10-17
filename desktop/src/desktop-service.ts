@@ -24,6 +24,7 @@ import { LauncherScenes } from './app-launcher/launcher-scenes.js';
 import { createAppLauncher } from './os-integration/create-app-launcher.js';
 import type { AppLauncherAdapter } from './os-integration/app-launcher.js';
 import { InputControl } from './input-simulation/input-control.js';
+import { KeyboardMacroStore } from './input-simulation/keyboard-macros.js';
 import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
 import { MemoryService } from './memory/memory-service.js';
@@ -84,7 +85,8 @@ export async function startDesktop(options: { directory: string; host: string; p
       new LauncherLayout(join(directory, 'launcher-pins.json')), join(directory, 'launcher-secret'),
       new LauncherScenes(join(directory, 'launcher-scenes.json')));
     if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'));
-    if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation);
+    if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation,
+      new KeyboardMacroStore(join(directory, 'keyboard-macros.json')));
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);
     if (options.memory !== false) memory = new MemoryService(registry, new GraphStore(join(directory, 'memory.json')), log);
     const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);

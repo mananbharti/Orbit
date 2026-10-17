@@ -8,7 +8,8 @@ export type Op = { k: 'mouse'; flags: number; dx?: number; dy?: number; data?: n
 const KEYUP = 0x2, EXT = 0x1, UNICODE = 0x4;
 const VK: Record<string, [number, boolean]> = { enter: [0x0d, false], backspace: [0x08, false], delete: [0x2e, true], tab: [0x09, false], escape: [0x1b, false], space: [0x20, false],
   up: [0x26, true], down: [0x28, true], left: [0x25, true], right: [0x27, true], home: [0x24, true], end: [0x23, true], pageup: [0x21, true], pagedown: [0x22, true],
-  volumeup: [0xaf, false], volumedown: [0xae, false], mute: [0xad, false], playpause: [0xb3, false], next: [0xb0, false], previous: [0xb1, false] };
+  volumeup: [0xaf, false], volumedown: [0xae, false], mute: [0xad, false], playpause: [0xb3, false], next: [0xb0, false], previous: [0xb1, false],
+  a: [0x41, false], b: [0x42, false], c: [0x43, false], d: [0x44, false], e: [0x45, false], f: [0x46, false], g: [0x47, false], h: [0x48, false], i: [0x49, false], j: [0x4a, false], k: [0x4b, false], l: [0x4c, false], m: [0x4d, false], n: [0x4e, false], o: [0x4f, false], p: [0x50, false], q: [0x51, false], r: [0x52, false], s: [0x53, false], t: [0x54, false], u: [0x55, false], v: [0x56, false], w: [0x57, false], x: [0x58, false], y: [0x59, false], z: [0x5a, false], 0: [0x30, false], 1: [0x31, false], 2: [0x32, false], 3: [0x33, false], 4: [0x34, false], 5: [0x35, false], 6: [0x36, false], 7: [0x37, false], 8: [0x38, false], 9: [0x39, false], f1: [0x70, false], f2: [0x71, false], f3: [0x72, false], f4: [0x73, false], f5: [0x74, false], f6: [0x75, false], f7: [0x76, false], f8: [0x77, false], f9: [0x78, false], f10: [0x79, false], f11: [0x7a, false], f12: [0x7b, false] };
 const MOD: Record<string, number> = { shift: 0x10, ctrl: 0x11, alt: 0x12, meta: 0x5b };
 const BTN: Record<string, [number, number]> = { left: [0x2, 0x4], right: [0x8, 0x10], middle: [0x20, 0x40] };
 const WHEEL = 0x800, HWHEEL = 0x1000, MOVE = 0x1;

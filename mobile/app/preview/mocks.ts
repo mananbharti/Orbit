@@ -58,6 +58,13 @@ export const mockFiles = (transferring = true): FileApi => ({ ...store({ offers:
   refreshOffers: async () => {}, watch: async () => {}, upload: async () => {}, download: async () => {}, cancel: async () => {}, retry: async () => {} }) as unknown as FileApi;
 export const mockMemory = (): MemoryApi => ({ recall: async () => [], remember: async () => '', forget: async () => true }) as unknown as MemoryApi;
 export const mockInput = (): InputApi => ({ ...store({ status: 'idle' }), begin: async () => {}, end: async () => {}, push: () => {} }) as unknown as InputApi;
+/** Active control session with two saved macros. */
+export const mockInputMacros = (): InputApi => ({ ...store({ status: 'active' }), begin: async () => {}, end: async () => {}, push: () => {},
+  macros: async () => [
+    { id: '33333333-3333-4333-8333-333333333333', name: 'Paste plain', steps: [{ key: 'v', modifiers: ['ctrl', 'shift'] }] },
+    { id: '44444444-4444-4444-8444-444444444444', name: 'Task view', steps: [{ key: 'tab', modifiers: ['meta'] }] },
+  ],
+  saveMacro: async () => [], deleteMacro: async () => [], runMacro: async () => {} }) as unknown as InputApi;
 export const mockSystem: SystemApi = ({
   power: async () => {}, panic: async () => 'locked' as const,
   audioSessions: async () => [{ id: '4204', name: 'Spotify', volume: 80, muted: false }, { id: '512', name: 'Discord', volume: 35, muted: true }],
