@@ -5,7 +5,7 @@ import { radius, space, useTheme, useThemePref, type ThemePref } from '../theme'
 
 const options: { value: ThemePref; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }];
 
-export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, appLock, onAppLock, biometrics }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void; appLock: boolean; onAppLock: (on: boolean) => void; biometrics: boolean }) {
+export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, appLock, onAppLock, biometrics, onDevices }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void; appLock: boolean; onAppLock: (on: boolean) => void; biometrics: boolean; onDevices: () => void }) {
   const t = useTheme();
   const { pref, setPref } = useThemePref();
   return (
@@ -48,6 +48,10 @@ export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, a
       <Text style={[styles.section, { color: t.sub }]}>COMPUTER</Text>
       <View style={[styles.card, { backgroundColor: t.card }]}>
         <Text style={{ color: t.text, fontSize: 17 }}>{name}</Text>
+        <Pressable accessibilityRole="button" onPress={onDevices} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
+          <Text style={{ color: t.text, fontSize: 17 }}>Devices</Text>
+          <Text style={{ color: t.sub, fontSize: 22 }}>›</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" onPress={onRepair} style={{ minHeight: 44, justifyContent: 'center' }}>
           <Text style={{ color: t.bad, fontSize: 17 }}>Forget this computer</Text>
         </Pressable>

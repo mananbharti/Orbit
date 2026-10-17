@@ -22,6 +22,8 @@ const BY_CODE: Partial<Record<string, string>> = {
   LAUNCHER_UNKNOWN_OUTCOME: 'Not sure the app opened. Check your computer.',
   LAUNCHER_LIMIT: 'The computer has too many apps to list.',
   BUSY: 'The computer is busy. Try again in a moment.',
+  PAIR_NOT_FOUND: 'That device is no longer paired.',
+  PAIR_SELF_SCOPES: 'This phone cannot change its own permissions.',
 };
 
 export function describeError(error: unknown): string {

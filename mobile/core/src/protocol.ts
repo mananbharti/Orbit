@@ -44,6 +44,14 @@ export const sessionResponseSchema = z.strictObject({ version: z.literal(1),
   deviceId: idSchema, sessionId: idSchema, expiresAt: z.number().int().positive(), sessionToken: tokenSchema,
   scopes: z.array(z.string().max(24)).max(16).optional() }); // older desktops echo the device's scopes
 
+/** The seven permissions a desktop can grant a device; mirrors the desktop wire contract. */
+export const SCOPES = ['agent', 'clipboard', 'files', 'launcher', 'input', 'dictation', 'memory'] as const;
+export type Scope = (typeof SCOPES)[number];
+export const deviceInfoSchema = z.strictObject({ deviceId: idSchema,
+  scopes: z.union([z.array(z.enum(SCOPES)).min(1).max(SCOPES.length), z.literal('all')]) });
+export const pairDevicesResultSchema = z.strictObject({ current: idSchema, devices: z.array(deviceInfoSchema).max(128) });
+export type DeviceInfo = z.infer<typeof deviceInfoSchema>;
+
 /** What the phone persists (in the OS secure store) after pairing. */
 export const pairedDesktopSchema = z.strictObject({ desktopServiceId: idSchema, displayName: z.string().min(1).max(64),
   deviceId: idSchema, endpoint: endpointSchema, certificateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -57,7 +65,8 @@ export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENT
   'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
   'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_STALE_LAYOUT', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_SCENE_CONFLICT', 'LAUNCHER_UNKNOWN_OUTCOME',
   'INPUT_UNAVAILABLE', 'INPUT_SESSION_REQUIRED', 'INPUT_SEQUENCE', 'INPUT_CONFLICT', 'INPUT_NOT_FOUND',
-  'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE'] as const;
+  'AGENT_NOT_FOUND', 'AGENT_INVALID_STATE', 'AGENT_LIMIT', 'AGENT_LEDGER_IO', 'AGENT_PAUSED', 'SCOPE_DENIED', 'SYSTEM_UNAVAILABLE',
+  'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),

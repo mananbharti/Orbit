@@ -40,4 +40,6 @@ Remote:
 16. Gyro mouse: Remote -> start control -> tap Gyro. Hold the phone like a remote and tilt: the PC cursor follows. Small hand tremor should NOT move it. If it moves the wrong way, tell me which axis is inverted.
 15. Present: open a PowerPoint deck on the PC. Phone home -> Present -> Start presenting (approve on PC). Tap "Start deck" (slideshow begins), > (next slide), Black screen, White screen, End deck. Touch-drag the laser pad: the red laser dot moves on screen.
 
+18. Devices: Settings -> Devices. "This iPhone" shows Full access. If you have only one paired device, the Other devices card says none are paired. (With a second device paired: tap it -> turn Full access off -> switch off Apps; on that device the Apps tab now shows a permission error. Switch it back on.)
+
 Report anything that fails with the exact step number.

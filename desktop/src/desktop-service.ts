@@ -25,6 +25,7 @@ import { createAppLauncher } from './os-integration/create-app-launcher.js';
 import type { AppLauncherAdapter } from './os-integration/app-launcher.js';
 import { InputControl } from './input-simulation/input-control.js';
 import { KeyboardMacroStore } from './input-simulation/keyboard-macros.js';
+import { DeviceDirectory } from './security-pairing/device-directory.js';
 import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
 import { MemoryService } from './memory/memory-service.js';
@@ -72,6 +73,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let memory: MemoryService | undefined;
   let system: SystemControl | undefined;
   let panic: PanicLock | undefined;
+  let devices: DeviceDirectory | undefined;
   let mixer: AudioMixer | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
@@ -103,6 +105,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     const hint: DesktopHint = { desktopServiceId: identity.desktopServiceId, displayName: options.displayName,
       endpoint: `wss://${host}:${address.port}/v1/channel`, certificate: identity.certificate };
     const pairing = new PairingService({ ...hint, macAddresses, certificateFingerprint: certificateFingerprint(identity.certificate) }, store, log);
+    devices = new DeviceDirectory(registry, store);
     transportOptions.pairing = pairing;
     if (options.discovery !== false) discovery = advertiseDesktop(hint,
       () => log.record({ severity: 'warn', eventType: 'discovery.error', outcome: 'failed' }));
@@ -112,7 +115,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
-        system?.stop(); panic?.stop(); mixer?.stop();
+        devices?.stop(); system?.stop(); panic?.stop(); mixer?.stop();
         await dictation?.stop();
         memory?.stop();
         await input?.stop();

@@ -1,5 +1,5 @@
 /** Fake data and fake APIs so every screen can be drawn without a computer, a phone or a network. Preview only; never imported by the real app. */
-import type { AgentApi, AppEntry, AuditEntry, ClipboardApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, SystemApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
+import type { AgentApi, AppEntry, AuditEntry, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, SystemApi, TaskEvent, TaskStore, TaskStoreState, TaskSummary } from '@orbit/core';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const NOW = 1_760_000_000_000;
@@ -71,3 +71,13 @@ export const mockSystem: SystemApi = ({
   setAudioSession: async () => {}, getVolume: async () => ({ level: 65, muted: false }), setVolume: async () => {},
   getBrightness: async () => 70, setBrightness: async () => {},
 }) as unknown as SystemApi;
+
+const phoneId = '3f9a1c2e-1111-4111-8111-aaaaaaaaaaaa';
+const ipadId = '7b2d4e6f-2222-4222-8222-bbbbbbbbbbbb';
+export const mockDevices: DevicesApi = { refresh: async () => devices, getDevices: () => devices, currentId: () => phoneId,
+  setScopes: async () => devices } as unknown as DevicesApi;
+export const devices = [
+  { deviceId: phoneId, scopes: 'all' as const },
+  { deviceId: ipadId, scopes: ['clipboard', 'files', 'launcher'] as ('clipboard' | 'files' | 'launcher')[] },
+];
+export const ipadDeviceId = ipadId;

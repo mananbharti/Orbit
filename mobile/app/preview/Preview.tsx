@@ -11,12 +11,13 @@ import { PairScreen } from '../src/screens/PairScreen';
 import { RemoteScreen } from '../src/screens/RemoteScreen';
 import { PresentScreen } from '../src/screens/PresentScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
+import { DevicesScreen } from '../src/screens/DevicesScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockClipboard, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -35,7 +36,9 @@ function Screen({ name }: { name: string }) {
     case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
-    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} />;
+    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} />;
+    case 'devices': return <DevicesScreen api={mockDevices} onBack={noop} />;
+    case 'devices-limited': return <DevicesScreen api={mockDevices} onBack={noop} initialSelected={ipadDeviceId} />;
     case 'pair': return <PairScreen onScanned={async () => {}} />;
     default: return <TasksScreen store={mockStore()} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onPresent={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
   }

@@ -18,6 +18,7 @@ import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { DevicesScreen } from './screens/DevicesScreen';
 import { ThemeProvider, useTheme } from './theme';
 
 export function App() {
@@ -27,6 +28,7 @@ export function App() {
 function Shell() {
   const t = useTheme();
   const [settings, setSettings] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const [booting, setBooting] = useState(true);
   const [locked, setLocked] = useState(false);
   const [appLock, setAppLock] = useState(true);
@@ -103,7 +105,8 @@ function Shell() {
     </View>
   );
   else if (!connected) body = <PairScreen onScanned={onScanned} />;
-  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} />;
+  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} />;
+  else if (devicesOpen) body = <DevicesScreen api={connected.devices} onBack={() => setDevicesOpen(false)} />;
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
   else if (present) body = <PresentScreen api={connected.input} onBack={() => setPresent(false)} />;
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;
@@ -114,7 +117,7 @@ function Shell() {
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
   else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} />;
-  const screenKey = booting ? 'boot' : !connected ? 'pair' : settings ? 'settings' : control ? 'control' : present ? 'present' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
+  const screenKey = booting ? 'boot' : !connected ? 'pair' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <ScreenTransition key={screenKey}>{body}</ScreenTransition>

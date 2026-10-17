@@ -26,3 +26,12 @@ export const pairedResponseSchema = z.strictObject({ version: z.literal(1),
   desktopServiceId: idSchema, deviceId: idSchema, credential: tokenSchema });
 export const sessionResponseSchema = z.strictObject({ version: z.literal(1),
   deviceId: idSchema, sessionId: idSchema, expiresAt: z.number().int().positive(), sessionToken: tokenSchema });
+
+/** Permission scopes a paired device may hold; the wire contract, mirrored by security-pairing/scopes.ts. */
+export const SCOPES = ['agent', 'clipboard', 'files', 'launcher', 'input', 'dictation', 'memory'] as const;
+export const scopeSchema = z.enum(SCOPES);
+export const deviceInfoSchema = z.strictObject({ deviceId: z.string().uuid(),
+  scopes: z.union([z.array(scopeSchema).min(1).max(SCOPES.length), z.literal('all')]) });
+export const pairDevicesResultSchema = z.strictObject({ current: z.string().uuid(), devices: z.array(deviceInfoSchema).max(128) });
+export const setDeviceScopesSchema = z.strictObject({ deviceId: z.string().uuid(),
+  scopes: z.union([z.array(scopeSchema).min(1).max(SCOPES.length), z.literal('all')]) });

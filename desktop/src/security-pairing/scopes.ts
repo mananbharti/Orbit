@@ -1,5 +1,6 @@
 /** Maps command families to permission scopes; depends on nothing; does not authenticate or store anything. */
-export const SCOPES = ['agent', 'clipboard', 'files', 'launcher', 'input', 'dictation', 'memory'] as const;
+import { SCOPES } from '../protocol/pairing.js';
+export { SCOPES };
 export type Scope = (typeof SCOPES)[number];
 
 const FAMILY_SCOPE: Readonly<Record<string, Scope>> = { agent: 'agent', clipboard: 'clipboard', file: 'files', launcher: 'launcher', input: 'input', dictation: 'dictation', memory: 'memory' };

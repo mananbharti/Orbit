@@ -42,6 +42,16 @@ export class FilePairedCredentialStore implements PairedCredentialStore {
     return [...this.devices.values()].map(deviceId => ({ deviceId, scopes: this.scopes.get(deviceId) ?? 'all' }));
   }
 
+  /** Replaces one device's scopes (undefined restores full access). The file is rewritten first. Returns false for an unknown id. */
+  setScopes(deviceId: string, scopes: readonly Scope[] | undefined): boolean {
+    if (!this.path || ![...this.devices.values()].includes(deviceId)) return false;
+    if (scopes) this.scopes.set(deviceId, Object.freeze([...new Set(scopes)]));
+    else this.scopes.delete(deviceId);
+    atomicWrite(this.path, JSON.stringify([...this.devices].map(([credentialHash, id]) => ({ credentialHash, deviceId: id,
+      ...(this.scopes.has(id) ? { scopes: this.scopes.get(id) } : {}) }))));
+    return true;
+  }
+
   /** Unpairs one device. The file is rewritten first; the device stops working on its next request. Returns false for an unknown id. */
   revoke(deviceId: string): boolean {
     if (!this.path || ![...this.devices.values()].includes(deviceId)) return false;

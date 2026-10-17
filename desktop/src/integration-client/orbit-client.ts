@@ -21,7 +21,7 @@ export const responseSchema = z.strictObject({ version: z.literal(1), type: z.li
   requestId: z.string().regex(IDENTIFIER_PATTERN).nullable(), payload: z.union([
     z.strictObject({ ok: z.literal(true), result: z.unknown() }),
     z.strictObject({ ok: z.literal(false), error: z.strictObject({ code: z.enum([
-      'INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'UNKNOWN_COMMAND',
+      'INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'PAIR_NOT_FOUND', 'PAIR_SELF_SCOPES', 'UNKNOWN_COMMAND',
       'INVALID_PAYLOAD', 'BIOMETRIC_REQUIRED', 'COMMAND_FAILED', 'DUPLICATE_REQUEST', 'BUSY',
       'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED', 'CLIPBOARD_NOT_FOUND',
       'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA',
