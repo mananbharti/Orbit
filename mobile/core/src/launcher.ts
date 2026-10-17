@@ -1,7 +1,7 @@
 /** Lists and launches apps on the desktop; depends on OrbitSession and Zod; never retries a launch and never sends paths or arguments. */
 import { InvalidDesktopReply } from './agent.js';
 import type { JsonValue } from './protocol.js';
-import { ICON_BATCH_SIZE, MAX_APPS, appIconResultSchema, appIconsResultSchema, appPageSchema, launchResultSchema, launcherLayoutSchema, type AppEntry } from './protocol.js';
+import { ICON_BATCH_SIZE, MAX_APPS, appIconResultSchema, appIconsResultSchema, appPageSchema, launchResultSchema, launcherLayoutSchema, launcherScenesSchema, sceneLaunchResultSchema, type AppEntry, type LauncherScene } from './protocol.js';
 import { CommandError, NotSent, type OrbitSession } from './session.js';
 
 const LAUNCHER_TIMEOUT_MS = 20_000; // discovery and activation each use a bounded native helper on the desktop
@@ -30,6 +30,34 @@ export class LauncherApi {
   async unpin(appId: string): Promise<string[]> { return this.layout('launcher.unpin', { appId }); }
   /** New favourite order; the desktop rejects anything that is not a permutation of its current pins. */
   async reorder(pinned: string[]): Promise<string[]> { return this.layout('launcher.reorder', { appIds: pinned }); }
+
+  /** Saved app groups, newest first, as stored on the desktop. */
+  async scenes(): Promise<LauncherScene[]> {
+    const result: unknown = await this.session.command('launcher.scenes', {}, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = launcherScenesSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.scenes;
+  }
+  /** Creates a scene (no id) or replaces it; every appId must exist in the desktop's catalog. */
+  async saveScene(name: string, appIds: string[], id?: string): Promise<LauncherScene[]> {
+    const result: unknown = await this.session.command('launcher.scene.save', { name, appIds, ...(id ? { id } : {}) }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = launcherScenesSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.scenes;
+  }
+  async deleteScene(id: string): Promise<LauncherScene[]> {
+    const result: unknown = await this.session.command('launcher.scene.delete', { id }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = launcherScenesSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data.scenes;
+  }
+  /** Launches every app in the scene; apps that fail come back by name, they never block the rest. */
+  async launchScene(id: string): Promise<{ launched: number; failed: string[] }> {
+    const result: unknown = await this.session.command('launcher.scene.launch', { id }, { timeoutMs: LAUNCHER_TIMEOUT_MS });
+    const parsed = sceneLaunchResultSchema.safeParse(result);
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data;
+  }
 
   /** The app's own icon as base64 PNG, or null when the desktop has none. Cached per connection. */
   async icon(appId: string): Promise<string | null> {

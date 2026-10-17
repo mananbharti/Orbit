@@ -32,7 +32,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 6 | Auto-organize transferred files | Implemented: received files land in inbox/<Type> (Documents, Images, Videos, Audio, Archives, Apps, Other), same-name deliveries step to " (2)" | Yes | Pending | - |
 | 7 | Photo auto-backup to PC | Not started | - | - | - |
 | 8 | Customizable launcher grid | Implemented: grid + search + long-press pin/unpin/move earlier-later; pins persisted on the desktop (stable app ids across restarts), shared by all phones | Yes (layout store, commands, id stability, corrupt-file recovery) | Pending | - |
-| 9 | Context-aware launcher scenes | Not started | - | - | - |
+| 9 | Context-aware launcher scenes | Partial: named scenes (save/edit/delete, one-tap launch-all, per-app failure reporting) persisted on the desktop; context triggers (time/place) not built | Yes (commands, persistence, partial-failure semantics) | Pending | - |
 | 10 | Full mouse/touchpad control | Implemented (A5) | Yes | Pending | Windows + Linux only |
 | 11 | Gyroscope mouse mode | Not started | - | - | - |
 | 12 | Full keyboard + custom macros | Partial: remote keyboard done; macros pending | Yes (keyboard) | Pending | - |

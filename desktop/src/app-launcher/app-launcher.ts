@@ -5,9 +5,10 @@ import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { CommandContext } from '../command-router/command-context.js';
 import type { AppLauncherAdapter, NativeApp } from '../os-integration/app-launcher.js';
 import { ProtocolError } from '../protocol/errors.js';
-import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appIconsSchema, appNameSchema, listAppsSchema, launchAppSchema, pinAppSchema, reorderAppsSchema } from '../protocol/app-launcher.js';
+import { APP_PAGE_SIZE, MAX_APPS, appIconSchema, appIconsSchema, appNameSchema, listAppsSchema, launchAppSchema, pinAppSchema, reorderAppsSchema, saveSceneSchema, sceneIdPayloadSchema } from '../protocol/app-launcher.js';
 import { atomicWrite } from '../security-pairing/atomic-file.js';
 import type { LauncherLayout } from './launcher-layout.js';
+import type { LauncherScenes } from './launcher-scenes.js';
 
 /** App ids must stay stable across restarts or pinned favourites would dangle: the HMAC secret lives next to the other private state. */
 function loadOrCreateSecret(path?: string): Buffer {
@@ -34,7 +35,7 @@ export class AppLauncher {
   private adapter?: AppLauncherAdapter;
 
   constructor(registry: CommandRegistry, private readonly createAdapter: () => AppLauncherAdapter,
-    private readonly layout?: LauncherLayout, secretPath?: string) {
+    private readonly layout?: LauncherLayout, secretPath?: string, private readonly scenes?: LauncherScenes) {
     this.secret = loadOrCreateSecret(secretPath);
     this.unregister = [
       registry.register('launcher.list', { validate: payload => listAppsSchema.safeParse(payload).success,
@@ -112,6 +113,52 @@ export class AppLauncher {
           this.authorize(context);
           try { return { pinned: this.layout.reorder(appIds) }; }
           catch { throw new ProtocolError('LAUNCHER_STALE_LAYOUT'); }
+        }) }),
+      registry.register('launcher.scenes', { validate: payload => payload === null || (typeof payload === 'object' && Object.keys(payload).length === 0),
+        execute: (_payload, context) => this.run(context, async () => {
+          if (!this.scenes) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          this.authorize(context);
+          return { scenes: this.scenes.list() };
+        }) }),
+      registry.register('launcher.scene.save', { validate: payload => saveSceneSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async signal => {
+          if (!this.scenes) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { id, name, appIds } = saveSceneSchema.parse(payload);
+          this.authorize(context);
+          if (!this.catalog.size) await this.refresh(signal); // a freshly restarted service has not listed yet
+          for (const appId of appIds) if (!this.catalog.has(appId)) throw new ProtocolError('LAUNCHER_NOT_FOUND');
+          try { return { scenes: this.scenes.save(name, appIds, id) }; }
+          catch (error) {
+            const message = (error as Error).message;
+            if (message === 'LAUNCHER_SCENE_NAME_TAKEN') throw new ProtocolError('LAUNCHER_SCENE_CONFLICT');
+            if (message === 'LAUNCHER_SCENE_NOT_FOUND') throw new ProtocolError('LAUNCHER_NOT_FOUND');
+            throw new ProtocolError('LAUNCHER_LIMIT');
+          }
+        }) }),
+      registry.register('launcher.scene.delete', { validate: payload => sceneIdPayloadSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async () => {
+          if (!this.scenes) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { id } = sceneIdPayloadSchema.parse(payload);
+          this.authorize(context);
+          return { scenes: this.scenes.remove(id) };
+        }) }),
+      // Launching a scene activates each app in order; one failing app never blocks the rest, and the names of failures come back so the phone can say what did not open.
+      registry.register('launcher.scene.launch', { validate: payload => sceneIdPayloadSchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(context, async signal => {
+          if (!this.scenes) throw new ProtocolError('LAUNCHER_UNAVAILABLE');
+          const { id } = sceneIdPayloadSchema.parse(payload);
+          this.authorize(context);
+          const scene = this.scenes.get(id);
+          if (!scene) throw new ProtocolError('LAUNCHER_NOT_FOUND');
+          await this.refresh(signal);
+          const failed: string[] = []; let launched = 0;
+          for (const appId of scene.appIds) {
+            const app = this.catalog.get(appId);
+            if (!app) { failed.push('(removed app)'); continue; }
+            try { await this.adapter!.launch(app, () => this.authorize(context), signal); launched++; }
+            catch { failed.push(app.name); }
+          }
+          return { launched, failed };
         }) }),
     ];
   }

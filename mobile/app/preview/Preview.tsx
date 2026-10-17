@@ -12,10 +12,10 @@ import { RemoteScreen } from '../src/screens/RemoteScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockLauncherPinned, mockMemory, mockStore, tasks , mockSystem } from './mocks';
+import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -26,6 +26,7 @@ function Screen({ name }: { name: string }) {
     case 'activity': return <ActivityScreen api={mockAgent()} onBack={noop} />;
     case 'apps': return <AppsScreen api={mockLauncher()} onBack={noop} />;
     case 'apps-pinned': return <AppsScreen api={mockLauncherPinned()} onBack={noop} />;
+    case 'apps-scenes': return <AppsScreen api={mockLauncherScenes()} onBack={noop} />;
     case 'clipboard': return <ClipboardScreen api={mockClipboard()} onBack={noop} />;
     case 'files': return <FilesScreen api={mockFiles()} onBack={noop} />;
     case 'memory': return <MemoryScreen api={mockMemory()} onBack={noop} />;

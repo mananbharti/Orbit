@@ -1,8 +1,8 @@
 import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { OutcomeUnknown, type AppEntry, type LauncherApi } from '@orbit/core';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { OutcomeUnknown, type AppEntry, type LauncherApi, type LauncherScene } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
@@ -30,10 +30,13 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
   const [query, setQuery] = useState('');
   const [icons, setIcons] = useState<Record<string, string | null>>({});
   const [pinned, setPinned] = useState<string[]>([]);
+  const [scenes, setScenes] = useState<LauncherScene[]>([]);
+  const [launchingScene, setLaunchingScene] = useState<string>();
+  const [selecting, setSelecting] = useState<{ id?: string; name: string; selected: Set<string> } | null>(null);
 
   const load = useCallback(async () => {
     setError(undefined);
-    try { setApps(await api.list()); setPinned(api.getPinned()); } catch (e) { setError(friendlyError(e)); }
+    try { setApps(await api.list()); setPinned(api.getPinned()); setScenes(await api.scenes()); } catch (e) { setError(friendlyError(e)); }
   }, [api]);
   useEffect(() => { void load(); }, [load]);
 
@@ -111,13 +114,49 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
     } finally { setLaunching(undefined); }
   };
 
+  const runScene = async (scene: LauncherScene): Promise<void> => {
+    setLaunchingScene(scene.id); setError(undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const outcome = await api.launchScene(scene.id);
+      if (outcome.failed.length) setError(`Could not open: ${outcome.failed.join(', ')}`);
+      else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) { setError(friendlyError(e)); }
+    finally { setLaunchingScene(undefined); }
+  };
+
+  const manageScene = (scene: LauncherScene): void => {
+    Alert.alert(scene.name, `${scene.appIds.length} apps`, [
+      { text: 'Edit', onPress: () => setSelecting({ id: scene.id, name: scene.name, selected: new Set(scene.appIds) }) },
+      { text: 'Delete scene', style: 'destructive', onPress: () => { void api.deleteScene(scene.id).then(setScenes).catch(e => setError(friendlyError(e))); } },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const saveScene = async (): Promise<void> => {
+    if (!selecting || !selecting.name.trim() || !selecting.selected.size) return;
+    setError(undefined);
+    try {
+      setScenes(await api.saveScene(selecting.name.trim(), [...selecting.selected], selecting.id));
+      setSelecting(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) { setError(friendlyError(e)); }
+  };
+
   const tile = (item: AppEntry) => {
     const [c1] = palette(item.name);
     const busy = launching === item.appId;
     const done = launched === item.appId;
+    const selected = selecting?.selected.has(item.appId) ?? false;
     return (
       <Pressable key={item.appId} accessibilityRole="button" accessibilityLabel={`Open ${item.name} on your computer`} disabled={!!launching}
-        onPress={() => { void launch(item); }} onLongPress={() => manage(item)}
+        onPress={() => {
+          if (selecting) {
+            const next = new Set(selecting.selected);
+            if (next.has(item.appId)) next.delete(item.appId); else next.add(item.appId);
+            setSelecting({ ...selecting, selected: next });
+          } else void launch(item);
+        }} onLongPress={() => manage(item)}
         style={({ pressed }) => [styles.tile, { opacity: pressed || busy ? 0.6 : 1 }]}>
         <View style={[styles.icon, icons[item.appId] ? styles.iconImage : { backgroundColor: c1 }]}>
           {busy ? <ActivityIndicator color="#fff" size="small" /> :
@@ -125,6 +164,9 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
               icons[item.appId] ? <Image source={{ uri: 'data:image/png;base64,' + icons[item.appId] }} style={styles.image} /> :
               <Text style={styles.initials}>{initials(item.name)}</Text>}
         </View>
+        {selecting && selected ? (
+          <View style={[styles.selectedBadge, { backgroundColor: t.tint, borderColor: t.bg }]}><Text style={styles.selectedCheck}>✓</Text></View>
+        ) : null}
         <Text numberOfLines={2} style={[styles.name, { color: t.text }]}>{item.name}</Text>
       </Pressable>
     );
@@ -135,6 +177,37 @@ export function AppsScreen({ api, onBack }: { api: LauncherApi; onBack: () => vo
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Apps</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Open any app on your computer, from here. Long-press to pin favourites to the top.</Text>
+      {selecting ? (
+        <View style={{ gap: space.s }}>
+          <TextInput value={selecting.name} onChangeText={name => setSelecting({ ...selecting, name })} placeholder="Scene name (e.g. Work)" placeholderTextColor={t.sub}
+            maxLength={40} style={[styles.search, { backgroundColor: t.fill, color: t.text, fontSize: 16 }]} accessibilityLabel="Scene name" />
+          <View style={{ flexDirection: 'row', gap: space.s }}>
+            <Pressable accessibilityRole="button" disabled={!selecting.name.trim() || !selecting.selected.size} onPress={() => { void saveScene(); }}
+              style={[styles.sceneAction, { backgroundColor: selecting.name.trim() && selecting.selected.size ? t.tint : t.fill }]}>
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>Save scene ({selecting.selected.size})</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setSelecting(null)} style={[styles.sceneAction, { backgroundColor: t.fill }]}>
+              <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+            </Pressable>
+          </View>
+          <Text style={{ color: t.sub, fontSize: 13 }}>Tap apps below to include them in this scene.</Text>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.s }}>
+          {scenes.map(scene => (
+            <Pressable key={scene.id} accessibilityRole="button" accessibilityLabel={`Launch scene ${scene.name}`} disabled={!!launchingScene}
+              onPress={() => { void runScene(scene); }} onLongPress={() => manageScene(scene)}
+              style={[styles.sceneChip, { backgroundColor: t.tint + '1f', opacity: launchingScene && launchingScene !== scene.id ? 0.5 : 1 }]}>
+              {launchingScene === scene.id ? <ActivityIndicator size="small" color={t.tint} /> : null}
+              <Text style={{ color: t.tint, fontSize: 15, fontWeight: '600' }}>{scene.name}</Text>
+            </Pressable>
+          ))}
+          <Pressable accessibilityRole="button" accessibilityLabel="New scene" onPress={() => setSelecting({ name: '', selected: new Set() })}
+            style={[styles.sceneChip, { backgroundColor: t.fill }]}>
+            <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>+ New scene</Text>
+          </Pressable>
+        </ScrollView>
+      )}
       <View style={[styles.search, { backgroundColor: t.fill }]}>
         <TextInput value={query} onChangeText={setQuery} placeholder="Search apps" placeholderTextColor={t.sub} autoCorrect={false} autoCapitalize="none"
           style={{ flex: 1, color: t.text, fontSize: 16 }} accessibilityLabel="Search apps" />
@@ -159,7 +232,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, padding: space.l, paddingTop: 70, gap: space.m },
   title: { fontSize: 34, fontWeight: '700' },
   search: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  tile: { flex: 1 / 4, alignItems: 'center', gap: 6 },
+  tile: { flex: 1 / 4, alignItems: 'center', gap: 6, position: 'relative' },
   icon: { width: 60, height: 60, borderRadius: 15, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   iconImage: { backgroundColor: 'transparent' },
@@ -167,4 +240,8 @@ const styles = StyleSheet.create({
   initials: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.5 },
   check: { color: '#fff', fontSize: 26, fontWeight: '800' },
   name: { fontSize: 11.5, fontWeight: '500', textAlign: 'center', lineHeight: 14 },
+  sceneChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 18, paddingVertical: 9, paddingHorizontal: 14 },
+  sceneAction: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  selectedBadge: { position: 'absolute', top: -4, right: 2, width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  selectedCheck: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
 });

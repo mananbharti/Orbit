@@ -28,3 +28,18 @@ export const MAX_PINS = 24;
 export const pinAppSchema = z.strictObject({ appId: appIdSchema });
 export const reorderAppsSchema = z.strictObject({ appIds: z.array(appIdSchema).min(1).max(MAX_PINS) });
 export const launcherLayoutSchema = z.strictObject({ pinned: z.array(appIdSchema).max(MAX_PINS) });
+
+/** Scenes: named groups of apps that launch together (e.g. "Work" opens Slack + VS Code + Chrome). */
+export const MAX_SCENES = 20;
+export const MAX_SCENE_APPS = 12;
+export const sceneNameSchema = z.string().min(1).max(40).refine(value => !/[\x00-\x1f\x7f\uD800-\uDFFF]/u.test(value));
+export const sceneIdSchema = z.string().uuid();
+export const launcherSceneSchema = z.strictObject({ id: sceneIdSchema, name: sceneNameSchema,
+  appIds: z.array(appIdSchema).min(1).max(MAX_SCENE_APPS) });
+export const saveSceneSchema = z.strictObject({ id: sceneIdSchema.optional(), name: sceneNameSchema,
+  appIds: z.array(appIdSchema).min(1).max(MAX_SCENE_APPS) });
+export const sceneIdPayloadSchema = z.strictObject({ id: sceneIdSchema });
+export const launcherScenesSchema = z.strictObject({ scenes: z.array(launcherSceneSchema).max(MAX_SCENES) });
+export const sceneLaunchResultSchema = z.strictObject({ launched: z.number().int().min(0).max(MAX_SCENE_APPS),
+  failed: z.array(appNameSchema).max(MAX_SCENE_APPS) });
+export type LauncherScene = z.infer<typeof launcherSceneSchema>;

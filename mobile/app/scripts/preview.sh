@@ -13,7 +13,7 @@ CHROME="${CHROME:-$(command -v google-chrome || command -v chromium || command -
 sleep 1
 mkdir -p preview-shots
 for theme in light dark; do
-  for screen in tasks tasks-empty tasks-offline tasks-wake task-detail activity apps apps-pinned clipboard files memory remote control settings pair; do
+  for screen in tasks tasks-empty tasks-offline tasks-wake task-detail activity apps apps-pinned apps-scenes clipboard files memory remote control settings pair; do
     "$CHROME" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=390,844 --virtual-time-budget=6000 \
       --screenshot="preview-shots/$screen-$theme.png" "http://localhost:8099/?screen=$screen&theme=$theme" >/dev/null 2>&1 || echo "failed: $screen $theme"
   done

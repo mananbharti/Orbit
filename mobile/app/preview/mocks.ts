@@ -34,7 +34,14 @@ export function mockStore(connection: TaskStoreState['connection'] = 'connected'
 }
 export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
 export const mockDictation = {} as unknown as DictationApi;
-export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [] }) as unknown as LauncherApi;
+export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [], scenes: async () => [] }) as unknown as LauncherApi;
+/** Two saved scenes, one pinned favourite: the lived-in state. */
+export const mockLauncherScenes = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [apps[4]!.appId],
+  scenes: async () => [
+    { id: '11111111-1111-4111-8111-111111111111', name: 'Work', appIds: [apps[3]!.appId, apps[4]!.appId, apps[2]!.appId] },
+    { id: '22222222-2222-4222-8222-222222222222', name: 'Chill', appIds: [apps[4]!.appId, apps[0]!.appId] },
+  ],
+  saveScene: async () => [], deleteScene: async () => [], launchScene: async () => ({ launched: 3, failed: [] }) }) as unknown as LauncherApi;
 /** The apps screen with two favourites pinned at the top, as the owner arranged them. */
 export const mockLauncherPinned = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [apps[4]!.appId, apps[3]!.appId],
   pin: async (id: string) => [id], unpin: async () => [], reorder: async (ids: string[]) => ids }) as unknown as LauncherApi;

@@ -132,3 +132,24 @@ test('a malformed layout reply is rejected instead of corrupting local state', a
   assert.deepEqual(api.getPinned(), []);
   s.stop();
 });
+
+test('scenes save, list, delete and launch through the desktop', async () => {
+  const scene = { id: '99999999-9999-4999-8999-999999999999', name: 'Work', appIds: [A, B] };
+  const { s, api, calls } = await setup(type => {
+    if (type === 'launcher.scene.launch') return { launched: 2, failed: [] };
+    return { scenes: type === 'launcher.scene.delete' ? [] : [scene] };
+  });
+  assert.deepEqual(await api.scenes(), [scene]);
+  assert.deepEqual(await api.saveScene('Work', [A, B]), [scene]);
+  await api.saveScene('Work 2', [A], scene.id);
+  assert.equal(calls[2]!.payload.id, scene.id);
+  assert.deepEqual(await api.deleteScene(scene.id), []);
+  assert.deepEqual(await api.launchScene(scene.id), { launched: 2, failed: [] });
+  assert.deepEqual(calls.map(c => c.type), ['launcher.scenes', 'launcher.scene.save', 'launcher.scene.save', 'launcher.scene.delete', 'launcher.scene.launch']);
+  s.stop();
+});
+test('a malformed scenes reply is rejected', async () => {
+  const { s, api } = await setup(() => ({ scenes: [{ id: 'not-a-uuid' }] }));
+  await assert.rejects(api.scenes(), InvalidDesktopReply);
+  s.stop();
+});
