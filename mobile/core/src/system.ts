@@ -9,9 +9,13 @@ const volumeStateSchema = z.strictObject({ level: z.number().int().min(0).max(10
 const brightnessResultSchema = z.strictObject({ level: z.number().int().min(0).max(100).nullable() });
 const appliedSchema = z.strictObject({ applied: z.literal(true) });
 const panicResultSchema = z.strictObject({ status: z.enum(['locked', 'unpaired']) });
+const audioSessionSchema = z.strictObject({ id: z.string().regex(/^[0-9]{1,10}$/), name: z.string().min(1).max(128),
+  volume: z.number().int().min(0).max(100), muted: z.boolean() });
+const audioSessionsResultSchema = z.strictObject({ sessions: z.array(audioSessionSchema).max(64) });
 
 export type PowerAction = 'lock' | 'sleep' | 'restart' | 'shutdown';
 export interface VolumeState { level: number; muted: boolean }
+export interface AudioSession { id: string; name: string; volume: number; muted: boolean }
 
 export class SystemApi {
   constructor(private readonly session: OrbitSession) {}
@@ -24,6 +28,13 @@ export class SystemApi {
   }
   power(action: PowerAction): Promise<void> {
     return this.call('system.power', { action }, powerResultSchema).then(() => {});
+  }
+  /** Per-app volume: apps currently playing audio on the computer. */
+  audioSessions(): Promise<AudioSession[]> {
+    return this.call('system.audio.sessions', {}, audioSessionsResultSchema).then(r => (r as { sessions: AudioSession[] }).sessions);
+  }
+  setAudioSession(id: string, level?: number, muted?: boolean): Promise<void> {
+    return this.call('system.audio.session.set', { id, ...(level !== undefined ? { level } : {}), ...(muted !== undefined ? { muted } : {}) }, appliedSchema).then(() => {});
   }
   /** Locks the PC (best effort) and unpairs this phone immediately; the session dies right after the reply. */
   panic(): Promise<'locked' | 'unpaired'> {

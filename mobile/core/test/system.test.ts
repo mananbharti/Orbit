@@ -48,3 +48,14 @@ test('malformed replies are rejected', async () => {
   await assert.rejects(api.getVolume(), InvalidDesktopReply);
   s.stop();
 });
+
+test('audio sessions list and per-app set commands carry pids and bounded levels', async () => {
+  const { s, api, calls } = await setup(type => type === 'system.audio.sessions'
+    ? { sessions: [{ id: '4204', name: 'Spotify', volume: 80, muted: false }] } : { applied: true });
+  assert.deepEqual(await api.audioSessions(), [{ id: '4204', name: 'Spotify', volume: 80, muted: false }]);
+  await api.setAudioSession('4204', 25, true);
+  assert.deepEqual(calls.at(-1), { type: 'system.audio.session.set', payload: { id: '4204', level: 25, muted: true } });
+  await api.setAudioSession('4204', undefined, false);
+  assert.deepEqual(calls.at(-1)!.payload, { id: '4204', muted: false });
+  s.stop();
+});

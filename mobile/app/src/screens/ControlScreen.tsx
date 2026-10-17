@@ -2,7 +2,7 @@ import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { PowerAction, SystemApi } from '@orbit/core';
+import type { AudioSession, PowerAction, SystemApi } from '@orbit/core';
 import { Icon, type IconName } from '../components/Icon';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -19,13 +19,30 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   const [volume, setVolume] = useState<number>();
   const [muted, setMuted] = useState(false);
   const [brightness, setBrightness] = useState<number | null>();
+  const [sessions, setSessions] = useState<AudioSession[]>([]);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
 
   useEffect(() => {
     api.getVolume().then(v => { setVolume(v.level); setMuted(v.muted); }).catch(() => {});
     api.getBrightness().then(setBrightness).catch(() => setBrightness(null));
+    api.audioSessions().then(setSessions).catch(() => {});
   }, [api]);
+
+  const nudgeSession = async (session: AudioSession, delta: number): Promise<void> => {
+    const level = Math.max(0, Math.min(100, session.volume + delta));
+    try {
+      await api.setAudioSession(session.id, level);
+      setSessions(prev => prev.map(x => (x.id === session.id ? { ...x, volume: level } : x)));
+    } catch (e) { setError(friendlyError(e)); }
+  };
+  const toggleSessionMute = async (session: AudioSession): Promise<void> => {
+    try {
+      await api.setAudioSession(session.id, undefined, !session.muted);
+      setSessions(prev => prev.map(x => (x.id === session.id ? { ...x, muted: !x.muted } : x)));
+      void Haptics.selectionAsync();
+    } catch (e) { setError(friendlyError(e)); }
+  };
 
   const run = (job: () => Promise<void>, done: string): void => {
     setError(undefined); setNote(undefined);
@@ -82,6 +99,27 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
           <Icon name={muted ? 'mute' : 'speaker'} size={20} color={muted ? '#fff' : t.text} />
         </Pressable>
       </View>
+      {sessions.length ? (
+        <>
+          <Text style={[styles.section, { color: t.sub }]}>APP VOLUME</Text>
+          {sessions.map(session => (
+            <View key={session.id} style={[styles.card, { backgroundColor: t.card }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Mute ${session.name}`} onPress={() => { void toggleSessionMute(session); }}
+                style={[styles.step, { backgroundColor: session.muted ? t.bad : t.fill }]}>
+                <Icon name={session.muted ? 'mute' : 'speaker'} size={18} color={session.muted ? '#fff' : t.text} />
+              </Pressable>
+              <View style={styles.meterWrap}>
+                <Text numberOfLines={1} style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>{session.name}</Text>
+                <View style={[styles.meter, { backgroundColor: t.fill }]}>
+                  <View style={{ height: 6, borderRadius: 3, backgroundColor: session.muted ? t.sub : t.tint, width: `${session.volume}%` }} />
+                </View>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${session.name} volume down`} onPress={() => { void nudgeSession(session, -10); }} style={[styles.stepSmall, { backgroundColor: t.fill }]}><Text style={[styles.stepText, { color: t.text }]}>−</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${session.name} volume up`} onPress={() => { void nudgeSession(session, 10); }} style={[styles.stepSmall, { backgroundColor: t.fill }]}><Text style={[styles.stepText, { color: t.text }]}>+</Text></Pressable>
+            </View>
+          ))}
+        </>
+      ) : null}
       {brightness !== null && brightness !== undefined ? (
         <>
           <Text style={[styles.section, { color: t.sub }]}>BRIGHTNESS</Text>
@@ -130,6 +168,7 @@ const styles = StyleSheet.create({
   tile: { flexBasis: '46%', flexGrow: 1, borderRadius: radius, padding: space.l, alignItems: 'center', gap: space.s },
   card: { borderRadius: radius, padding: space.m, flexDirection: 'row', alignItems: 'center', gap: space.m },
   step: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  stepSmall: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontSize: 22, fontWeight: '700' },
   meterWrap: { flex: 1, gap: 4 },
   meter: { height: 6, borderRadius: 3, overflow: 'hidden' },

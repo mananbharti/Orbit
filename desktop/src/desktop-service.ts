@@ -25,8 +25,11 @@ import type { InputDevice } from './os-integration/input-device.js';
 import type { BiometricConfirmation } from './security-pairing/biometric-confirmation.js';
 import { MemoryService } from './memory/memory-service.js';
 import { SystemControl } from './system-control/system-control.js';
+import { AudioMixer } from './system-control/audio-mixer.js';
 import { PanicLock } from './security-pairing/panic-lock.js';
 import { createSystemControl } from './os-integration/create-system-control.js';
+import { createAudioMixer } from './os-integration/create-audio-mixer.js';
+import type { AudioMixerAdapter } from './os-integration/audio-mixer.js';
 import type { SystemControlAdapter } from './os-integration/system-control.js';
 import { GraphStore } from './memory/graph-store.js';
 import { DictationService } from './dictation/dictation-service.js';
@@ -49,6 +52,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   dictation?: { engine: Transcriber; cleanup?: () => CleanupOptions; decoder?: AudioDecoder };
   /** Power, volume and brightness control. On by default; pass a custom adapter to test. */
   system?: { createAdapter: () => SystemControlAdapter } | false;
+  audioMixer?: { createAdapter: () => AudioMixerAdapter } | false;
   input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation } }) {
   const directory = privateDirectory(options.directory);
   const unlock = lockService(directory);
@@ -64,6 +68,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let memory: MemoryService | undefined;
   let system: SystemControl | undefined;
   let panic: PanicLock | undefined;
+  let mixer: AudioMixer | undefined;
   try {
     const identity = await loadOrCreateIdentity(directory);
     const store = new FilePairedCredentialStore(join(directory, 'credentials.json'));
@@ -80,6 +85,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);
     if (systemFactory) system = new SystemControl(registry, systemFactory, log);
     panic = new PanicLock(registry, store, systemFactory, log);
+    if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
@@ -98,7 +104,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         if (stopped) return;
         stopped = true;
         pairing.close();
-        system?.stop(); panic?.stop();
+        system?.stop(); panic?.stop(); mixer?.stop();
         await dictation?.stop();
         memory?.stop();
         await input?.stop();

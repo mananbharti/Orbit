@@ -49,6 +49,8 @@ export const mockFiles = (transferring = true): FileApi => ({ ...store({ offers:
 export const mockMemory = (): MemoryApi => ({ recall: async () => [], remember: async () => '', forget: async () => true }) as unknown as MemoryApi;
 export const mockInput = (): InputApi => ({ ...store({ status: 'idle' }), begin: async () => {}, end: async () => {}, push: () => {} }) as unknown as InputApi;
 export const mockSystem: SystemApi = ({
-  power: async () => {}, panic: async () => 'locked' as const, getVolume: async () => ({ level: 65, muted: false }), setVolume: async () => {},
+  power: async () => {}, panic: async () => 'locked' as const,
+  audioSessions: async () => [{ id: '4204', name: 'Spotify', volume: 80, muted: false }, { id: '512', name: 'Discord', volume: 35, muted: true }],
+  setAudioSession: async () => {}, getVolume: async () => ({ level: 65, muted: false }), setVolume: async () => {},
   getBrightness: async () => 70, setBrightness: async () => {},
 }) as unknown as SystemApi;
