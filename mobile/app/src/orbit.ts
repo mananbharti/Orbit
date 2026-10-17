@@ -2,8 +2,9 @@
 import * as Crypto from 'expo-crypto';
 import { AgentApi, ClipboardApi, DevicesApi, DictationApi, FileApi, InputApi, LauncherApi, MemoryApi, OrbitSession, SystemApi, TaskStore, createLocator, describeError, pairWithQr, type PairedDesktop } from '@orbit/core';
 import { fileEnv } from './files';
+import { updatePaired } from './storage';
 import { createNativeDiscovery, createNativeTransport } from './native-transport';
-import { clearPaired, savePaired } from './storage';
+
 
 const uuid = (): string => Crypto.randomUUID();
 const transport = createNativeTransport(uuid);
@@ -13,15 +14,13 @@ const locator = createLocator({ transport, discover: discovery.discover, localAd
 export interface Connected { paired: PairedDesktop; session: OrbitSession; store: TaskStore; api: AgentApi; launcher: LauncherApi; clipboard: ClipboardApi; files: FileApi; input: InputApi; memory: MemoryApi; dictation: DictationApi; system: SystemApi; devices: DevicesApi }
 
 export async function pair(qrText: string): Promise<PairedDesktop> {
-  const paired = await pairWithQr(qrText, transport);
-  await savePaired(paired);
-  return paired;
+  return pairWithQr(qrText, transport); // the caller upserts it into the paired list once the owner confirms
 }
 
 export function connect(paired: PairedDesktop): Connected {
   // If the computer's address changes (new Wi-Fi, new IP), the session finds it again by its pinned certificate and we remember the new address.
   const session = new OrbitSession(paired, transport, { uuid, locator,
-    onEndpointChanged: endpoint => { void savePaired({ ...paired, endpoint }); } });
+    onEndpointChanged: endpoint => { void updatePaired({ ...paired, endpoint }); } });
   const api = new AgentApi(session, uuid);
   const store = new TaskStore(session, api);
   const launcher = new LauncherApi(session);
@@ -38,13 +37,14 @@ export function connect(paired: PairedDesktop): Connected {
   return { paired, session, store, api, launcher, clipboard, files, input, memory, dictation, system, devices };
 }
 
-export async function forget(connected: Connected | undefined): Promise<void> {
+/** Stops the session and disposes per-connection state without unpairing; the computer stays in the paired list. */
+export function disconnect(connected: Connected | undefined): void {
   connected?.store.dispose();
   connected?.clipboard.dispose();
   connected?.files.dispose();
   connected?.input.dispose();
   connected?.session.stop();
-  await clearPaired();
 }
+
 
 export const friendlyError = describeError;

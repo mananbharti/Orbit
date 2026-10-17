@@ -42,4 +42,6 @@ Remote:
 
 18. Devices: Settings -> Devices. "This iPhone" shows Full access. If you have only one paired device, the Other devices card says none are paired. (With a second device paired: tap it -> turn Full access off -> switch off Apps; on that device the Apps tab now shows a permission error. Switch it back on.)
 
+19. Computers (needs two PCs, or one PC + the preview): Settings -> Computers shows every paired computer with a check on the active one. Pair a second PC (Add a computer). Tap the other computer: Face ID, "Switching...", then the Home header shows its name. Tap the name on Home: the Computers screen opens. Forget the inactive one: tap Forget, then "Tap again to forget": it leaves the list. Forget the active one: you land on the Computers list (or the pair screen if none are left). Kill and reopen the app: it connects to the last active computer.
+
 Report anything that fails with the exact step number.

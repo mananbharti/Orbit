@@ -81,3 +81,10 @@ export const devices = [
   { deviceId: ipadId, scopes: ['clipboard', 'files', 'launcher'] as ('clipboard' | 'files' | 'launcher')[] },
 ];
 export const ipadDeviceId = ipadId;
+
+export const mockComputers = [
+  { desktopServiceId: 'c1c1c1c1-1111-4111-8111-cccccccccccc', displayName: "Manan's PC", deviceId: '3f9a1c2e-1111-4111-8111-aaaaaaaaaaaa',
+    endpoint: 'wss://192.168.137.1:4000/v1/channel', certificateFingerprint: 'a'.repeat(64), credential: 'x'.repeat(43), macAddresses: ['a1:b2:c3:d4:e5:f6'] },
+  { desktopServiceId: 'd2d2d2d2-2222-4222-8222-dddddddddddd', displayName: 'Work Laptop', deviceId: '5e7b8c9d-3333-4333-8333-cccccccccccc',
+    endpoint: 'wss://192.168.137.20:4000/v1/channel', certificateFingerprint: 'b'.repeat(64), credential: 'y'.repeat(43) },
+];

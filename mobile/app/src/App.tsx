@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { connect, forget, pair, type Connected } from './orbit';
+import { connect, disconnect, pair, type Connected } from './orbit';
 import { ActivityScreen } from './screens/ActivityScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { AppsScreen } from './screens/AppsScreen';
@@ -13,12 +13,14 @@ import { PresentScreen } from './screens/PresentScreen';
 import { PairScreen } from './screens/PairScreen';
 import { TaskDetailScreen } from './screens/TaskDetailScreen';
 import { TasksScreen } from './screens/TasksScreen';
-import { loadAppLock, loadClipboardAuto, loadPaired, saveAppLock, saveClipboardAuto } from './storage';
+import { loadAppLock, loadClipboardAuto, loadPairedList, removePaired, saveAppLock, saveClipboardAuto, savePairedList, upsertPaired } from './storage';
 import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
+import { ComputersScreen } from './screens/ComputersScreen';
+import type { PairedDesktop } from '@orbit/core';
 import { ThemeProvider, useTheme } from './theme';
 
 export function App() {
@@ -29,6 +31,11 @@ function Shell() {
   const t = useTheme();
   const [settings, setSettings] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  const [computersOpen, setComputersOpen] = useState(false);
+  const [pairing, setPairing] = useState(false);
+  const [pairedList, setPairedList] = useState<PairedDesktop[]>([]);
+  const [activeId, setActiveId] = useState<string>();
+  const [switchingId, setSwitchingId] = useState<string>();
   const [booting, setBooting] = useState(true);
   const [locked, setLocked] = useState(false);
   const [appLock, setAppLock] = useState(true);
@@ -57,7 +64,9 @@ function Shell() {
     void loadClipboardAuto().then(setAutoSync);
     void loadAppLock().then(setAppLock);
     void biometricAvailable().then(setBiometrics);
-    void loadPaired().then(async paired => {
+    void loadPairedList().then(async ({ list, activeId: active }) => {
+      setPairedList(list); setActiveId(active);
+      const paired = list.find(d => d.desktopServiceId === active);
       if (!paired) return;
       if (await loadAppLock() && !(await authenticate('Unlock Orbit to connect to your computer'))) {
         pendingPaired.current = paired; setLocked(true); return;
@@ -83,15 +92,41 @@ function Shell() {
     if (appLock && !(await authenticate('Confirm it is you to pair this computer'))) {
       pendingPaired.current = paired; setLocked(true); return;
     }
+    setPairedList(await upsertPaired(pairedList, paired));
+    setActiveId(paired.desktopServiceId);
+    setPairing(false);
+    disconnect(connected);
     setConnected(connect(paired));
-  }, [appLock]);
+  }, [appLock, connected, pairedList]);
   const unlock = useCallback(async () => {
     if (await authenticate('Unlock Orbit to connect to your computer')) {
       setLocked(false);
       if (pendingPaired.current) { setConnected(connect(pendingPaired.current)); pendingPaired.current = undefined; }
     }
   }, []);
-  const repair = useCallback(() => { void forget(connected).then(() => { setConnected(undefined); setOpen(undefined); }); }, [connected]);
+  const forgetComputer = useCallback(async (desktopServiceId: string) => {
+    const { list, activeId: nextActive } = await removePaired(pairedList, desktopServiceId, activeId);
+    setPairedList(list); setActiveId(nextActive);
+    if (desktopServiceId === activeId) {
+      disconnect(connected);
+      setConnected(undefined); setOpen(undefined); setControl(false);
+      setComputersOpen(list.length > 0); // land on the list so the owner picks the next computer deliberately
+    }
+  }, [connected, pairedList, activeId]);
+  const repair = useCallback(() => { if (activeId) void forgetComputer(activeId); }, [activeId, forgetComputer]);
+  const switchTo = useCallback(async (desktopServiceId: string) => {
+    const paired = pairedList.find(d => d.desktopServiceId === desktopServiceId);
+    if (!paired || desktopServiceId === activeId || switchingId) return;
+    setSwitchingId(desktopServiceId);
+    try {
+      if (appLock && !(await authenticate('Unlock Orbit to connect to ' + paired.displayName))) return;
+      await savePairedList(pairedList, desktopServiceId);
+      setActiveId(desktopServiceId);
+      setComputersOpen(false); setOpen(undefined);
+      disconnect(connected);
+      setConnected(connect(paired));
+    } finally { setSwitchingId(undefined); }
+  }, [appLock, connected, pairedList, activeId, switchingId]);
 
   let body;
   if (booting) body = <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
@@ -104,20 +139,24 @@ function Shell() {
       </Pressable>
     </View>
   );
-  else if (!connected) body = <PairScreen onScanned={onScanned} />;
-  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} />;
+  else if (!connected) body = computersOpen && pairedList.length > 0
+    ? <ComputersScreen list={pairedList} activeId={activeId} switchingId={switchingId} onSwitch={id => { void switchTo(id); }} onAdd={() => { setComputersOpen(false); setPairing(true); }} onForget={id => { void forgetComputer(id); }} onBack={() => setComputersOpen(false)} />
+    : <PairScreen onScanned={onScanned} onBack={pairedList.length > 0 ? () => setComputersOpen(true) : undefined} />;
+  else if (pairing) body = <PairScreen onScanned={onScanned} onBack={() => { setPairing(false); setComputersOpen(true); }} />;
+  else if (computersOpen) body = <ComputersScreen list={pairedList} activeId={activeId} switchingId={switchingId} onSwitch={id => { void switchTo(id); }} onAdd={() => { setComputersOpen(false); setPairing(true); }} onForget={id => { void forgetComputer(id); }} onBack={() => setComputersOpen(false)} />;
+  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} onComputers={() => setComputersOpen(true)} />;
   else if (devicesOpen) body = <DevicesScreen api={connected.devices} onBack={() => setDevicesOpen(false)} />;
   else if (memoryOpen) body = <MemoryScreen api={connected.memory} onBack={() => setMemoryOpen(false)} />;
   else if (present) body = <PresentScreen api={connected.input} onBack={() => setPresent(false)} />;
   else if (remote) body = <RemoteScreen api={connected.input} onBack={() => setRemote(false)} />;
   else if (filesOpen) body = <FilesScreen api={connected.files} onBack={() => setFilesOpen(false)} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
-  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { void forget(connected).then(() => { setConnected(undefined); setControl(false); }); }} />;
+  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { if (activeId) void forgetComputer(activeId); }} />;
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
-  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} />;
-  const screenKey = booting ? 'boot' : !connected ? 'pair' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
+  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} />;
+  const screenKey = booting ? 'boot' : !connected ? 'pair' : computersOpen ? 'computers' : pairing ? 'pair-add' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <ScreenTransition key={screenKey}>{body}</ScreenTransition>

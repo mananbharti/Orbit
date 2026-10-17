@@ -2,10 +2,11 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackButton } from '../components/BackButton';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
-export function PairScreen({ onScanned }: { onScanned: (text: string) => Promise<void> }) {
+export function PairScreen({ onScanned, onBack }: { onScanned: (text: string) => Promise<void>; onBack?: () => void }) {
   const t = useTheme();
   const [permission, request] = useCameraPermissions();
   const [busy, setBusy] = useState(false);
@@ -27,6 +28,7 @@ export function PairScreen({ onScanned }: { onScanned: (text: string) => Promise
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
+      {onBack ? <BackButton onPress={onBack} /> : null}
       <Text style={[styles.title, { color: t.text }]}>Connect your computer</Text>
       <Text style={[styles.body, { color: t.sub }]}>Open Orbit on your computer and show the pairing code. Both devices need to be on the same Wi-Fi.</Text>
       <View style={[styles.camera, { backgroundColor: t.card, borderColor: t.line }]}>

@@ -14,7 +14,7 @@ import { radius, space, useTheme } from '../theme';
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; wakePreview?: boolean }) {
+export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings, onComputers }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; onComputers?: () => void; wakePreview?: boolean }) {
   const t = useTheme();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState('');
@@ -49,7 +49,12 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: t.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Text style={[styles.title, { color: t.text }]}>Agent</Text>
       <View style={styles.subRow}>
-        <Text numberOfLines={1} style={[styles.sub, { color: t.sub, flexShrink: 1 }]}>{name}</Text>
+        {onComputers ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Switch computer" onPress={onComputers} style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+            <Text numberOfLines={1} style={[styles.sub, { color: t.sub, flexShrink: 1 }]}>{name}</Text>
+            <Text style={{ color: t.sub, fontSize: 13 }}> ›</Text>
+          </Pressable>
+        ) : <Text numberOfLines={1} style={[styles.sub, { color: t.sub, flexShrink: 1 }]}>{name}</Text>}
         {!paused && !offline ? <Pressable accessibilityRole="button" hitSlop={10} onPress={confirmPause}><Text style={{ color: t.bad, fontSize: 15 }}>Stop agent</Text></Pressable> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips} contentContainerStyle={{ gap: space.s, paddingRight: space.l }}>
