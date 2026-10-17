@@ -50,4 +50,6 @@ Remote:
 
 22. Photo backup: Files -> turn on "Back up new photos", allow photo access. The first run uploads your whole library (takes a while; progress shows under the toggle). Check received/Images on the PC: photos arrive full size. Take a new photo and keep Orbit open about a minute: it appears in received/Images. Take another photo with Orbit closed, then open Orbit: it backs up on its own within a minute.
 
+23. Share into Orbit (needs a dev-client rebuild first): in Photos or Files, share any file and choose Orbit in "Open in...". Orbit opens, the banner says it is sending the shared file, and it lands in received/<Type> on the PC. With Orbit killed, share again, then open Orbit and connect: the queued file sends on its own.
+
 Report anything that fails with the exact step number.

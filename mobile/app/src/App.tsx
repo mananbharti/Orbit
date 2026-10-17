@@ -17,6 +17,7 @@ import { loadAppLock, loadClipboardAuto, loadPairedList, removePaired, saveAppLo
 import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { PhotoBackup, photoBackupAvailable, photoBackupEnabled, photoBackupPermitted, setPhotoBackupEnabled, type BackupProgress } from './photo-backup';
+import { ShareIntake } from './share-intake';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
@@ -43,6 +44,7 @@ function Shell() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [backupOn, setBackupOn] = useState(false);
   const [backupProgress, setBackupProgress] = useState<BackupProgress>({ done: 0, total: 0, running: false });
+  const intakeRef = useRef<ShareIntake | undefined>(undefined);
   const [sceneOptions, setSceneOptions] = useState<{ id: string; name: string }[]>([]);
   const [booting, setBooting] = useState(true);
   const [locked, setLocked] = useState(false);
@@ -50,6 +52,8 @@ function Shell() {
   const [biometrics, setBiometrics] = useState(false);
   const pendingPaired = useRef<Parameters<typeof connect>[0] | undefined>(undefined);
   const [connected, setConnected] = useState<Connected>();
+  const connectedRef = useRef<Connected | undefined>(undefined);
+  connectedRef.current = connected;
   const [open, setOpen] = useState<string>();
   const [activity, setActivity] = useState(false);
   const [apps, setApps] = useState(false);
@@ -92,6 +96,7 @@ function Shell() {
     return () => { handle.stop(); autoRef.current = undefined; };
   }, [connected, showBanner]);
   useEffect(() => { autoRef.current?.setEnabled(autoSync); }, [autoSync]);
+  useEffect(() => { if (connected) intakeRef.current?.notifyConnected(); }, [connected]);
   useEffect(() => { void photoBackupEnabled().then(setBackupOn); }, []);
   useEffect(() => {
     if (!connected || !backupOn) return;
@@ -99,6 +104,15 @@ function Shell() {
     backup.start();
     return () => backup.stop();
   }, [connected, backupOn]);
+  useEffect(() => {
+    const intake = new ShareIntake(() => connectedRef.current?.files, {
+      onQueued: count => showBanner(count === 1 ? 'Sending the shared file to your computer' : `Sending ${count} shared files to your computer`),
+      onError: message => showBanner(message),
+    });
+    intakeRef.current = intake;
+    intake.start();
+    return () => { intake.stop(); intakeRef.current = undefined; };
+  }, []);
   const onAutoSync = useCallback((on: boolean) => { setAutoSync(on); void saveClipboardAuto(on); }, []);
   useEffect(() => () => { connected?.store.dispose(); connected?.clipboard.dispose(); connected?.files.dispose(); connected?.input.dispose(); connected?.session.stop(); }, [connected]);
 

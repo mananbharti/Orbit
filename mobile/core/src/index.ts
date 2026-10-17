@@ -20,3 +20,4 @@ export * from './wol.js';
 export * from './devices.js';
 export * from './automation.js';
 export * from './terminal.js';
+export { isSharedFileUrl, sharedFileName } from './share-intake.js';

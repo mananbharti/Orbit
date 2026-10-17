@@ -13,6 +13,22 @@
         "NSLocalNetworkUsageDescription": "Orbit finds and connects to your computer on your local network.",
         "NSBonjourServices": [
           "_orbit._tcp"
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Shared file",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.data",
+              "public.content",
+              "public.image",
+              "public.movie",
+              "public.audio",
+              "com.adobe.pdf",
+              "public.archive"
+            ]
+          }
         ]
       }
     },
