@@ -9,6 +9,7 @@ import { core } from './helpers.js';
 import { waitForClipboard as waitFor } from './clipboard-helpers.js';
 import { FileTransfer } from '../src/file-transfer/file-transfer.js';
 import { TransferStore } from '../src/file-transfer/transfer-store.js';
+import { organizedDestination } from '../src/file-transfer/organize.js';
 import { sha256 } from '../src/file-transfer/file-storage.js';
 import * as protocol from '../src/protocol/file-transfer.js';
 import type { CommandConnection } from '../src/command-router/command-context.js';
@@ -180,13 +181,19 @@ test('existing destination files are never overwritten, even after successful in
   const bytes = Buffer.from('verified data'); const offer = manifest(bytes);
   ok(await client.command('file.offer', offer));
   const row = store.get(offer.transferId, deviceId);
-  writeFileSync(store.paths(row).destination, 'existing unrelated file');
+  // The transfer will organize into received/Other/; a pre-existing user file at that exact spot must survive.
+  const taken = organizedDestination(store.inbox, row.manifest.name);
+  writeFileSync(taken, 'existing unrelated file');
+  const planted = organizedDestination(store.inbox, row.manifest.name); // what the transfer must now avoid
+  assert.notEqual(planted, taken);
   const status = protocol.statusSchema.parse(ok(await client.command('file.resume', { transferId: offer.transferId })));
   ok(await client.command('file.chunk', { transferId: offer.transferId, leaseId: status.leaseId!, offset: 0,
     dataBase64: bytes.toString('base64'), sha256: sha256(bytes) }));
   ok(await client.command('file.finish', { transferId: offer.transferId, leaseId: status.leaseId! }));
-  await waitFor(() => row.state === 'failed');
-  assert.equal(readFileSync(store.paths(row).destination, 'utf8'), 'existing unrelated file');
+  await waitFor(() => row.state === 'completed');
+  assert.equal(store.paths(row).destination, planted); // stepped aside, never overwrote
+  assert.equal(readFileSync(taken, 'utf8'), 'existing unrelated file');
+  assert.equal(readFileSync(planted, 'utf8'), 'verified data');
 });
 
 test('changed local sources fail before download; cancellation deletes only the receiving partial', async t => {
