@@ -54,7 +54,9 @@ nav { display: flex; flex-direction: column; gap: 3px; flex: 1; }
 /* Main */
 main { flex: 1; height: 100vh; overflow-y: auto; padding: 40px 44px 60px; z-index: 1; }
 .tab { display: none; max-width: 720px; animation: in .22s ease; }
-html[data-preview] .tab { animation: none; }
+/* Headless preview: freeze every transition/animation so screenshots are deterministic
+   (CSS transitions run on wall-clock, not virtual time, so captures land mid-fade). */
+html[data-preview] *, html[data-preview] *::before, html[data-preview] *::after { transition: none !important; animation: none !important; }
 .tab.on { display: block; }
 @keyframes in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
