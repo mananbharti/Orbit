@@ -27,6 +27,8 @@ import { InputControl } from './input-simulation/input-control.js';
 import { KeyboardMacroStore } from './input-simulation/keyboard-macros.js';
 import { DeviceDirectory } from './security-pairing/device-directory.js';
 import { AutomationService } from './automation/automation-service.js';
+import { ExtensionServer } from './browser-tabs/extension-server.js';
+import { TabsService } from './browser-tabs/tabs-service.js';
 import { TerminalService, type SpawnShell } from './terminal/terminal-service.js';
 import { AutomationStore } from './automation/automation-store.js';
 import type { InputDevice } from './os-integration/input-device.js';
@@ -80,6 +82,8 @@ export async function startDesktop(options: { directory: string; host: string; p
   let panic: PanicLock | undefined;
   let devices: DeviceDirectory | undefined;
   let automations: AutomationService | undefined;
+  let extensionServer: ExtensionServer | undefined;
+  let tabs: TabsService | undefined;
   let terminal: TerminalService | undefined;
   let mixer: AudioMixer | undefined;
   try {
@@ -119,18 +123,25 @@ export async function startDesktop(options: { directory: string; host: string; p
       power: action => system ? system.powerLocal(action) : Promise.reject(new Error('SYSTEM_UNAVAILABLE')),
     }, log);
     automations.start();
+    extensionServer = new ExtensionServer(directory);
+    await extensionServer.start();
+    tabs = new TabsService(registry, extensionServer);
     if (options.terminal) terminal = new TerminalService(registry, log, options.terminal.confirmation, options.terminal.spawnShell);
     transportOptions.pairing = pairing;
     if (options.discovery !== false) discovery = advertiseDesktop(hint,
       () => log.record({ severity: 'warn', eventType: 'discovery.error', outcome: 'failed' }));
     let stopped = false;
     return { directory, pairing, hint, log, transport, auth, files, credentials: store,
+      browserExtension: { get port(): number { return extensionServer!.port; }, get token(): string { return extensionServer!.token; },
+        connected: () => extensionServer!.extensionConnected },
       async stop(): Promise<void> {
         if (stopped) return;
         stopped = true;
         pairing.close();
         await terminal?.stop();
         await automations?.stop();
+        await tabs?.stop();
+        await extensionServer?.stop();
         devices?.stop(); system?.stop(); panic?.stop(); mixer?.stop();
         await dictation?.stop();
         memory?.stop();
@@ -146,6 +157,8 @@ export async function startDesktop(options: { directory: string; host: string; p
   } catch (error) {
     await terminal?.stop();
     await automations?.stop();
+    await tabs?.stop();
+    await extensionServer?.stop();
     await dictation?.stop();
     await input?.stop();
     await agent?.stop();

@@ -27,6 +27,8 @@ const BY_CODE: Partial<Record<string, string>> = {
   AUTOMATION_NOT_FOUND: 'That automation no longer exists.',
   AUTOMATION_LIMIT: 'The computer has too many automations. Delete one first.',
   TERMINAL_UNAVAILABLE: 'The terminal is not available on this computer.',
+  TABS_EXTENSION_OFFLINE: 'Connect the Orbit browser extension on your computer first.',
+  TABS_NOT_FOUND: 'That tab is already gone.',
   TERMINAL_SESSION_REQUIRED: 'Start a terminal session first.',
 };
 
