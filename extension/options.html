@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orbit setup</title>
+<style>
+  body { font: 15px -apple-system, "Segoe UI", sans-serif; max-width: 420px; margin: 40px auto; color: #1d1d1f; }
+  h1 { font-size: 22px; font-weight: 600; }
+  label { display: block; margin: 14px 0 4px; color: #6e6e73; font-size: 13px; }
+  input { width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid #d2d2d7; border-radius: 10px; box-sizing: border-box; }
+  button { margin-top: 18px; padding: 10px 18px; font-size: 15px; border: 0; border-radius: 10px; background: #0a84ff; color: white; cursor: pointer; }
+  #status { margin-top: 14px; font-size: 14px; }
+  .ok { color: #248a3d; } .bad { color: #d70015; }
+  p.hint { color: #6e6e73; font-size: 13px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>Connect Orbit</h1>
+<p class="hint">Open Orbit on this computer, go to Settings, and copy the browser extension port and token shown there. This page talks only to your own computer.</p>
+<label for="port">Port</label>
+<input id="port" inputmode="numeric" placeholder="17342">
+<label for="token">Token</label>
+<input id="token" placeholder="paste the token">
+<button id="save">Save and connect</button>
+<div id="status"></div>
+<script src="options.js"></script>
+</body>
+</html>
