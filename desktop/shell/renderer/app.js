@@ -23,7 +23,11 @@ const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.ad
 
 // Standalone preview helper: ?tab=settings opens that tab (used by headless screenshot checks; harmless in the app).
 const wantTab = new URLSearchParams(location.search).get('tab');
-if (!window.orbit && wantTab) setTimeout(() => document.querySelector('.nav[data-tab="' + wantTab + '"]')?.click(), 0);
+if (!window.orbit && wantTab) {
+  // Headless review: skip the entry fade so screenshots are deterministic.
+  document.head.appendChild(document.createElement('style')).textContent = '.tab{animation:none}';
+  setTimeout(() => document.querySelector('.nav[data-tab="' + wantTab + '"]')?.click(), 0);
+}
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.nav,.tab').forEach(e => e.classList.remove('on'));
   b.classList.add('on'); $(b.dataset.tab).classList.add('on');
