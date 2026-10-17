@@ -54,6 +54,7 @@ nav { display: flex; flex-direction: column; gap: 3px; flex: 1; }
 /* Main */
 main { flex: 1; height: 100vh; overflow-y: auto; padding: 40px 44px 60px; z-index: 1; }
 .tab { display: none; max-width: 720px; animation: in .22s ease; }
+html[data-preview] .tab { animation: none; }
 .tab.on { display: block; }
 @keyframes in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
@@ -127,8 +128,16 @@ progress::-webkit-progress-value { background: var(--accent); border-radius: 3px
 progress.done::-webkit-progress-value { background: var(--good); }
 progress.fail::-webkit-progress-value { background: var(--bad); }
 
-/* File icon chip */
-.fi { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+[hidden] { display: none !important; }
+
+/* File icon chip - colors via data-ext (CSP blocks inline styles) */
+.fi { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: #6e6e73; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+.fi[data-ext="mp4"], .fi[data-ext="mov"] { background: #bf5af2; }
+.fi[data-ext="png"], .fi[data-ext="jpg"], .fi[data-ext="jpeg"], .fi[data-ext="gif"], .fi[data-ext="doc"], .fi[data-ext="docx"] { background: #0a84ff; }
+.fi[data-ext="pdf"] { background: #ff453a; }
+.fi[data-ext="zip"] { background: #ff9f0a; }
+.fi[data-ext="txt"], .fi[data-ext="md"] { background: #30d158; }
+.fi[data-ext="mp3"] { background: #ff375f; }
 
 /* Lists */
 .list { display: flex; flex-direction: column; overflow: hidden; }

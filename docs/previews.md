@@ -20,4 +20,4 @@ python3 -m http.server 8123
 # open http://localhost:8123/index.html?tab=home
 ```
 
-`?tab=` accepts `home`, `files`, `clipboard`, `devices`, `activity`, `settings`. The deep-link and the disabled entry animation only apply in this standalone mode; the packaged Electron app is unaffected.
+`?tab=` accepts `home`, `files`, `clipboard`, `devices`, `activity`, `settings`. Add `&theme=light` for the light appearance (dark is the standalone default). The deep-link, theme override and the disabled entry animation only apply in this standalone mode; the packaged Electron app is unaffected.

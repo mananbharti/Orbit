@@ -9,23 +9,23 @@ const api = window.orbit ?? (() => {
       { id: '3', name: 'orbit-logo.png', size: 184320, direction: 'to-client', state: 'completed', progress: 1, updatedAt: Date.now() - 3600000, device: 'iphone-17-pro' }],
     activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
-  return { state: async () => s, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false,
+  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false,
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/Orbit-1.0' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name };
 })();
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const fmtSize = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(0) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(2) + ' GB';
 const ago = ts => { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
-const EXT_COLORS = { mp4: '#bf5af2', mov: '#bf5af2', png: '#0a84ff', jpg: '#0a84ff', jpeg: '#0a84ff', gif: '#0a84ff', pdf: '#ff453a', zip: '#ff9f0a', txt: '#30d158', md: '#30d158', mp3: '#ff375f', doc: '#0a84ff', docx: '#0a84ff' };
-const fileIcon = name => { const ext = (name.split('.').pop() || 'file').slice(0, 4); return '<span class="fi" data-ext style="background:' + (EXT_COLORS[ext.toLowerCase()] || '#6e6e73') + '">' + esc(ext) + '</span>'; };
+const fileIcon = name => { const ext = (name.split('.').pop() || 'file').slice(0, 4); return '<span class="fi" data-ext="' + esc(ext.toLowerCase()) + '">' + esc(ext) + '</span>'; };
 let qrSvg = ''; let toastTimer;
 const toast = msg => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400); };
 
 // Standalone preview helper: ?tab=settings opens that tab (used by headless screenshot checks; harmless in the app).
 const wantTab = new URLSearchParams(location.search).get('tab');
 if (!window.orbit && wantTab) {
-  // Headless review: skip the entry fade so screenshots are deterministic.
-  document.head.appendChild(document.createElement('style')).textContent = '.tab{animation:none}';
+  // Headless review: skip the entry fade so screenshots are deterministic
+  // (a <style> tag would be blocked by the CSP, so flip a stylesheet selector).
+  document.documentElement.dataset.preview = '1';
   setTimeout(() => document.querySelector('.nav[data-tab="' + wantTab + '"]')?.click(), 0);
 }
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => {
@@ -109,7 +109,7 @@ function render(s) {
 
   // Browser extension
   if (s.browserExtension) {
-    $('ext-card').style.display = '';
+    $('ext-card').hidden = false;
     $('ext-port').textContent = String(s.browserExtension.port);
     $('ext-token').textContent = s.browserExtension.token;
     $('ext-dot').className = 'dot ' + (s.browserExtension.connected ? 'ok' : '');
