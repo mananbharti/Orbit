@@ -154,7 +154,7 @@ export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; 
             </View>
           ) : null}
           <Text style={{ color: t.sub, fontSize: 13, fontWeight: '600' }}>MACROS</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.s }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space.s }}>
             {macros.map(macro => (
               <Pressable key={macro.id} accessibilityRole="button" accessibilityLabel={`Run macro ${macro.name}`} disabled={!!running}
                 onPress={() => { void runMacro(macro); }} onLongPress={() => manageMacro(macro)}
