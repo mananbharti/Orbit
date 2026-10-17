@@ -28,10 +28,13 @@ export const endpointSchema = z.string().max(256).refine(value => {
   } catch { return false; }
 }, 'Endpoint must be a local wss:// /v1/channel address');
 
+const macAddressSchema = z.string().regex(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
 export const pairingPayloadSchema = z.strictObject({
   version: z.literal(1), desktopServiceId: idSchema, displayName: z.string().min(1).max(64),
   endpoint: endpointSchema, certificateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   pairingToken: tokenSchema, expiresAt: z.number().int().positive(),
+  /** Real NIC addresses for Wake-on-LAN; absent when the desktop could not list them. */
+  macAddresses: z.array(macAddressSchema).max(4).optional(),
 });
 export type PairingPayload = z.infer<typeof pairingPayloadSchema>;
 
@@ -44,7 +47,7 @@ export const sessionResponseSchema = z.strictObject({ version: z.literal(1),
 /** What the phone persists (in the OS secure store) after pairing. */
 export const pairedDesktopSchema = z.strictObject({ desktopServiceId: idSchema, displayName: z.string().min(1).max(64),
   deviceId: idSchema, endpoint: endpointSchema, certificateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  credential: tokenSchema });
+  credential: tokenSchema, macAddresses: z.array(macAddressSchema).max(4).optional() });
 export type PairedDesktop = z.infer<typeof pairedDesktopSchema>;
 
 export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'UNKNOWN_COMMAND',

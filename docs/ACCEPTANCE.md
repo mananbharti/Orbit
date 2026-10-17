@@ -38,7 +38,7 @@ Preview screenshots shown during development use synthetic data (mock apps, mock
 | 12 | Full keyboard + custom macros | Partial: remote keyboard done; macros pending | Yes (keyboard) | Pending | - |
 | 13 | System volume + per-app mixer | Implemented | Yes | Pending | Sessions addressed by PID |
 | 14 | Power control (shutdown/sleep/restart/lock) | Implemented | Yes | Pending | - |
-| 15 | Wake-on-LAN | Not started | - | - | Phone needs a UDP native module |
+| 15 | Wake-on-LAN | Implemented: MACs in pairing payload + phone magic-packet sender + Wake button when PC is unreachable | Yes (packet bytes, MAC filtering, pairing pass-through) | Pending | Needs the desktop BIOS/NIC WoL enabled; iOS sends via react-native-udp (native module, dev-client build) |
 | 16 | Display brightness + mode control | Partial: brightness done (null on desktops without backlight); mode control pending | Yes | Pending | Most desktops have no controllable backlight |
 | 17 | Presentation mode | Not started | - | - | - |
 | 18 | Browser tab control | Not started | - | - | Likely needs a browser extension |

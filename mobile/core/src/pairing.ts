@@ -28,5 +28,6 @@ export async function pairWithQr(qrText: string, transport: PinnedTransport, now
     throw new PairingError('mismatch', 'The computer answered with an unexpected identity');
   }
   return { desktopServiceId: qr.desktopServiceId, displayName: qr.displayName, deviceId: result.data.deviceId,
-    endpoint: qr.endpoint, certificateFingerprint: qr.certificateFingerprint, credential: result.data.credential };
+    endpoint: qr.endpoint, certificateFingerprint: qr.certificateFingerprint, credential: result.data.credential,
+    ...(qr.macAddresses?.length ? { macAddresses: qr.macAddresses } : {}) };
 }

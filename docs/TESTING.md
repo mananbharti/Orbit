@@ -12,21 +12,25 @@ Setup (once per batch):
 Files:
 1. Phone -> Files -> send a PDF. PC shows a notification; Files tab lists it. Tap "Open" (opens it) and "Folder" (opens Explorer at the file).
 2. Drag a file onto the PC window. Phone Files screen shows it arriving with progress.
+3. Send a .pdf and a photo from the phone. On the PC they land in received\Documents and received\Images respectively. Send the same .pdf again: it arrives as "name (2).pdf" and the first copy is untouched.
 
 Clipboard:
-3. Copy text on the PC. Phone shows the incoming banner and it is already on the phone clipboard - paste anywhere.
-4. While Orbit is open on the phone, copy text in another app. PC clipboard gets it (iOS may ask to allow pasting: Settings -> Apps -> Orbit -> Paste from Other Apps -> Allow).
-5. Phone -> Clipboard -> History: tap an older entry. It lands on both clipboards.
+4. Copy text on the PC. Phone shows the incoming banner and it is already on the phone clipboard - paste anywhere.
+5. While Orbit is open on the phone, copy text in another app. PC clipboard gets it (iOS may ask to allow pasting: Settings -> Apps -> Orbit -> Paste from Other Apps -> Allow).
+6. Phone -> Clipboard -> History: tap an older entry. It lands on both clipboards.
 
 Control:
-6. Phone -> Control -> tap Lock. PC locks. Unlock, tap volume +/-. PC volume changes (watch the Windows volume HUD).
-7. Play audio in two apps (e.g. Spotify + a browser video). APP VOLUME lists both; drag one down - only that app gets quieter. Mute one; unmute.
-8. Panic Lock (bottom, red): confirm. PC locks AND the phone returns to the pair screen. Pairing is gone on both sides; pair again to continue.
+7. Phone -> Control -> tap Lock. PC locks. Unlock, tap volume +/-. PC volume changes (watch the Windows volume HUD).
+8. Play audio in two apps (e.g. Spotify + a browser video). APP VOLUME lists both; drag one down - only that app gets quieter. Mute one; unmute.
+9. Panic Lock (bottom, red): confirm. PC locks AND the phone returns to the pair screen. Pairing is gone on both sides; pair again to continue.
 
 Launcher:
-9. Phone -> Apps: real icons stream in (8 at a time). Search "edge", tap it - Edge opens on the PC.
+10. Phone -> Apps: real icons stream in (8 at a time). Search "edge", tap it - Edge opens on the PC.
+
+Wake-on-LAN (one-time PC setup first: Device Manager -> your network adapter -> Power Management -> allow this device to wake the computer; BIOS: enable Wake on LAN):
+12. Pair, then sleep or shut down the PC (Control -> Sleep). Wait until the phone shows "Looking for your computer". Tap "Wake <PC name>". The PC powers on; the phone reconnects on its own within ~30s.
 
 Remote:
-10. Phone -> Remote: tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
+13. Phone -> Remote: tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
 
 Report anything that fails with the exact step number.

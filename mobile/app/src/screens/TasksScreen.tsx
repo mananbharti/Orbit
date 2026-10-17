@@ -8,12 +8,13 @@ import { Icon, type IconName } from '../components/Icon';
 import { PressableScale } from '../components/PressableScale';
 import { StatusPill } from '../components/StatusPill';
 import { friendlyError } from '../orbit';
+import { canWake, wakeDesktop } from '../wol';
 import { radius, space, useTheme } from '../theme';
 
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void }) {
+export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onMemory, onControl, onSettings }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; wakePreview?: boolean }) {
   const t = useTheme();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState('');
@@ -21,6 +22,13 @@ export function TasksScreen({ store, api, dictation, name, onOpen, onRepair, onA
   const [error, setError] = useState<string>();
   const offline = state.connection !== 'connected';
   const [paused, setPaused] = useState(false);
+  const [waking, setWaking] = useState<'no' | 'sending' | 'sent'>('no');
+  const wake = async (): Promise<void> => {
+    if (!macAddresses?.length || waking !== 'no') return;
+    setWaking('sending');
+    try { await wakeDesktop(macAddresses); setWaking('sent'); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+    catch (e) { setWaking('no'); setError(friendlyError(e)); }
+  };
   useEffect(() => { if (state.connection === 'connected') api.safeMode().then(setPaused, () => {}); }, [api, state.connection]);
   const setSafeMode = async (pause: boolean): Promise<void> => {
     try { if (pause) await api.pause(); else await api.resume(); setPaused(pause); void store.refresh(); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }
@@ -58,6 +66,12 @@ export function TasksScreen({ store, api, dictation, name, onOpen, onRepair, onA
         <Pressable disabled={state.connection !== 'authentication-required'} onPress={onRepair}
           style={[styles.banner, { backgroundColor: t.fill }]}>
           <Text style={{ color: t.text, fontSize: 15 }}>{connectionText[state.connection]}{state.connection === 'authentication-required' ? ' Tap to pair again.' : ''}</Text>
+        </Pressable>
+      ) : null}
+      {offline && state.connection !== 'authentication-required' && (wakePreview || canWake(macAddresses)) ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Wake ${name}`} disabled={waking !== 'no'} onPress={() => { if (wakePreview) { setWaking('sent'); } else void wake(); }}
+          style={[styles.banner, { backgroundColor: t.tint, opacity: waking === 'sending' ? 0.6 : 1 }]}>
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>{waking === 'sent' ? `Wake signal sent. ${name} takes a moment to come online.` : `Wake ${name}`}</Text>
         </Pressable>
       ) : null}
       {paused ? (

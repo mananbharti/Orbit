@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { NetworkInterfaceInfo } from 'node:os';
-import { pickLanAddress } from '../src/lan-address.js';
+import { lanMacAddresses, pickLanAddress } from '../src/lan-address.js';
 
 const v4 = (address: string, mac = 'aa:bb:cc:00:11:22', internal = false) => ({ address, family: 'IPv4', internal, netmask: '255.255.255.0', mac, cidr: null }) as NetworkInterfaceInfo;
 
@@ -23,4 +23,14 @@ test('only a virtual adapter present means no address, not a wrong one', () => {
 });
 test('the default-route address wins between two real adapters', () => {
   assert.equal(pickLanAddress({ Ethernet: [v4('10.0.0.4')], 'Wi-Fi': [v4('172.31.1.2')] }, '10.0.0.4'), '10.0.0.4');
+});
+
+test('lanMacAddresses returns real NIC MACs only, lowercased and deduped', () => {
+  assert.deepEqual(lanMacAddresses({
+    'Wi-Fi': [v4('192.168.1.23', 'A1:B2:C3:D4:E5:F6')],
+    Ethernet: [v4('192.168.1.24', 'aa:bb:cc:dd:ee:ff')],
+    'vEthernet (WSL)': [v4('172.20.0.1', '00:15:5d:00:00:01')],
+    Loopback: [v4('127.0.0.1', '00:00:00:00:00:00', true)],
+  }), ['a1:b2:c3:d4:e5:f6', 'aa:bb:cc:dd:ee:ff']);
+  assert.deepEqual(lanMacAddresses({ 'Ethernet 3': [v4('192.168.56.1', '0a:00:27:00:00:0b')] }), []);
 });

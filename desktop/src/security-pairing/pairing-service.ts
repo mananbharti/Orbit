@@ -7,7 +7,7 @@ import { credentialHash, TOKEN_PATTERN } from './session-auth.js';
 import type { Scope } from './scopes.js';
 
 export const PAIRING_TTL_MS = 120_000;
-type PublicIdentity = Pick<PairingPayload, 'desktopServiceId' | 'displayName' | 'endpoint' | 'certificateFingerprint'>;
+type PublicIdentity = Pick<PairingPayload, 'desktopServiceId' | 'displayName' | 'endpoint' | 'certificateFingerprint' | 'macAddresses'>;
 
 export class PairingService {
   private invitation?: { hash: Buffer; expiresAt: number; scopes?: readonly Scope[] };
@@ -21,7 +21,8 @@ export class PairingService {
     this.invitation = { hash: Buffer.from(credentialHash(pairingToken), 'hex'), expiresAt, ...(scopes ? { scopes } : {}) };
     this.log.record({ severity: 'info', eventType: 'pairing.opened', outcome: 'success' });
     return { version: 1, desktopServiceId: this.identity.desktopServiceId, displayName: this.identity.displayName,
-      endpoint: this.identity.endpoint, certificateFingerprint: this.identity.certificateFingerprint, pairingToken, expiresAt };
+      endpoint: this.identity.endpoint, certificateFingerprint: this.identity.certificateFingerprint, pairingToken, expiresAt,
+      ...(this.identity.macAddresses?.length ? { macAddresses: this.identity.macAddresses } : {}) };
   }
 
   close(): void { this.invitation = undefined; }

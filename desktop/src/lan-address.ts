@@ -42,3 +42,17 @@ export function defaultRouteAddress(): Promise<string | undefined> {
     try { socket.connect(53, '1.1.1.1', () => done(socket.address().address)); } catch { done(); }
   });
 }
+
+/** Hardware addresses of the real Wi-Fi/Ethernet interfaces, for Wake-on-LAN at pairing time. Lowercase, deduped, capped at 4. */
+export function lanMacAddresses(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()): string[] {
+  const macs: string[] = [];
+  for (const [name, list] of Object.entries(interfaces)) {
+    for (const entry of list ?? []) {
+      if (entry.family !== 'IPv4' || entry.internal || !entry.mac || entry.mac === '00:00:00:00:00:00') continue;
+      if (isVirtualAdapter(name, entry)) continue;
+      const mac = entry.mac.toLowerCase();
+      if (!macs.includes(mac)) macs.push(mac);
+    }
+  }
+  return macs.slice(0, 4);
+}

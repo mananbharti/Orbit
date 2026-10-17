@@ -9,6 +9,7 @@ import { certificateFingerprint, loadOrCreateIdentity } from './security-pairing
 import { FilePairedCredentialStore } from './security-pairing/paired-credential-store.js';
 import { PairingService } from './security-pairing/pairing-service.js';
 import { SessionAuth } from './security-pairing/session-auth.js';
+import { lanMacAddresses } from './lan-address.js';
 import { advertiseDesktop, type DesktopHint } from './transport/discovery/lan-discovery.js';
 import { createWebSocketTransport, type TransportOptions } from './transport/websocket/websocket-server.js';
 import { ClipboardSync } from './clipboard-sync/clipboard-sync.js';
@@ -92,9 +93,10 @@ export async function startDesktop(options: { directory: string; host: string; p
     transport = createWebSocketTransport(transportOptions);
     const address = await transport.start();
     const host = options.host.includes(':') ? `[${options.host}]` : options.host;
+    const macAddresses = lanMacAddresses();
     const hint: DesktopHint = { desktopServiceId: identity.desktopServiceId, displayName: options.displayName,
       endpoint: `wss://${host}:${address.port}/v1/channel`, certificate: identity.certificate };
-    const pairing = new PairingService({ ...hint, certificateFingerprint: certificateFingerprint(identity.certificate) }, store, log);
+    const pairing = new PairingService({ ...hint, macAddresses, certificateFingerprint: certificateFingerprint(identity.certificate) }, store, log);
     transportOptions.pairing = pairing;
     if (options.discovery !== false) discovery = advertiseDesktop(hint,
       () => log.record({ severity: 'warn', eventType: 'discovery.error', outcome: 'failed' }));

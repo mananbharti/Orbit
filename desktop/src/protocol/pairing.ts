@@ -12,10 +12,13 @@ export const endpointSchema = z.string().max(256).refine(value => {
       && !url.username && !url.password && !url.search && !url.hash && url.pathname === '/v1/channel';
   } catch { return false; }
 });
+export const macAddressSchema = z.string().regex(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
 export const pairingPayloadSchema = z.strictObject({
   version: z.literal(1), desktopServiceId: idSchema, displayName: z.string().min(1).max(64),
   endpoint: endpointSchema, certificateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   pairingToken: tokenSchema, expiresAt: z.number().int().positive(),
+  /** Real NIC addresses, so a paired phone can wake this machine later. Absent on unknown platforms. */
+  macAddresses: z.array(macAddressSchema).max(4).optional(),
 });
 export type PairingPayload = z.infer<typeof pairingPayloadSchema>;
 

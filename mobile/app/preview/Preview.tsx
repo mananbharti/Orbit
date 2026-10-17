@@ -15,11 +15,12 @@ import { TasksScreen } from '../src/screens/TasksScreen';
 import { mockAgent, mockClipboard, mockDictation, mockFiles, mockInput, mockLauncher, mockMemory, mockStore, tasks , mockSystem } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'task-detail', 'activity', 'apps', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'task-detail', 'activity', 'apps', 'clipboard', 'files', 'memory', 'remote', 'control', 'settings', 'pair'] as const;
 
 function Screen({ name }: { name: string }) {
   switch (name) {
     case 'tasks-empty': return <TasksScreen store={mockStore('connected', [])} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
+    case 'tasks-wake': return <TasksScreen store={mockStore('reconnecting')} api={mockAgent()} dictation={mockDictation} name="Manan's PC" macAddresses={['a1:b2:c3:d4:e5:f6']} wakePreview onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
     case 'tasks-offline': return <TasksScreen store={mockStore('reconnecting')} api={mockAgent()} dictation={mockDictation} name="Manan's PC" onOpen={noop} onRepair={noop} onActivity={noop} onApps={noop} onClipboard={noop} onFiles={noop} onRemote={noop} onMemory={noop} onControl={noop} onSettings={noop} />;
     case 'task-detail': return <TaskDetailScreen store={mockStore()} taskId={tasks[0]!.taskId} onBack={noop} />;
     case 'activity': return <ActivityScreen api={mockAgent()} onBack={noop} />;
