@@ -49,7 +49,7 @@ export type PairedDesktop = z.infer<typeof pairedDesktopSchema>;
 
 export const ERROR_CODES = ['INVALID_MESSAGE', 'UNSUPPORTED_VERSION', 'UNAUTHENTICATED', 'UNKNOWN_COMMAND',
   'INVALID_PAYLOAD', 'BIOMETRIC_REQUIRED', 'COMMAND_FAILED', 'DUPLICATE_REQUEST', 'BUSY',
-  'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED',
+  'CLIPBOARD_UNAVAILABLE', 'CLIPBOARD_NOT_SUBSCRIBED', 'CLIPBOARD_NOT_FOUND',
   'FILE_NOT_FOUND', 'FILE_INVALID_STATE', 'FILE_INVALID_LEASE', 'FILE_QUOTA', 'FILE_OFFSET', 'FILE_INTEGRITY',
   'FILE_SOURCE_CHANGED', 'FILE_IO', 'FILE_EXPIRED',
   'LAUNCHER_UNAVAILABLE', 'LAUNCHER_LIMIT', 'LAUNCHER_STALE_CATALOG', 'LAUNCHER_NOT_FOUND', 'LAUNCHER_UNKNOWN_OUTCOME',
@@ -105,6 +105,10 @@ export const appIconsResultSchema = z.strictObject({ icons: z.record(z.string().
 export const MAX_CLIPBOARD_BYTES = 8 * 1024;
 export const clipboardSubscriptionSchema = z.strictObject({ subscriptionId: z.string().uuid(), revision: z.number().int().min(0) });
 export const clipboardWriteResultSchema = z.strictObject({ status: z.enum(['applied', 'unchanged', 'conflict']), revision: z.number().int().min(0) });
+export const clipboardHistoryEntrySchema = z.strictObject({ id: z.string().uuid(), text: z.string(),
+  at: z.number().int().positive(), source: z.enum(['pc', 'phone']) });
+export const clipboardHistoryResultSchema = z.strictObject({ entries: z.array(clipboardHistoryEntrySchema).max(50), nextCursor: z.string().uuid().nullable() });
+export type ClipboardHistoryEntry = z.infer<typeof clipboardHistoryEntrySchema>;
 export const clipboardChangedSchema = z.strictObject({ subscriptionId: z.string().uuid(), revision: z.number().int().min(0), text: z.string() });
 export const clipboardStatusSchema = z.strictObject({ subscriptionId: z.string().uuid(), revision: z.number().int().min(0),
   status: z.enum(['unsupported', 'oversized', 'unavailable']) });

@@ -23,3 +23,14 @@ export const clipboardWriteResultSchema = z.strictObject({ status: z.enum(['appl
 export const clipboardChangedSchema = z.strictObject({ subscriptionId: subscriptionIdSchema, revision: revisionSchema, text: clipboardTextSchema });
 export const clipboardStatusSchema = z.strictObject({ subscriptionId: subscriptionIdSchema, revision: revisionSchema,
   status: z.enum(['unsupported', 'oversized', 'unavailable']) });
+
+// Clipboard history: bounded, byte-budgeted pages so a reply never exceeds the 64KB socket cap.
+export const CLIPBOARD_HISTORY_LIMIT = 50;
+export const HISTORY_PAGE_BYTES = 48_000;
+export const clipboardHistoryEntrySchema = z.strictObject({ id: z.string().uuid(), text: clipboardTextSchema,
+  at: z.number().int().positive(), source: z.enum(['pc', 'phone']) });
+export type ClipboardHistoryEntry = z.infer<typeof clipboardHistoryEntrySchema>;
+export const clipboardHistorySchema = z.strictObject({ before: z.string().uuid().optional() });
+export const clipboardHistoryResultSchema = z.strictObject({ entries: z.array(clipboardHistoryEntrySchema).max(CLIPBOARD_HISTORY_LIMIT),
+  nextCursor: z.string().uuid().nullable() });
+export const clipboardApplySchema = z.strictObject({ subscriptionId: subscriptionIdSchema, historyId: z.string().uuid() });

@@ -36,6 +36,12 @@ export const mockAgent = (paused = false): AgentApi => ({ audit: async () => aud
 export const mockDictation = {} as unknown as DictationApi;
 export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {} }) as unknown as LauncherApi;
 export const mockClipboard = (incoming = true): ClipboardApi => ({ ...store({ active: true, ...(incoming ? { incoming: { text: 'Meeting moved to 4pm, room 2B', revision: 3 } } : {}) }),
+  history: async () => ({ entries: [
+    { id: '11111111-1111-4111-8111-111111111111', text: 'Meeting moved to 4pm, room 2B', at: Date.now() - 4 * 60000, source: 'pc' as const },
+    { id: '22222222-2222-4222-8222-222222222222', text: 'https://github.com/mananbharti/Orbit/pull/3', at: Date.now() - 26 * 60000, source: 'phone' as const },
+    { id: '33333333-3333-4333-8333-333333333333', text: 'Wi-Fi: Omen_Hotspot / pass: orbit1234', at: Date.now() - 2 * 3600000, source: 'pc' as const },
+  ], nextCursor: null }),
+  apply: async () => {},
   start: async () => {}, stop: async () => {}, send: async () => 'sent', dismissIncoming: () => {} }) as unknown as ClipboardApi;
 export const mockFiles = (transferring = true): FileApi => ({ ...store({ offers: [{ transferId: id(20), direction: 'to-client', name: 'Invoice-October.pdf', sizeBytes: 482_113, sha256: 'a'.repeat(64), chunkBytes: 65536 }],
   ...(transferring ? { transfer: { transferId: id(21), name: 'trip-photos.zip', direction: 'to-desktop', state: 'transferring', doneBytes: 18_000_000, sizeBytes: 42_000_000 } } : {}) }),

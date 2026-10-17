@@ -12,6 +12,7 @@ import { SessionAuth } from './security-pairing/session-auth.js';
 import { advertiseDesktop, type DesktopHint } from './transport/discovery/lan-discovery.js';
 import { createWebSocketTransport, type TransportOptions } from './transport/websocket/websocket-server.js';
 import { ClipboardSync } from './clipboard-sync/clipboard-sync.js';
+import { ClipboardHistory } from './clipboard-sync/clipboard-history.js';
 import { createClipboard } from './os-integration/create-clipboard.js';
 import type { ClipboardAdapter } from './os-integration/clipboard.js';
 import { TransferStore } from './file-transfer/transfer-store.js';
@@ -68,7 +69,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     const store = new FilePairedCredentialStore(join(directory, 'credentials.json'));
     const auth = new SessionAuth(store, log, options.sessionTtlMs);
     const registry = options.registry ?? new CommandRegistry();
-    clipboard = new ClipboardSync(registry, options.clipboard?.createAdapter ?? createClipboard, log, options.clipboard?.pollMs);
+    clipboard = new ClipboardSync(registry, options.clipboard?.createAdapter ?? createClipboard, log, options.clipboard?.pollMs, new ClipboardHistory(join(directory, 'clipboard-history.json')));
     const inbox = options.inbox ? privateDirectory(options.inbox) : join(directory, 'received');
     files = new FileTransfer(new TransferStore(directory, inbox, 'to-desktop'), registry, log, owner => store.isActive(owner));
     launcher = new AppLauncher(registry, options.launcher?.createAdapter ?? createAppLauncher);

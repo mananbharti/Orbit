@@ -1,11 +1,12 @@
-/** Orders bidirectional Clipboard Sync for subscribed connections; depends on router, OS adapter and metadata log; retains no clipboard history or offline commands. */
+/** Orders bidirectional Clipboard Sync for subscribed connections and keeps a bounded shared history; depends on router, OS adapter and metadata log. */
 import { randomUUID } from 'node:crypto';
 import type { ActivityLog } from '../activity-log/activity-log.js';
 import type { CommandConnection, CommandContext } from '../command-router/command-context.js';
 import type { CommandRegistry } from '../command-router/command-registry.js';
 import type { ClipboardAdapter } from '../os-integration/clipboard.js';
-import { CLIPBOARD_POLL_MS, clipboardSubscribeSchema, clipboardUnsubscribeSchema, clipboardWriteSchema,
-  clipboardSnapshotSchema, type ClipboardSnapshot } from '../protocol/clipboard.js';
+import { CLIPBOARD_POLL_MS, clipboardApplySchema, clipboardHistorySchema, clipboardSubscribeSchema, clipboardUnsubscribeSchema,
+  clipboardWriteSchema, clipboardSnapshotSchema, type ClipboardSnapshot } from '../protocol/clipboard.js';
+import type { ClipboardHistory } from './clipboard-history.js';
 import { ProtocolError } from '../protocol/errors.js';
 import { snapshotKey } from './snapshot-key.js';
 
@@ -26,7 +27,7 @@ export class ClipboardSync {
   private readonly unregister: (() => void)[];
 
   constructor(registry: CommandRegistry, private readonly createAdapter: () => ClipboardAdapter,
-    private readonly log: ActivityLog, private readonly pollMs = CLIPBOARD_POLL_MS) {
+    private readonly log: ActivityLog, private readonly pollMs = CLIPBOARD_POLL_MS, private readonly history?: ClipboardHistory) {
     if (!Number.isSafeInteger(pollMs) || pollMs < 1) throw new Error('Invalid clipboard polling interval');
     this.unregister = [
       registry.register('clipboard.subscribe', { validate: payload => clipboardSubscribeSchema.safeParse(payload).success,
@@ -55,6 +56,24 @@ export class ClipboardSync {
           catch { this.unavailable(); throw new ProtocolError('CLIPBOARD_UNAVAILABLE'); }
           // A disconnect during an OS operation cannot undo that action. Do not retry it or claim a rollback.
           this.observe({ kind: 'text', text }, context.connection!.id);
+          return { status: 'applied', revision: this.revision };
+        }) }),
+      registry.register('clipboard.history', { validate: payload => clipboardHistorySchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(async () => {
+          this.requireConnection(context);
+          const { before } = clipboardHistorySchema.parse(payload);
+          return this.history?.page(before) ?? { entries: [], nextCursor: null };
+        }) }),
+      registry.register('clipboard.apply', { validate: payload => clipboardApplySchema.safeParse(payload).success,
+        execute: (payload, context) => this.run(async () => {
+          const { subscriptionId, historyId } = clipboardApplySchema.parse(payload);
+          this.requireSubscription(context, subscriptionId);
+          const entry = this.history?.get(historyId);
+          if (!entry) { this.record('clipboard.conflict', context, 'rejected'); throw new ProtocolError('CLIPBOARD_NOT_FOUND'); }
+          try { await this.adapter!.write(entry.text); }
+          catch { this.unavailable(); throw new ProtocolError('CLIPBOARD_UNAVAILABLE'); }
+          // Same propagation as a typed write: subscribers (including the phone itself) see clipboard.changed.
+          this.observe({ kind: 'text', text: entry.text }, context.connection!.id);
           return { status: 'applied', revision: this.revision };
         }) }),
     ];
@@ -117,6 +136,7 @@ export class ClipboardSync {
     this.fingerprint = fingerprint;
     if (baseline) return;
     this.revision++;
+    if (snapshot.kind === 'text') this.history?.add(snapshot.text, excludeConnection ? 'phone' : 'pc');
     for (const subscription of [...this.subscriptions.values()]) {
       if (!subscription.connection.isAuthorized()) { subscription.remove(); continue; }
       if (subscription.connection.id === excludeConnection) continue;

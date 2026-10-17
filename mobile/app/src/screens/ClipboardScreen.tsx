@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { ClipboardApi } from '@orbit/core';
+import type { ClipboardApi, ClipboardHistoryEntry } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
@@ -13,6 +13,28 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
   const [text, setText] = useState('');
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
+  const [history, setHistory] = useState<ClipboardHistoryEntry[]>([]);
+
+  const refreshHistory = (): void => { api.history().then(page => setHistory(page.entries)).catch(() => {}); };
+  useEffect(refreshHistory, [api]);
+  // A clip from either device lands in history; refresh when the incoming banner changes.
+  useEffect(() => { refreshHistory(); }, [state.incoming?.revision]);
+
+  const applyEntry = async (entry: ClipboardHistoryEntry): Promise<void> => {
+    setError(undefined);
+    try {
+      await api.apply(entry.id);
+      await Clipboard.setStringAsync(entry.text);
+      setNote('On both clipboards'); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) { setError(friendlyError(e)); }
+  };
+
+  const when = (at: number): string => {
+    const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+    if (mins < 1) return 'now'; if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60); if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+  };
 
   useEffect(() => { api.start().catch(e => setError(friendlyError(e))); }, [api]); // the app-level subscription keeps running after this screen closes
 
@@ -60,6 +82,18 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
             <Text style={styles.buttonText}>Send</Text></Pressable>
         </View>
       </View>
+      {history.length ? (
+        <View style={[styles.card, { backgroundColor: t.card, gap: 0 }]}>
+          <Text style={[styles.label, { color: t.sub, marginBottom: space.s }]}>History - both devices</Text>
+          {history.slice(0, 20).map((entry, index) => (
+            <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={`Copy ${entry.text.slice(0, 60)}`} onPress={() => { void applyEntry(entry); }}
+              style={({ pressed }) => [{ paddingVertical: 11, borderTopWidth: index ? StyleSheet.hairlineWidth : 0, borderTopColor: t.fill, gap: 3 }, pressed && { opacity: 0.6 }]}>
+              <Text numberOfLines={2} style={{ color: t.text, fontSize: 15, lineHeight: 20 }}>{entry.text}</Text>
+              <Text style={{ color: t.sub, fontSize: 12 }}>{entry.source === 'pc' ? 'Computer' : 'This phone'} · {when(entry.at)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
     </View>
