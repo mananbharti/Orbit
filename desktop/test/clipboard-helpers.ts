@@ -25,7 +25,8 @@ export class MemoryClipboard implements ClipboardAdapter {
   async dispose(): Promise<void> { this.disposed = true; }
 }
 
-export async function waitForClipboard(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+// 15s default: shared CI runners stall timers for seconds under load (seen on windows-latest); the 10ms poll keeps passing tests just as fast.
+export async function waitForClipboard(predicate: () => boolean, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error('Expected synthetic clipboard state did not arrive');
