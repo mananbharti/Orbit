@@ -16,6 +16,7 @@ export * from './memory.js';
 export * from './wav.js';
 export * from './locator.js';
 export * from './system.js';
+export * from './gyro.js';
 export * from './wol.js';
 export * from './devices.js';
 export * from './automation.js';
