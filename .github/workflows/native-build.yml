@@ -1,12 +1,14 @@
 # Builds the real phone apps, including the native pinning module, and uploads them as downloads.
 #  - Android: app-release.apk (debug-signed, installs on a phone or the Android emulator).
 #  - iOS: Orbit-unsigned.ipa. It has no signature. Re-sign it on Windows with Sideloadly and a free Apple ID (see docs/first-test.md).
-# Neither build has ever run before, so the first result is a real finding. It never blocks a merge.
+# Builds are best-effort (continue-on-error) and never block a merge. Runs on every
+# v1.1 push that touches the phone app so the installable artifacts stay current.
 name: native-build
 on:
   workflow_dispatch:
   push:
-    paths: ['.github/workflows/native-build.yml']
+    branches: [v1.1]
+    paths: ['mobile/**', '.github/workflows/native-build.yml']
   schedule:
     - cron: '17 3 * * 1'
 jobs:

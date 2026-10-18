@@ -3,7 +3,7 @@
 Setup (once per batch):
 
 1. On the PC: `git clone https://github.com/mananbharti/Orbit.git && cd Orbit && git checkout v1.1`
-2. `cd desktop && npm ci && npm run build`, then `npm start` (Electron control center opens)
+2. `cd desktop && npm ci && npm run app` (builds, then opens the Orbit control-center window; `npm start` is the headless CLI instead)
 3. Turn on the Windows mobile hotspot; join the iPhone to it
 4. On the phone: `cd mobile/app && npm ci && npx expo start --dev-client`, open Orbit, pair with the QR shown by the desktop
 

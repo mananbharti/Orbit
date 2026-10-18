@@ -1,7 +1,7 @@
 # First test, step by step
 
 Written for a first-timer with a Windows PC and an iPhone with a free Apple ID (no paid developer account).
-Nothing here has been run on real devices yet. The phone builds are made by GitHub, and the first run may fail. If a step fails, send the exact error text.
+QR pairing and the encrypted session are proven on a real Windows 11 PC and iPhone (October 14, over a Windows hotspot). The rest is waiting on the device pass in `docs/TESTING.md`. If a step fails, send the exact error text.
 
 ## Why this is not just "open Expo Go"
 Orbit pins the computer's certificate so nobody on the Wi-Fi can pretend to be your PC. Expo Go cannot do that, so Orbit needs its own phone app. There is deliberately no "skip security" switch.
@@ -10,25 +10,27 @@ Orbit pins the computer's certificate so nobody on the Wi-Fi can pretend to be y
 1. Install Node 24 from nodejs.org and Git.
 2. In PowerShell:
    ```
-   git clone https://github.com/mananbharti/Orbit-1.0.git
-   cd Orbit-1.0\desktop
+   git clone https://github.com/mananbharti/Orbit.git
+   cd Orbit
+   git checkout v1.1
+   cd desktop
    npm ci
    npm test
    ```
    Tests should end with `fail 0`.
-3. Find the PC's Wi-Fi address: run `ipconfig`, copy the "IPv4 Address" of your Wi-Fi (looks like 192.168.1.23).
+3. Hostel and many other Wi-Fi networks block device-to-device traffic. The reliable setup: turn on the Windows Mobile Hotspot (Settings -> Network & Internet -> Mobile hotspot) and join the iPhone to it. The PC's address on the hotspot is then `192.168.137.1`. If you use a normal Wi-Fi instead, find the PC's address with `ipconfig` ("IPv4 Address", looks like 192.168.1.23).
 4. Start it, using that address:
    ```
-   $env:ORBIT_HOST="192.168.1.23"
+   $env:ORBIT_HOST="192.168.137.1"
    $env:ORBIT_DATA_DIR="$HOME\orbit-data"
-   npm start
+   npm run app
    ```
-   Allow it in the Windows Firewall popup (private networks).
+   Allow it in the Windows Firewall popup (private networks). `npm run app` builds and opens the Orbit window; for a headless run use `npm start` instead.
 5. Agent tasks only work with a Hermes server. For the first test you can skip this. If you have one, also set `$env:ORBIT_HERMES_URL` and `$env:ORBIT_HERMES_API_KEY` before `npm start`. Do not paste the key anywhere else.
-6. In the same window type `pair` and press Enter. This opens a two-minute pairing window and writes `pairing.svg` and `pairing.json` in `%USERPROFILE%\orbit-data`. Open pairing.svg in a browser to see the QR.
+6. In the Orbit window press "Show pairing code" to get a two-minute QR. (Headless CLI instead: `npm start`, then type `pair` and press Enter - it writes `pairing.svg` and `pairing.json` in `%USERPROFILE%\orbit-data`; open pairing.svg in a browser.)
 
 ## Part 2a: iPhone with a free Apple ID (sideload)
-1. On GitHub open https://github.com/mananbharti/Orbit-1.0/actions , choose "native-build", open the latest run, download the artifact `orbit-ios-unsigned-ipa`, unzip it to get `Orbit-unsigned.ipa`. (If the iOS job failed, stop and send me the error.)
+1. On GitHub open https://github.com/mananbharti/Orbit/actions , choose "native-build", open the latest run **on branch v1.1** (older runs built the pre-v1.1 app and are missing most features), download the artifact `orbit-ios-unsigned-ipa`, unzip it to get `Orbit-unsigned.ipa`. (If the iOS job failed, stop and send me the error.)
 2. On the PC install iTunes and iCloud from apple.com (not the Microsoft Store versions), then Sideloadly from sideloadly.io.
 3. Plug the iPhone in with a cable, tap Trust. In Settings > Privacy & Security turn on Developer Mode and restart the phone.
 4. In Sideloadly pick the iPhone, drag in the ipa, enter your Apple ID, press Start.
