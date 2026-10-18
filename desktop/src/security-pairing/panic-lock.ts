@@ -25,7 +25,10 @@ export class PanicLock {
     const deviceId = context.session.deviceId;
     // Lock first, best effort: a machine that cannot lock still loses the phone.
     let locked = false;
-    try { await this.createLockAdapter?.().power('lock'); locked = true; } catch { /* the unpair still runs */ }
+    try {
+      if (!this.createLockAdapter) throw new Error('no lock adapter on this platform');
+      await this.createLockAdapter().power('lock'); locked = true;
+    } catch { /* the unpair still runs */ }
     // The reply must reach the phone first: revoking closes the socket before the response frame is written, so the unpair lands a tick after dispatch returns.
     setTimeout(() => {
       const unpaired = this.credentials.revoke(deviceId);
