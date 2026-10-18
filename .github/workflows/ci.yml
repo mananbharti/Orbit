@@ -2,6 +2,8 @@ name: CI
 on: [push, pull_request]
 jobs:
   desktop:
+    # Hung runners fail in 12 minutes instead of the 6-hour default (suite is ~1 min, npm ci worst case ~5).
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix: { os: [ubuntu-latest, windows-latest] }
@@ -14,6 +16,7 @@ jobs:
       - run: npm ci
       - run: npm test
   web:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
