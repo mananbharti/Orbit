@@ -38,7 +38,9 @@ Small fixes (typos, docs, obvious bugs) can go straight to a PR without a prior 
 ```
 orbit/
 ├── mobile/     # React Native app (iOS/Android)
-├── desktop/    # Node.js background service (Windows/Linux)
+├── desktop/    # Node.js background service + Electron app (Windows/Linux)
+├── app/        # Landing site (Next.js)
+├── extension/  # Browser extension for tab control (Chrome/Edge/Brave)
 ├── design/     # Logo, screenshots, architecture diagrams
 └── docs/       # Additional documentation
 ```
@@ -57,7 +59,7 @@ orbit/
 
 ## Questions?
 
-Open an issue with the `question` label, or check back here once the Discord community is live.
+Open an issue with the `question` label, or join the [Discord community](https://discord.gg/xQ3VaAnmPA).
 
 ---
 
