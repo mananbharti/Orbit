@@ -7,6 +7,8 @@ Every feature is at exactly one verification level per platform:
 - **Real-device verified** - run and confirmed on Manan's Windows 11 (Omen) + iPhone.
 - **Platform limitation** - the OS does not allow the full version; the limitation is named.
 
+When the real-device pass is done, the merge to main follows [merge-checklist.md](merge-checklist.md).
+
 Preview screenshots shown during development use synthetic data (mock apps, mock volumes) unless labeled otherwise. "Working" in milestone notes means automated-tested; it never means device-verified.
 
 ## Manan's reported complaints
