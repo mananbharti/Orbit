@@ -19,13 +19,13 @@ export const metadata: Metadata = {
     title: "Orbit — Your phone and PC, on the same team",
     description:
       "A local-first companion for your phone and computer. Both apps are built and in private device testing.",
-    images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "Orbit connects your phone and computer" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Orbit connects your phone and computer" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Orbit — Your phone and PC, on the same team",
     description: "A local-first companion for your phone and computer. Both apps are built and in private device testing.",
-    images: ["/og-image.svg"],
+    images: ["/og-image.png"],
   },
   robots: { index: true, follow: true },
 };

@@ -10,10 +10,10 @@
   <text x="157" y="135" font-family="Arial,sans-serif" font-size="31" font-weight="700" letter-spacing="-2" fill="#171c1b">orbit</text>
   <rect x="102" y="194" width="217" height="31" rx="16" fill="#fff" stroke="#dce9e3"/>
   <circle cx="120" cy="209.5" r="4" fill="#51b99d"/>
-  <text x="133" y="213" font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#586660">LOCAL-FIRST · IN DEVELOPMENT</text>
+  <text x="133" y="213" font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing="1.2" fill="#586660">LOCAL-FIRST · IN PRIVATE TESTING</text>
   <text x="102" y="319" font-family="Arial,sans-serif" font-size="93" font-weight="700" letter-spacing="-6" fill="#171c1b">Meet <tspan fill="#2b9076">Orbit.</tspan></text>
   <text x="107" y="369" font-family="Arial,sans-serif" font-size="22" fill="#68716e">A local-first connection for phone and computer.</text>
-  <text x="107" y="403" font-family="Arial,sans-serif" font-size="17" fill="#7b8580">Open source · Desktop-first · In active development</text>
+  <text x="107" y="403" font-family="Arial,sans-serif" font-size="17" fill="#7b8580">Open source · Phone + desktop · In private device testing</text>
   <g transform="translate(785 208)">
     <ellipse cx="178" cy="169" rx="220" ry="97" fill="none" stroke="#9bcab7" stroke-opacity=".45"/>
     <rect x="75" y="25" width="115" height="217" rx="21" fill="#202724"/>
