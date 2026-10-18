@@ -2,7 +2,7 @@ import { BackButton } from '../components/BackButton';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ClipboardApi, ClipboardHistoryEntry } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -58,7 +58,7 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: t.bg }]}>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={styles.root}>
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Clipboard</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Clipboard syncs automatically while Orbit is open on both devices. Turn this off in Settings anytime.</Text>
@@ -96,11 +96,11 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
       ) : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
-    </View>
+    </ScrollView>
   );
 }
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: space.l, paddingTop: 70, gap: space.m },
+  root: { padding: space.l, paddingTop: 70, paddingBottom: 40, gap: space.m },
   title: { fontSize: 34, fontWeight: '700' },
   card: { padding: space.l, borderRadius: radius, gap: space.s },
   label: { fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 },
