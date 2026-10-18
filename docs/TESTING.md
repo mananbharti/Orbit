@@ -21,44 +21,44 @@ Clipboard:
 
 Control:
 7. Phone -> Control -> tap Lock. PC locks. Unlock, tap volume +/-. PC volume changes (watch the Windows volume HUD).
-7a. Control -> THEME: tap Dark. Windows apps and the taskbar switch to dark within a second; tap Light to switch back. On a desktop monitor without a backlight the BRIGHTNESS row stays hidden - expected.
-8. Play audio in two apps (e.g. Spotify + a browser video). APP VOLUME lists both; drag one down - only that app gets quieter. Mute one; unmute.
-9. Panic Lock (bottom, red): confirm. PC locks AND the phone returns to the pair screen. Pairing is gone on both sides; pair again to continue.
+8. Control -> THEME: tap Dark. Windows apps and the taskbar switch to dark within a second; tap Light to switch back. On a desktop monitor without a backlight the BRIGHTNESS row stays hidden - expected.
+9. Play audio in two apps (e.g. Spotify + a browser video). APP VOLUME lists both; drag one down - only that app gets quieter. Mute one; unmute.
+10. Panic Lock (bottom, red): confirm. PC locks AND the phone returns to the pair screen. Pairing is gone on both sides; pair again to continue.
 
 Launcher:
-10. Phone -> Apps: real icons stream in (8 at a time). Search "edge", tap it - Edge opens on the PC.
-11a. Tap "+ New scene", name it "Work", tap 3 apps, Save. The Work chip appears. Tap it: all 3 apps open on the PC. Long-press the chip -> Edit, remove one app, Save. Long-press -> Delete.
-11. Long-press Spotify -> Pin to top. A PINNED row appears above the grid. Long-press it again -> Move later. Close and reopen the app (and restart Orbit on the PC): the pinned row is still there, same order.
+11. Phone -> Apps: real icons stream in (8 at a time). Search "edge", tap it - Edge opens on the PC.
+12. Tap "+ New scene", name it "Work", tap 3 apps, Save. The Work chip appears. Tap it: all 3 apps open on the PC. Long-press the chip -> Edit, remove one app, Save. Long-press -> Delete.
+13. Long-press Spotify -> Pin to top. A PINNED row appears above the grid. Long-press it again -> Move later. Close and reopen the app (and restart Orbit on the PC): the pinned row is still there, same order.
 
 Wake-on-LAN (one-time PC setup first: Device Manager -> your network adapter -> Power Management -> allow this device to wake the computer; BIOS: enable Wake on LAN):
-12. Pair, then sleep or shut down the PC (Control -> Sleep). Wait until the phone shows "Looking for your computer". Tap "Wake <PC name>". The PC powers on; the phone reconnects on its own within ~30s.
+14. Pair, then sleep or shut down the PC (Control -> Sleep). Wait until the phone shows "Looking for your computer". Tap "Wake <PC name>". The PC powers on; the phone reconnects on its own within ~30s.
 
 Remote:
-13. Phone -> Remote: tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
-14. MACROS: tap "+ Macro", name it "Paste plain", tap Ctrl + Shift, pick V, "Add step", Save. Open Notepad on the PC, copy formatted text from a browser, tap the Paste plain chip: plain text lands. Long-press the chip -> Delete. Restart the PC app: macros persist. tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
+15. Phone -> Remote: tap "Enable control". PC shows an in-app approval dialog (not a PowerShell box). Approve: move the trackpad, type.
+16. MACROS: tap "+ Macro", name it "Paste plain", tap Ctrl + Shift, pick V, "Add step", Save. Open Notepad on the PC, copy formatted text from a browser, tap the Paste plain chip: plain text lands. Long-press the chip -> Delete. Restart the PC app: macros persist.
 
 17. App lock: kill the phone app, reopen it - Face ID is asked before it connects. Cancel the prompt: the app sits on a locked screen, no connection. Tap Unlock. Settings -> Require Face ID off, reopen: connects straight away. Turn it back on.
-16. Gyro mouse: Remote -> start control -> tap Gyro. Hold the phone like a remote and tilt: the PC cursor follows. Small hand tremor should NOT move it. If it moves the wrong way, tell me which axis is inverted.
-15. Present: open a PowerPoint deck on the PC. Phone home -> Present -> Start presenting (approve on PC). Tap "Start deck" (slideshow begins), > (next slide), Black screen, White screen, End deck. Touch-drag the laser pad: the red laser dot moves on screen.
+18. Gyro mouse: Remote -> start control -> tap Gyro. Hold the phone like a remote and tilt: the PC cursor follows. Small hand tremor should NOT move it. If it moves the wrong way, tell me which axis is inverted.
+19. Present: open a PowerPoint deck on the PC. Phone home -> Present -> Start presenting (approve on PC). Tap "Start deck" (slideshow begins), > (next slide), Black screen, White screen, End deck. Touch-drag the laser pad: the red laser dot moves on screen.
 
-18. Devices: Settings -> Devices. "This iPhone" shows Full access. If you have only one paired device, the Other devices card says none are paired. (With a second device paired: tap it -> turn Full access off -> switch off Apps; on that device the Apps tab now shows a permission error. Switch it back on.)
+20. Devices: Settings -> Devices. "This iPhone" shows Full access. If you have only one paired device, the Other devices card says none are paired. (With a second device paired: tap it -> turn Full access off -> switch off Apps; on that device the Apps tab now shows a permission error. Switch it back on.)
 
-19. Computers (needs two PCs, or one PC + the preview): Settings -> Computers shows every paired computer with a check on the active one. Pair a second PC (Add a computer). Tap the other computer: Face ID, "Switching...", then the Home header shows its name. Tap the name on Home: the Computers screen opens. Forget the inactive one: tap Forget, then "Tap again to forget": it leaves the list. Forget the active one: you land on the Computers list (or the pair screen if none are left). Kill and reopen the app: it connects to the last active computer.
+21. Computers (needs two PCs, or one PC + the preview): Settings -> Computers shows every paired computer with a check on the active one. Pair a second PC (Add a computer). Tap the other computer: Face ID, "Switching...", then the Home header shows its name. Tap the name on Home: the Computers screen opens. Forget the inactive one: tap Forget, then "Tap again to forget": it leaves the list. Forget the active one: you land on the Computers list (or the pair screen if none are left). Kill and reopen the app: it connects to the last active computer.
 
-20. Automations: Home -> Automations -> New automation. Pick Sleep, set the time two minutes from now, leave Weekdays (or Every day), Save. Watch the PC sleep at that minute. Turn the switch off, delete the automation. Make one for Open Work scene at a near time: the scene's apps open on their own. Restart the PC app after one fires: it does not fire again.
+22. Automations: Home -> Automations -> New automation. Pick Sleep, set the time two minutes from now, leave Weekdays (or Every day), Save. Watch the PC sleep at that minute. Turn the switch off, delete the automation. Make one for Open Work scene at a near time: the scene's apps open on their own. Restart the PC app after one fires: it does not fire again.
 
-21. Terminal: Home -> Terminal -> Start session. The PC shows an approval dialog - approve it. Run: dir (or ls). Output streams in. Run: cd Documents - the path above the output moves. Run: cd nowhere - an error line appears and the path does NOT move. Run: ping localhost -n 20 (Windows) or ping localhost (Mac/Linux), then tap the stop square: it dies within a second. Tap End session, then Start session and choose Deny on the PC: the phone says it was declined, no session opens.
+23. Terminal: Home -> Terminal -> Start session. The PC shows an approval dialog - approve it. Run: dir (or ls). Output streams in. Run: cd Documents - the path above the output moves. Run: cd nowhere - an error line appears and the path does NOT move. Run: ping localhost -n 20 (Windows) or ping localhost (Mac/Linux), then tap the stop square: it dies within a second. Tap End session, then Start session and choose Deny on the PC: the phone says it was declined, no session opens.
 
-22. Photo backup: Files -> turn on "Back up new photos", allow photo access. The first run uploads your whole library (takes a while; progress shows under the toggle). Check received/Images on the PC: photos arrive full size. Take a new photo and keep Orbit open about a minute: it appears in received/Images. Take another photo with Orbit closed, then open Orbit: it backs up on its own within a minute.
+24. Photo backup: Files -> turn on "Back up new photos", allow photo access. The first run uploads your whole library (takes a while; progress shows under the toggle). Check received/Images on the PC: photos arrive full size. Take a new photo and keep Orbit open about a minute: it appears in received/Images. Take another photo with Orbit closed, then open Orbit: it backs up on its own within a minute.
 
-23. Share into Orbit (needs a dev-client rebuild first): in Photos or Files, share any file and choose Orbit in "Open in...". Orbit opens, the banner says it is sending the shared file, and it lands in received/<Type> on the PC. With Orbit killed, share again, then open Orbit and connect: the queued file sends on its own.
+25. Share into Orbit (needs a dev-client rebuild first): in Photos or Files, share any file and choose Orbit in "Open in...". Orbit opens, the banner says it is sending the shared file, and it lands in received/<Type> on the PC. With Orbit killed, share again, then open Orbit and connect: the queued file sends on its own.
 
-24. Browser tabs (needs the desktop app updated): on the PC, open chrome://extensions, turn on Developer mode, Load unpacked -> pick the orbit repo's extension folder. The extension's setup page asks for the port and token shown in Orbit's Settings on the PC. Phone Home -> Tabs: your PC browser's tabs appear. Tap one: that tab comes to the front on the PC. Close one from the phone. Type a link (e.g. wikipedia.org) and Open: it opens on the PC.
+26. Browser tabs (needs the desktop app updated): on the PC, open chrome://extensions, turn on Developer mode, Load unpacked -> pick the orbit repo's extension folder. The extension's setup page asks for the port and token shown in Orbit's Settings on the PC. Phone Home -> Tabs: your PC browser's tabs appear. Tap one: that tab comes to the front on the PC. Close one from the phone. Type a link (e.g. wikipedia.org) and Open: it opens on the PC.
 
-25. Place scenes: Apps -> long-press a scene -> "When I arrive here" (allow location). The scene chip gets an "arrives" marker. Leave the area with Orbit open, come back: within about a minute of arriving, the phone says it opened the scene and those apps launch on the PC. Long-press again -> "Remove place trigger" turns it off. (Works while Orbit is open; iOS does not let apps watch location in the background.)
+27. Place scenes: Apps -> long-press a scene -> "When I arrive here" (allow location). The scene chip gets an "arrives" marker. Leave the area with Orbit open, come back: within about a minute of arriving, the phone says it opened the scene and those apps launch on the PC. Long-press again -> "Remove place trigger" turns it off. (Works while Orbit is open; iOS does not let apps watch location in the background.)
 
-26. Full keyboard: Remote -> start control -> "Full keyboard". Tap Q, W, a couple of letters: they type on the PC. Tap Ctrl then A: it selects all (modifier applies to the next key only, then clears). Tap F5: the focused app refreshes. Digits row types numbers. "Hide keyboard" folds it away.
+28. Full keyboard: Remote -> start control -> "Full keyboard". Tap Q, W, a couple of letters: they type on the PC. Tap Ctrl then A: it selects all (modifier applies to the next key only, then clears). Tap F5: the focused app refreshes. Digits row types numbers. "Hide keyboard" folds it away.
 
-27. Forget a device: Settings -> Devices -> tap another device -> "Forget this device" -> Forget. It disappears from the list and from the computer's Orbit window; that device can no longer connect without a fresh pairing code. "Unpair this iPhone" on the top card unpairs this phone and returns Orbit to the pair screen.
+29. Forget a device: Settings -> Devices -> tap another device -> "Forget this device" -> Forget. It disappears from the list and from the computer's Orbit window; that device can no longer connect without a fresh pairing code. "Unpair this iPhone" on the top card unpairs this phone and returns Orbit to the pair screen.
 
 Report anything that fails with the exact step number.

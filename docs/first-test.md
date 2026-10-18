@@ -44,4 +44,4 @@ Unknown: Sideloadly support for the newest iOS version on an iPhone 17 Pro was n
 Microphone dictation and haptics are not meaningful on an emulator.
 
 ## What to check
-Go through `docs/TESTING.md` (27 steps) after `docs/BUILD-CHECKLIST.md`. Send me: what worked, and for anything that failed the exact step number and the message on screen.
+Go through `docs/TESTING.md` (29 steps) after `docs/BUILD-CHECKLIST.md`. Send me: what worked, and for anything that failed the exact step number and the message on screen.
