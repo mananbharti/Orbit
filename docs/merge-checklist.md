@@ -13,7 +13,7 @@ Run these in order when Manan is happy with the real-device pass. Nothing here i
 ## After merging
 - [ ] README CI badge: change `?branch=v1.1` to `?branch=main` (it tracks v1.1 today).
 - [ ] native-build.yml triggers on v1.1 pushes only; add `main` to its branch list (or keep building from a release branch) so phone artifacts stay current.
-- [ ] Tag the release if wanted (e.g. `v1.1.0`).
+- [ ] Tag the release if wanted (e.g. `v1.1.0`). The phone app still reports version 0.1.0 in `mobile/app/app.json`; bump it before any store submission (Manan's call what the public version should be).
 
 ## Repo cleanup - needs Manan's explicit confirmation
 - [ ] Delete the original `Orbit-1.0` repository. It is superseded by this one, but deletion is irreversible and its stars/issues/history should be noted first. Do not delete without a clear yes.
