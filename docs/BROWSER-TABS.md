@@ -1,5 +1,7 @@
 # Browser tab control (row 18) - design
 
+Status: implemented as designed (v1.1). Verification level and honest limits live in [ACCEPTANCE.md](ACCEPTANCE.md) row 18; real-device steps in [TESTING.md](TESTING.md) step 24.
+
 Goal: from the phone, see the computer's browser tabs, switch to one, close one, open a URL. Real implementation, no cloud: a companion Chrome/Edge extension talks to the desktop app over a loopback-only channel; the phone talks to the desktop through the normal Orbit protocol.
 
 ## Pieces
