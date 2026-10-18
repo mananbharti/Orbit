@@ -43,11 +43,18 @@ while ($null -ne ($line = [Console]::ReadLine())) {
 }
 `;
 
+const defaultSpawnWorker = (): ChildProcessWithoutNullStreams =>
+  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', WORKER_SCRIPT],
+    { windowsHide: true, stdio: 'pipe', env: windowsPowerShellEnv() });
+
 export class WindowsClipboard implements ClipboardAdapter {
   private worker?: ChildProcessWithoutNullStreams;
   private disposed = false;
   private pending?: { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
   private output = '';
+
+  constructor(private readonly spawnWorker: () => ChildProcessWithoutNullStreams = defaultSpawnWorker,
+    private readonly timeoutMs = WORKER_TIMEOUT_MS) {}
 
   async read(): Promise<ClipboardSnapshot> {
     const response = await this.request({ op: 'read' });
@@ -73,8 +80,7 @@ export class WindowsClipboard implements ClipboardAdapter {
   private request(value: object): Promise<unknown> {
     if (this.disposed || this.pending) return Promise.reject(new ClipboardUnavailable());
     if (!this.worker) {
-      const worker = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', WORKER_SCRIPT],
-        { windowsHide: true, stdio: 'pipe', env: windowsPowerShellEnv() });
+      const worker = this.spawnWorker();
       this.worker = worker;
       worker.stdout.setEncoding('utf8');
       worker.stdout.on('data', (chunk: string) => {
@@ -101,7 +107,7 @@ export class WindowsClipboard implements ClipboardAdapter {
       worker.on('exit', () => { if (worker === this.worker) this.fail(); });
     }
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.fail(), WORKER_TIMEOUT_MS);
+      const timer = setTimeout(() => this.fail(), this.timeoutMs);
       this.pending = { resolve, reject, timer };
       this.worker!.stdin.write(`${JSON.stringify(value)}\n`, 'utf8', error => { if (error) this.fail(); });
     });
