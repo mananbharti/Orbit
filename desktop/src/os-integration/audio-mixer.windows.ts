@@ -5,13 +5,12 @@ import { AudioMixerUnavailable } from './audio-mixer.js';
 import { windowsPowerShellEnv } from './powershell-env.js';
 
 const TIMEOUT_MS = 10_000;
-function ps(script: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
-      { timeout: TIMEOUT_MS, windowsHide: true, env: windowsPowerShellEnv(), maxBuffer: 1 << 20 },
-      (error, stdout) => { if (error) reject(new AudioMixerUnavailable(String(error.message).slice(0, 120))); else resolve(String(stdout).trim()); });
-  });
-}
+export type PowerShellTool = (script: string) => Promise<string>;
+const execPowerShell: PowerShellTool = script => new Promise((resolve, reject) => {
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    { timeout: TIMEOUT_MS, windowsHide: true, env: windowsPowerShellEnv(), maxBuffer: 1 << 20 },
+    (error, stdout) => { if (error) reject(new AudioMixerUnavailable(String(error.message).slice(0, 120))); else resolve(String(stdout).trim()); });
+});
 
 // Enumerates IAudioSessionManager2 sessions on the default endpoint; volume/mute via ISimpleAudioVolume, app name via the owning process.
 const MIXER_CSHARP = `
@@ -74,8 +73,9 @@ public static class Mixer {
 `;
 
 export class WindowsAudioMixer implements AudioMixerAdapter {
+  constructor(private readonly ps: PowerShellTool = execPowerShell) {}
   async listSessions(): Promise<AudioSession[]> {
-    const out = await ps(MIXER_CSHARP + `
+    const out = await this.ps(MIXER_CSHARP + `
 [Mixer]::List() | ForEach-Object { [Console]::WriteLine(('{0}|{1}|{2}|{3}' -f $_.Pid, ($_.Name -replace '[|]', ''), $_.Volume, $_.Muted)) }`);
     if (!out) return [];
     const sessions: AudioSession[] = [];
@@ -89,7 +89,7 @@ export class WindowsAudioMixer implements AudioMixerAdapter {
     if (!/^[0-9]{1,10}$/.test(id)) throw new AudioMixerUnavailable('Invalid session id');
     if (level !== undefined && (!Number.isInteger(level) || level < 0 || level > 100)) throw new AudioMixerUnavailable('Volume must be 0-100');
     // Values cross as typed PowerShell literals, never string-interpolated user data: id is digits-only, level is a bounded int, mute is a boolean switch.
-    const out = await ps(MIXER_CSHARP + `
+    const out = await this.ps(MIXER_CSHARP + `
 $ok = [Mixer]::Set([uint32]${id}, [float]${level ?? 0}, [bool]$${muted ? 'True' : 'False'}, [bool]$${level !== undefined}, [bool]$${muted !== undefined})
 if ($ok) { [Console]::Write('ok') } else { [Console]::Write('gone') }`);
     if (out !== 'ok') throw new AudioMixerUnavailable('That app is no longer playing audio');
