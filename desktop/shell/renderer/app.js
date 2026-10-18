@@ -10,7 +10,7 @@ const api = window.orbit ?? (() => {
     activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
   return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false,
-    clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/Orbit-1.0' }), clipboardWrite: async () => true,
+    clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name };
 })();
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
