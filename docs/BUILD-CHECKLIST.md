@@ -8,12 +8,13 @@ One pass, start to finish, to run everything on your Omen + iPhone. About 30 min
 ## 2. Desktop app (Windows)
 - `cd desktop && npm install && npm run app` - builds and opens the Orbit window.
 - The window shows a status dot and "Show pairing code". Leave it running.
-- If your phone will connect over the Windows hotspot: start the hotspot first, then launch Orbit with `set ORBIT_HOST=192.168.137.1 && npm run app` (hostel Wi-Fi blocks device-to-device traffic; the hotspot does not).
+- If your phone will connect over the Windows hotspot: start the hotspot first, then launch Orbit with `$env:ORBIT_HOST="192.168.137.1"; npm run app` in PowerShell (hostel Wi-Fi blocks device-to-device traffic; the hotspot does not).
 
-## 3. iPhone app (rebuild required)
-The dev client must be rebuilt once to pick up photo-backup, location, and share-receiving permissions:
-- `cd mobile/app && npm install && npx expo run:ios --device` (Mac + Xcode), or trigger an EAS development build and install it on the iPhone.
-- Then `npx expo start --dev-client` and open Orbit on the phone.
+## 3. iPhone app
+The app needs photo-backup, location, and share-receiving permissions, so Expo Go cannot run it. Pick one:
+- No Mac (the usual route): sideload the current v1.1 `orbit-ios-unsigned-ipa` artifact with Sideloadly and a free Apple ID - the full steps are in [docs/first-test.md](first-test.md) Part 2a. The artifact already includes every permission.
+- With a Mac: `cd mobile/app && npm install && npx expo run:ios --device`, then `npx expo start --dev-client`.
+- If you installed a dev client from before v1.1, reinstall once - older builds lack these permissions.
 
 ## 4. Pair
 - Phone: Pair, scan the code on the PC. Face ID confirms.
@@ -29,7 +30,7 @@ The dev client must be rebuilt once to pick up photo-backup, location, and share
 - Home -> Automations: any schedules you want.
 
 ## 7. Test pass
-- Walk docs/TESTING.md steps 1-27 in order. Report anything that fails with the exact step number.
+- Walk docs/TESTING.md steps 1-29 in order. Report anything that fails with the exact step number.
 - Foreground-only notes (platform limits, not bugs): clipboard sync, photo backup, and place triggers run while Orbit is open on the phone; each catches up on the next open.
 
 ## Design review without devices
