@@ -5,15 +5,13 @@ import { SystemControlUnavailable } from './system-control.js';
 import { windowsPowerShellEnv } from './powershell-env.js';
 
 const TIMEOUT_MS = 10_000;
-function run(file: string, args: string[], input?: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: TIMEOUT_MS, windowsHide: true, env: windowsPowerShellEnv(), maxBuffer: 1 << 20 }, (error, stdout) => {
-      if (error) reject(new SystemControlUnavailable(String(error.message).slice(0, 120)));
-      else resolve(String(stdout).trim());
-    }).stdin?.end(input ?? '');
-  });
-}
-const ps = (script: string, input?: string): Promise<string> => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], input);
+export type WindowsSystemTool = (file: string, args: string[], input?: string) => Promise<string>;
+const execTool: WindowsSystemTool = (file, args, input) => new Promise((resolve, reject) => {
+  execFile(file, args, { timeout: TIMEOUT_MS, windowsHide: true, env: windowsPowerShellEnv(), maxBuffer: 1 << 20 }, (error, stdout) => {
+    if (error) reject(new SystemControlUnavailable(String(error.message).slice(0, 120)));
+    else resolve(String(stdout).trim());
+  }).stdin?.end(input ?? '');
+});
 
 // Master volume through the Core Audio COM API; the classic C# interop, compiled in-proc by PowerShell.
 const VOLUME_CSHARP = `
@@ -41,13 +39,19 @@ public static class Audio {
 `;
 
 export class WindowsSystemControl implements SystemControlAdapter {
+  private readonly run: WindowsSystemTool;
+  private readonly ps: (script: string, input?: string) => Promise<string>;
+  constructor(tool: WindowsSystemTool = execTool) {
+    this.run = tool;
+    this.ps = (script, input) => this.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], input);
+  }
   async power(action: 'lock' | 'sleep' | 'restart' | 'shutdown'): Promise<void> {
-    if (action === 'lock') { await run('rundll32.exe', ['user32.dll,LockWorkStation']); return; }
-    if (action === 'sleep') { await run('rundll32.exe', ['powrprof.dll,SetSuspendState', 'Sleep']); return; }
-    await run('shutdown.exe', action === 'restart' ? ['/r', '/t', '3'] : ['/s', '/t', '3']);
+    if (action === 'lock') { await this.run('rundll32.exe', ['user32.dll,LockWorkStation']); return; }
+    if (action === 'sleep') { await this.run('rundll32.exe', ['powrprof.dll,SetSuspendState', 'Sleep']); return; }
+    await this.run('shutdown.exe', action === 'restart' ? ['/r', '/t', '3'] : ['/s', '/t', '3']);
   }
   async getVolume(): Promise<{ level: number; muted: boolean }> {
-    const out = await ps(VOLUME_CSHARP + `
+    const out = await this.ps(VOLUME_CSHARP + `
 $v = [Audio]::Endpoint()
 $level = 0.0; $mute = $false
 [void]$v.GetMasterVolumeLevelScalar([ref]$level); [void]$v.GetMute([ref]$mute)
@@ -58,22 +62,23 @@ $level = 0.0; $mute = $false
   }
   async setVolume(level: number, muted?: boolean): Promise<void> {
     if (!Number.isInteger(level) || level < 0 || level > 100) throw new SystemControlUnavailable('Volume must be 0-100');
-    await ps(VOLUME_CSHARP + `
+    await this.ps(VOLUME_CSHARP + `
 $v = [Audio]::Endpoint()
 [void]$v.SetMasterVolumeLevelScalar([float](${'LEVEL'} / 100.0), [Guid]::Empty)
 ${'MUTE'}`.replace('LEVEL', String(level)).replace('MUTE', typeof muted === 'boolean' ? `[void]$v.SetMute($${muted}, [Guid]::Empty)` : ''));
   }
   async getBrightness(): Promise<number | null> {
-    const out = await ps(`(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue).CurrentBrightness`);
+    const out = await this.ps(`(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue).CurrentBrightness`);
+    if (out === '') return null; // no WMI backlight on this machine; Number('') would lie as 0
     const n = Number(out);
     return Number.isInteger(n) && n >= 0 && n <= 100 ? n : null;
   }
   async setBrightness(level: number): Promise<void> {
     if (!Number.isInteger(level) || level < 0 || level > 100) throw new SystemControlUnavailable('Brightness must be 0-100');
-    await ps(`$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; if ($null -eq $m) { exit 3 }; $m.WmiSetBrightness(1, ${'LEVEL'})`.replace('LEVEL', String(level)));
+    await this.ps(`$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; if ($null -eq $m) { exit 3 }; $m.WmiSetBrightness(1, ${'LEVEL'})`.replace('LEVEL', String(level)));
   }
   async getDisplayMode(): Promise<DisplayMode> {
-    const out = await ps(`(Get-ItemPropertyValue -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme -ErrorAction SilentlyContinue)`);
+    const out = await this.ps(`(Get-ItemPropertyValue -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme -ErrorAction SilentlyContinue)`);
     const theme = out === '0' ? 'dark' : out === '1' ? 'light' : null;
     // Night light state lives in an undocumented binary CloudStore blob; poking it risks corrupting Settings. Report unsupported.
     return { theme, nightLight: null };
@@ -82,7 +87,7 @@ ${'MUTE'}`.replace('LEVEL', String(level)).replace('MUTE', typeof muted === 'boo
     if (mode.theme) {
       // Computed from the enum, never interpolated user data. AppsUseLightTheme covers apps; SystemUsesLightTheme covers taskbar and shell.
       const dword = mode.theme === 'light' ? '1' : '0';
-      await ps(`$p = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'; Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value ${'DWORD'}; Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value ${'DWORD'}`.replace(/DWORD/g, dword));
+      await this.ps(`$p = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'; Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value ${'DWORD'}; Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value ${'DWORD'}`.replace(/DWORD/g, dword));
     }
     if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light cannot be toggled safely (undocumented registry state)');
   }
