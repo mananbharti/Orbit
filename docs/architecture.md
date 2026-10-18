@@ -4,7 +4,9 @@ Orbit Desktop is a Node 24 + TypeScript service. Phones connect over an encrypte
 
 - `protocol/`: zod wire contracts (strict objects, bounded sizes).
 - `command-router/`: authenticated dispatch, duplicate-request rejection, biometric gate for sensitive commands.
-- `security-pairing/`: identity, pairing, sessions.
-- Feature modules: clipboard-sync, file-transfer, app-launcher, input-simulation.
-- `activity-log/`: in-memory audit trail of every command outcome.
-- Next: an `agent` module runs tasks through a harness over MCP and records each task in a durable ledger (see ROADMAP.md, P1 and P2).
+- `security-pairing/`: identity, pairing, sessions, per-device scopes, panic lock.
+- Feature modules: clipboard-sync (with a bounded private history), file-transfer, app-launcher, input-simulation, system-control (power, volume, brightness, display theme), browser-tabs, terminal, automation, memory, dictation.
+- `agent/`: runs tasks through the Hermes harness and records each one in a durable ledger with an exportable audit trail.
+- `activity-log/`: bounded in-memory audit of every command outcome - metadata only, never payloads.
+- `os-integration/`: per-OS adapters. Clipboard, apps, audio and system control have Windows + Linux implementations; pointer/keyboard input and the remote terminal are Windows-only today, gated behind opt-in flags and an on-PC approval.
+- The Electron shell (`shell/`) wraps the same service with the pairing window and approval dialogs.
