@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Orbit — Your phone and PC, on the same team",
   description:
-    "Orbit is an open-source, local-first project connecting phones and computers. Its desktop service is in active development; the mobile app is still ahead.",
+    "Orbit is an open-source, local-first project connecting phones and computers. The desktop and phone apps are built and in private device testing.",
   applicationName: "Orbit",
   alternates: { canonical: "/" },
   icons: { icon: "/favicon.svg" },
@@ -18,13 +18,13 @@ export const metadata: Metadata = {
     siteName: "Orbit",
     title: "Orbit — Your phone and PC, on the same team",
     description:
-      "A local-first companion in development. The desktop service is taking shape; the phone app comes later.",
+      "A local-first companion for your phone and computer. Both apps are built and in private device testing.",
     images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "Orbit connects your phone and computer" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Orbit — Your phone and PC, on the same team",
-    description: "A local-first companion in development. The desktop service is taking shape; the phone app comes later.",
+    description: "A local-first companion for your phone and computer. Both apps are built and in private device testing.",
     images: ["/og-image.svg"],
   },
   robots: { index: true, follow: true },
