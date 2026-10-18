@@ -9,14 +9,14 @@ Today the desktop service is a Node 24 program (`npm start`). Options to ship it
 3. **Installer** (MSI/MSIX on Windows, .deb/AppImage on Linux, signed .dmg on macOS) wrapping option 2, plus a login-item or service so Orbit starts at login.
 
 Open items before any installer:
-- Native input drivers (see `remote-input.md`) do not exist, so remote mouse and keyboard ship disabled.
+- Remote mouse/keyboard and terminal are Windows-only and ship off by default (opt-in flag plus an on-PC approval); see `remote-input.md`.
 - Dictation needs a bundled or downloaded whisper.cpp binary and a model file. Licenses of the chosen model must be checked before bundling.
 - Code signing: Windows needs a code-signing certificate, macOS needs an Apple Developer ID and notarization. These cost money and need Manan's accounts.
 - Auto-update is not designed. Without it, security fixes depend on users updating by hand.
 
 ## Phone (Android, iOS)
 The app is Expo (SDK 54) with a custom native module for certificate pinning, so it needs a **development build**, not Expo Go:
-1. `eas build --profile development --platform android` (and ios). The pinning module has never been compiled, so expect first-build fixes.
+1. The `native-build` GitHub workflow already compiles the app with the pinning module on every v1.1 push that touches `mobile/`: it produces an Android APK (debug-signed) and an unsigned iOS IPA to re-sign with Sideloadly (see `first-test.md`). Local alternative: `eas build --profile development --platform android` (and ios).
 2. Android: a signed APK/AAB. Internal testing track first.
 3. iOS: needs an Apple Developer account, a device registered for ad-hoc builds or TestFlight. The local-network permission string is already set.
 4. Bundle ids are `app.orbit.mobile` on both. Change before publishing if Manan wants another.
@@ -28,7 +28,7 @@ Open items: app icons and splash assets, store listings, privacy labels (camera 
 - [ ] First run on a real phone and a real computer, pairing through revoke.
 - [ ] Independent security review of pairing, pinning and the input path.
 - [ ] Threat model gaps in `threat-model.md` closed or accepted in writing.
-- [ ] Licenses listed (Orbit is not yet licensed for others; third-party notices needed).
+- [ ] Third-party license notices listed (Orbit itself is Apache-2.0).
 - [ ] Version numbers and changelog.
 
 ## Desktop app (added Oct 14)
