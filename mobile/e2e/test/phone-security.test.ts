@@ -9,6 +9,7 @@ import { startDesktop } from '../../../desktop/src/desktop-service.js';
 import { MemoryApi } from '../../core/src/memory.js';
 import { pairWithQr } from '../../core/src/pairing.js';
 import { OrbitSession } from '../../core/src/session.js';
+import { SystemApi } from '../../core/src/system.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
 
 async function world(t: TestContext) {
@@ -23,7 +24,7 @@ async function world(t: TestContext) {
     const paired = await pairWithQr(JSON.stringify(qr), transport);
     const session = new OrbitSession(paired, transport, { uuid: randomUUID }); sessions.push(session);
     await session.start();
-    return { paired, session, memory: new MemoryApi(session), transport };
+    return { paired, session, memory: new MemoryApi(session), system: new SystemApi(session), transport };
   };
   return { service, addPhone };
 }
@@ -60,4 +61,15 @@ test('oversize, wrong-type and injection-shaped input are rejected without hurti
   await assert.rejects(p.session.command('session.refresh', {}));
   await p.memory.remember({ name: 'still works' });
   assert.equal((await p.memory.recall('still works'))[0]?.name, 'still works');
+});
+
+test('panic lock unpairs the calling phone and leaves other phones alone', async t => {
+  const { addPhone } = await world(t);
+  const a = await addPhone(); const b = await addPhone();
+  await a.memory.remember({ name: 'panic-check' });
+  const status = await a.system.panic();
+  assert.ok(status === 'locked' || status === 'unpaired', `honest status, got ${status}`);
+  await new Promise(resolve => setTimeout(resolve, 300)); // the unpair lands a tick after the panic reply, by design
+  await assert.rejects(a.memory.recall('panic-check'), 'the panicking phone is cut off');
+  assert.equal((await b.memory.recall('panic-check'))[0]?.name, 'panic-check', 'the other phone still works');
 });
