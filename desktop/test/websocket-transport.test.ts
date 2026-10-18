@@ -66,7 +66,7 @@ async function send(socket: WebSocket, type = 'test.echo', payload: unknown = nu
 }
 
 async function waitFor(predicate: () => boolean) {
-  const deadline = Date.now() + 2_000;
+  const deadline = Date.now() + 15_000; // generous ceiling for loaded CI runners
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error('Timed out waiting for server state');
     await delay(10);

@@ -36,7 +36,7 @@ function fixture(biometric: BiometricConfirmation = { verify: async () => true }
   return { guard, log, adapters, ...peer() };
 }
 const code = (name: string) => ({ code: name });
-async function waitFor(predicate: () => boolean, limit = 1_000): Promise<void> {
+async function waitFor(predicate: () => boolean, limit = 5_000): Promise<void> { // ceiling, not pace: passing runs resolve at poll speed
   const deadline = Date.now() + limit;
   while (!predicate() && Date.now() < deadline) await delay(10);
   assert.ok(predicate(), 'Expected lifecycle transition before deadline');

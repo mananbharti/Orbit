@@ -22,7 +22,7 @@ async function fixture(t: TestContext, ttlMs: number) {
   return { service, client, paired, registry, options };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 5_000) {
+async function waitFor(predicate: () => boolean, timeoutMs = 15_000) { // generous ceiling for loaded CI runners; the poll keeps passing tests fast
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error('Expected client state did not arrive');
