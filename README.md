@@ -1,6 +1,6 @@
 <p align="center">
   <br/>
-  <a href="https://github.com/mananbharti/Orbit-1.0/actions/workflows/desktop-ci.yml"><img src="https://github.com/mananbharti/Orbit-1.0/actions/workflows/desktop-ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/mananbharti/orbit/actions/workflows/ci.yml"><img src="https://github.com/mananbharti/orbit/actions/workflows/ci.yml/badge.svg?branch=v1.1" alt="CI"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-3F51B5.svg?style=for-the-badge&label=License&logoColor=000000&labelColor=ececec" alt="License: Apache 2.0"></a>
   <a href="https://github.com/mananbharti/orbit/stargazers"><img src="https://img.shields.io/github/stars/mananbharti/orbit?style=for-the-badge&color=A78BFA&labelColor=ececec" alt="Stars"></a>
   <a href="https://github.com/mananbharti/orbit/issues"><img src="https://img.shields.io/github/issues/mananbharti/orbit?style=for-the-badge&color=EC4899&labelColor=ececec" alt="Issues"></a>
@@ -1615,8 +1615,8 @@ Orbit should also provide:
 # Getting Started
 
 ```bash
-git clone https://github.com/mananbharti/Orbit-1.0.git
-cd Orbit-1.0
+git clone https://github.com/mananbharti/orbit.git
+cd orbit
 
 # Desktop agent (Node 24)
 cd desktop
