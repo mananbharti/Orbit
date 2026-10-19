@@ -16,7 +16,8 @@ import type { ActivityLog } from '../activity-log/activity-log.js';
 export type SpawnShell = (command: string, cwd: string) => ChildProcessWithoutNullStreams;
 export const defaultSpawnShell: SpawnShell = (command, cwd) => process.platform === 'win32'
   ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', command], { cwd, windowsHide: true })
-  : spawn(process.env.SHELL ?? '/bin/sh', ['-c', command], { cwd });
+  // detached: the shell leads its own process group, so interrupt/timeout stops the whole command tree, not just the shell.
+  : spawn(process.env.SHELL ?? '/bin/sh', ['-c', command], { cwd, detached: true });
 
 interface Running {
   child: ChildProcessWithoutNullStreams;
@@ -149,8 +150,19 @@ export class TerminalService {
   }
 
   private kill(child: ChildProcessWithoutNullStreams): void {
-    try { child.kill('SIGTERM'); } catch { /* already gone */ }
-    setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already gone */ } }, 2_000).unref();
+    const tree = (signal: 'SIGTERM' | 'SIGKILL'): void => {
+      const pid = child.pid;
+      if (pid === undefined) { try { child.kill(signal); } catch { /* already gone */ } return; } // no pid: best effort on the handle
+      if (process.platform === 'win32') {
+        if (signal !== 'SIGTERM') return; // taskkill /T /F already covers the tree, forced
+        spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => {});
+        return;
+      }
+      try { process.kill(-pid, signal); } // the whole process group
+      catch { try { child.kill(signal); } catch { /* already gone */ } }
+    };
+    tree('SIGTERM');
+    setTimeout(() => tree('SIGKILL'), 2_000).unref();
   }
 
   private idleTimer(session: Session): ReturnType<typeof setTimeout> {

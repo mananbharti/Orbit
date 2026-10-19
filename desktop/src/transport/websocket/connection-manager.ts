@@ -97,7 +97,11 @@ export class ConnectionManager {
       this.send(socket, connection, failure(null, error instanceof ProtocolError ? error.code : 'INVALID_MESSAGE'));
       return;
     }
-    if (connection.busy) {
+    // Interrupt-shaped commands exist to act on the in-flight command itself; refusing them while busy
+    // would make Ctrl+C useless exactly while a command runs. They are safe concurrent: interrupt only
+    // signals the running child, end only tears the session down. Everything else keeps one-at-a-time.
+    const overtake = connection.busy && (message.type === 'terminal.interrupt' || message.type === 'terminal.end');
+    if (connection.busy && !overtake) {
       this.send(socket, connection, failure(message.requestId, 'BUSY'));
       return;
     }
@@ -105,9 +109,9 @@ export class ConnectionManager {
       this.send(socket, connection, failure(message.requestId, 'UNKNOWN_COMMAND'));
       return;
     }
-    connection.busy = true;
+    if (!overtake) connection.busy = true;
     try { this.send(socket, connection, await this.router.dispatch(message, connection.token, connection.binding)); }
-    finally { connection.busy = false; }
+    finally { if (!overtake) connection.busy = false; }
   }
 
   private send(socket: WebSocket, connection: Connection, response: ResponseMessage | EventMessage): void {

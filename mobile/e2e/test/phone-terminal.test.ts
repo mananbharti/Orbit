@@ -75,3 +75,18 @@ test('one session at a time: a second begin is refused while the first is open',
   await other.begin(); // after the first ends, a new one is fine
   await other.end();
 });
+
+test('interrupt stops a running command like Ctrl+C and the session stays usable', async t => {
+  const api = await phone(t, true);
+  await api.begin();
+  const started = Date.now();
+  const running = api.exec('sleep 30');
+  await new Promise(r => setTimeout(r, 300)); // let the sleep actually start
+  await api.interrupt();
+  const result = await running;
+  assert.ok(Date.now() - started < 10_000, 'the 30s sleep was cut short');
+  assert.notEqual(result.exitCode, 0, `interrupted exit reported honestly, got ${result.exitCode}`);
+  const after = await api.exec('echo still-alive');
+  assert.equal(after.exitCode, 0);
+  await api.end();
+});

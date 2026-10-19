@@ -47,13 +47,14 @@ export class TerminalApi {
   }
 
   async interrupt(): Promise<void> {
-    await this.session.command('terminal.interrupt', { sessionId: this.requireSession() }, { timeoutMs: 10_000 });
+    // immediate: interrupt must overtake the very exec it is stopping; queueing it would deadlock.
+    await this.session.command('terminal.interrupt', { sessionId: this.requireSession() }, { timeoutMs: 10_000, immediate: true });
   }
 
   async end(): Promise<void> {
     const id = this.sessionId;
     this.sessionId = undefined;
-    if (id) await this.session.command('terminal.end', { sessionId: id }, { timeoutMs: 10_000 }).catch(() => { /* already gone is fine */ });
+    if (id) await this.session.command('terminal.end', { sessionId: id }, { timeoutMs: 10_000, immediate: true }).catch(() => { /* already gone is fine */ });
   }
 
   dispose(): void { this.off?.(); this.outputListeners.clear(); }

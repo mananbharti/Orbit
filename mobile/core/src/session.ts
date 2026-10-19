@@ -46,6 +46,7 @@ export class OrbitSession {
   private submitted = 0;
   private generation = 0;
   private pending?: { id: string; resolve(v: unknown): void; reject(e: Error): void; timer: ReturnType<typeof setTimeout> };
+  private readonly immediate = new Map<string, { resolve(v: unknown): void; reject(e: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private queue: { type: string; payload: JsonValue; gen: number; timeoutMs?: number; resolve(v: unknown): void; reject(e: Error): void }[] = [];
   private statusListeners = new Set<(s: SessionStatus) => void>();
   private eventListeners = new Set<(e: DesktopEvent) => void>();
@@ -83,9 +84,27 @@ export class OrbitSession {
   }
 
   /** Sends one command. Rejects with CommandError (desktop refused), OutcomeUnknown (connection lost or timeout) or NotSent. */
-  command(type: string, payload: JsonValue, options: { timeoutMs?: number } = {}): Promise<unknown> {
+  command(type: string, payload: JsonValue, options: { timeoutMs?: number; immediate?: boolean } = {}): Promise<unknown> {
     if (this.status_ !== 'connected' || !this.channel) return Promise.reject(new NotSent('Not connected; command was not sent'));
     if (!COMMAND.test(type) || type.startsWith('session.')) return Promise.reject(new NotSent('Invalid command'));
+    // Immediate commands (terminal interrupt/end) must overtake a queued long-running command: that is their whole point.
+    if (options.immediate) {
+      if (this.immediate.size >= 4) return Promise.reject(new NotSent('Too many commands waiting'));
+      const channel = this.channel;
+      return new Promise((resolve, reject) => {
+        const requestId = this.options.uuid();
+        const text = JSON.stringify({ version: 1, type, requestId, payload });
+        if (new TextEncoder().encode(text).length > MAX_MESSAGE_BYTES) return reject(new NotSent('Command is too large'));
+        const timer = setTimeout(() => {
+          const entry = this.immediate.get(requestId);
+          if (entry) { this.immediate.delete(requestId); entry.reject(new OutcomeUnknown()); }
+          if (this.channel === channel) { channel.close(); this.onChannelClosed(channel); }
+        }, options.timeoutMs ?? this.options.commandTimeoutMs ?? 10_000);
+        this.immediate.set(requestId, { resolve, reject, timer });
+        this.submitted++;
+        try { channel.send(text); } catch { const entry = this.immediate.get(requestId); if (entry) { this.immediate.delete(requestId); clearTimeout(entry.timer); entry.reject(new NotSent('Connection changed; command was not sent')); } }
+      });
+    }
     if (this.queue.length >= MAX_QUEUED) return Promise.reject(new NotSent('Too many commands waiting'));
     return new Promise((resolve, reject) => {
       this.queue.push({ type, payload, gen: this.generation, resolve, reject, timeoutMs: options.timeoutMs });
@@ -190,6 +209,14 @@ export class OrbitSession {
       const event = eventSchema.safeParse(value);
       if (event.success) { for (const l of [...this.eventListeners]) l(event.data.payload); return; }
       const response = responseSchema.parse(value);
+      const immediate = response.requestId === null ? undefined : this.immediate.get(response.requestId);
+      if (immediate && response.requestId !== null) {
+        this.immediate.delete(response.requestId);
+        clearTimeout(immediate.timer);
+        if (response.payload.ok) immediate.resolve(response.payload.result);
+        else immediate.reject(new CommandError(response.payload.error.code));
+        return;
+      }
       const pending = this.pending;
       if (!pending || pending.id !== response.requestId) return;
       this.pending = undefined;
@@ -240,10 +267,13 @@ export class OrbitSession {
 
   private failPending(): void {
     const pending = this.pending;
-    if (!pending) return;
-    this.pending = undefined;
-    clearTimeout(pending.timer);
-    pending.reject(new OutcomeUnknown());
+    if (pending) {
+      this.pending = undefined;
+      clearTimeout(pending.timer);
+      pending.reject(new OutcomeUnknown());
+    }
+    for (const [, entry] of this.immediate) { clearTimeout(entry.timer); entry.reject(new OutcomeUnknown()); }
+    this.immediate.clear();
   }
   private failQueue(): void {
     for (const entry of this.queue.splice(0)) entry.reject(new NotSent('Connection changed; command was not sent'));
