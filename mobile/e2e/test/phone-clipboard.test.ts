@@ -45,3 +45,31 @@ test('an unsupported desktop clipboard is flagged, not shown as text', async t =
   await waitForClipboard(() => f.api.getState().blocked === 'unsupported');
   assert.equal(f.api.getState().incoming, undefined);
 });
+
+test('a phone never sees its own text echoed back, while the other phone gets it', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-phone-echo-'));
+  const desktopClipboard = new MemoryClipboard();
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    clipboard: { createAdapter: () => desktopClipboard, pollMs: 10 } });
+  const sessions: OrbitSession[] = []; const apis: ClipboardApi[] = [];
+  t.after(async () => { for (const a of apis) a.dispose(); for (const s of sessions) s.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const addPhone = async () => {
+    const transport = new NodePinnedTransport(new Map());
+    const qr = service.pairing.open();
+    (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+    const paired = await pairWithQr(JSON.stringify(qr), transport);
+    const session = new OrbitSession(paired, transport, { uuid: randomUUID }); sessions.push(session);
+    const api = new ClipboardApi(session); apis.push(api);
+    await session.start(); await api.start();
+    return api;
+  };
+  const a = await addPhone(); const b = await addPhone();
+  assert.equal(await a.send('echo me'), 'sent');
+  await waitForClipboard(() => b.getState().incoming?.text === 'echo me'); // the other phone gets it
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(a.getState().incoming, undefined, 'writer must not see its own text as incoming');
+  assert.equal(await b.send('reply'), 'sent');
+  await waitForClipboard(() => a.getState().incoming?.text === 'reply');
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(b.getState().incoming?.text, 'echo me', 'second writer keeps the earlier incoming, not its own echo');
+});
