@@ -33,7 +33,7 @@ async function phone(t: TestContext, approve: boolean) {
   const api = new InputApi(session);
   t.after(async () => { api.dispose(); session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
   await session.start();
-  return { api, device };
+  return { api, device, session };
 }
 
 test('without the owner confirming, no control starts and the device is never opened', async t => {
@@ -90,4 +90,19 @@ test('macros are saved on the desktop and run as one ordered batch inside the se
   assert.deepEqual(edited.map(m => [m.name, m.steps.length]), [['Just enter', 1]]);
   assert.deepEqual((await f.api.deleteMacro(saved[0]!.id)).length, 0);
   await f.api.end();
+});
+
+test('when the phone goes silent the desktop releases control on its own, and a fresh session can start', async t => {
+  const f = await phone(t, true);
+  await f.api.begin();
+  assert.equal(f.device.opened, true);
+  f.api.dispose(); // the phone app died: no end, no more heartbeats
+  const deadline = Date.now() + 12_000;
+  while (f.device.released === 0 && Date.now() < deadline) await new Promise(r => setTimeout(r, 100));
+  assert.ok(f.device.released >= 1, 'the desktop released the input device after the heartbeat lapsed');
+  const again = new InputApi(f.session);
+  t.after(() => again.dispose());
+  await again.begin(); // the lease is truly free: the owner can hand control right back
+  assert.equal(again.getState().status, 'active');
+  await again.end();
 });
