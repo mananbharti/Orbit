@@ -52,6 +52,7 @@ test('pins surface on every catalog page and pin/unpin/reorder update the layout
   assert.deepEqual(pinnedPage.pinned, [three, one]);
   assert.deepEqual(result(await command('launcher.reorder', { appIds: [one, three] })), { pinned: [one, three] });
   error(await command('launcher.reorder', { appIds: [one, two] }), 'LAUNCHER_STALE_LAYOUT');
+  error(await command('launcher.reorder', { appIds: [one, one] }), 'LAUNCHER_STALE_LAYOUT'); // a duplicate must not replace another pin
   assert.deepEqual(result(await command('launcher.unpin', { appId: one })), { pinned: [three] });
 });
 

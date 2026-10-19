@@ -35,7 +35,7 @@ export class LauncherLayout {
   /** A reorder must name every pinned id exactly once - anything else is a stale client and rejected wholesale. */
   reorder(appIds: string[]): string[] {
     const current = new Set(this.pinned);
-    if (appIds.length !== this.pinned.length || appIds.some(id => !current.has(id))) throw new Error('LAUNCHER_STALE_LAYOUT');
+    if (appIds.length !== this.pinned.length || new Set(appIds).size !== appIds.length || appIds.some(id => !current.has(id))) throw new Error('LAUNCHER_STALE_LAYOUT');
     this.pinned = [...appIds];
     this.save();
     return this.list();
