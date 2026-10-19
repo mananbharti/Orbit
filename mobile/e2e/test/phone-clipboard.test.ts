@@ -123,3 +123,21 @@ test('a stale write conflicts instead of clobbering newer clipboard content', as
     { subscriptionId: sub.subscriptionId, baseRevision: w1.revision, text: 'stale text' }));
   assert.equal(retry.status, 'applied');
 });
+
+test('unsubscribe stops the stream; a fresh subscribe resumes with a clean state', async t => {
+  const f = await phone(t);
+  await f.api.start();
+  f.desktopClipboard.value = { kind: 'text', text: 'while subscribed' };
+  await waitForClipboard(() => f.api.getState().incoming?.text === 'while subscribed');
+  await f.api.stop();
+  assert.equal(f.api.getState().active, false);
+  f.api.dismissIncoming();
+  f.desktopClipboard.value = { kind: 'text', text: 'after unsubscribe' };
+  await new Promise(r => setTimeout(r, 200)); // several poll cycles pass...
+  assert.equal(f.api.getState().incoming, undefined, '...and nothing new arrives on the phone');
+  await f.api.start(); // reopen the screen: a fresh subscription resumes the stream...
+  assert.equal(f.api.getState().active, true);
+  assert.equal(f.api.getState().incoming, undefined, '...but changes made while unsubscribed are not replayed');
+  f.desktopClipboard.value = { kind: 'text', text: 'third copy' };
+  await waitForClipboard(() => f.api.getState().incoming?.text === 'third copy'); // new changes flow again
+});
