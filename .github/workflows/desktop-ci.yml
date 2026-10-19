@@ -5,6 +5,7 @@ on:
   pull_request:
 jobs:
   desktop:
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +31,7 @@ jobs:
           node --test --test-reporter=tap dist/test/pairing.test.js 2>&1 | Select-String -Pattern 'error:|code:|message|stack|at ' | Select-Object -First 25 | ForEach-Object { $_.Line }
   phone-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     defaults:
       run:
         working-directory: mobile/core
@@ -45,6 +47,7 @@ jobs:
       - run: npm test
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
