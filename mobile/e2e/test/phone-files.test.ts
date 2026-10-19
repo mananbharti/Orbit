@@ -99,3 +99,25 @@ test('a changed source file is refused instead of sending mixed content', async 
   await assert.rejects(f.api.upload(flaky));
   assert.equal(f.api.getState().transfer?.state, 'failed');
 });
+
+test('cancelling a paused upload wipes the partial on the desktop and nothing can resume it', async t => {
+  const f = await phone(t);
+  const data = randomBytes(100_000);
+  let failAt = 1; // deliver one chunk, then stall out like a dead network
+  const flaky: FileSource = { name: 'cancel.bin', size: data.length,
+    sha256: async () => createHash('sha256').update(data).digest('hex'),
+    read: async (o, l) => { if (failAt-- <= 0) throw new Error('network died'); return new Uint8Array(data.subarray(o, o + l)); } };
+  await assert.rejects(f.api.upload(flaky));
+  assert.equal(f.api.getState().transfer?.state, 'paused');
+  const id = f.api.getState().transfer!.transferId;
+  await f.api.cancel();
+  assert.equal(f.api.getState().transfer?.state, 'cancelled');
+  await assert.rejects(f.api.retry(), /nothing to resume/i); // the phone itself refuses: a cancelled transfer is dead
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+    .flatMap(e => { const p = join(dir, e.name); return e.isDirectory() ? walk(p) : [p]; });
+  const leftovers = walk(f.root).filter(p => p.endsWith('.partial'));
+  assert.deepEqual(leftovers, [], 'the partial bytes were wiped, nothing resume-shaped remains');
+  const record = JSON.parse(readFileSync(join(f.root, 'private', 'transfers', id + '.json'), 'utf8'));
+  assert.equal(record.state, 'cancelled', 'the desktop remembers it as cancelled, never as delivered');
+  assert.ok(!received(f.root).some(b => b.equals(data)), 'the full file never materialized');
+});
