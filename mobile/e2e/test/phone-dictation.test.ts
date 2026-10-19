@@ -73,3 +73,31 @@ test('compressed audio is refused cleanly when the computer has no decoder, and 
   await assert.rejects(failing.transcribeCompressed(new Uint8Array(100).fill(1)));
   assert.deepEqual(await (await phone(t, { transcribe: async () => 'hello' }, undefined, async () => speech())).transcribeCompressed(new Uint8Array(10).fill(1)), { status: 'text', text: 'Hello' });
 });
+
+test('cancelling mid-stream frees the clip; double-cancel and finish-after-cancel are clean errors', async t => {
+  let called = 0;
+  const root = mkdtempSync(join(tmpdir(), 'orbit-phone-dict-cancel-'));
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    dictation: { engine: { transcribe: async () => { called++; return 'after cancel'; } }, cleanup: () => ({ dictionary: {} }) } });
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  await session.start();
+
+  const begun = await session.command('dictation.begin', {}) as { dictationId: string };
+  const chunk = Buffer.alloc(1600 * 2); // 100ms of quiet synthetic audio
+  const ack = await session.command('dictation.chunk', { dictationId: begun.dictationId, offset: 0, dataBase64: chunk.toString('base64') }) as { nextOffset: number };
+  assert.equal(ack.nextOffset, 1600);
+  assert.deepEqual(await session.command('dictation.cancel', { dictationId: begun.dictationId }), { cancelled: true });
+  await assert.rejects(session.command('dictation.cancel', { dictationId: begun.dictationId }),
+    (e: unknown) => e instanceof CommandError && e.code === 'INVALID_PAYLOAD');
+  await assert.rejects(session.command('dictation.finish', { dictationId: begun.dictationId }),
+    (e: unknown) => e instanceof CommandError && e.code === 'INVALID_PAYLOAD');
+  assert.equal(called, 0, 'the engine never saw the cancelled clip');
+  // The clip slot is truly free: a full dictation afterwards works.
+  assert.deepEqual(await new DictationApi(session).transcribe(speech(), 'en'), { status: 'text', text: 'After cancel' });
+  assert.equal(called, 1);
+});
