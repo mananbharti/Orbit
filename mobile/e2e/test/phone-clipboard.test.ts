@@ -8,6 +8,7 @@ import { test, type TestContext } from 'node:test';
 import { startDesktop } from '../../../desktop/src/desktop-service.js';
 import { MemoryClipboard, waitForClipboard } from '../../../desktop/test/clipboard-helpers.js';
 import { ClipboardApi } from '../../core/src/clipboard.js';
+import { clipboardSubscriptionSchema, clipboardWriteResultSchema } from '../../core/src/protocol.js';
 import { pairWithQr } from '../../core/src/pairing.js';
 import { OrbitSession } from '../../core/src/session.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
@@ -24,7 +25,7 @@ async function phone(t: TestContext) {
   const session = new OrbitSession(paired, transport, { uuid: randomUUID });
   t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
   await session.start();
-  return { api: new ClipboardApi(session), desktopClipboard };
+  return { api: new ClipboardApi(session), desktopClipboard, session };
 }
 
 test('text sent from the phone lands on the desktop clipboard', async t => {
@@ -101,4 +102,24 @@ test('history pages newest-first by byte budget, marks sources, and apply puts a
   await f.api.apply(oldest.id);
   await waitForClipboard(() => f.api.getState().incoming?.text === oldest.text);
   assert.ok(f.desktopClipboard.writes.includes(oldest.text), 'old clip written back to the PC clipboard');
+});
+
+test('a stale write conflicts instead of clobbering newer clipboard content', async t => {
+  const f = await phone(t);
+  const sub = clipboardSubscriptionSchema.parse(await f.session.command('clipboard.subscribe', {}));
+  const r0 = sub.revision;
+  const w1 = clipboardWriteResultSchema.parse(await f.session.command('clipboard.write',
+    { subscriptionId: sub.subscriptionId, baseRevision: r0, text: 'fresh text' }));
+  assert.equal(w1.status, 'applied');
+  await waitForClipboard(() => f.desktopClipboard.writes.includes('fresh text'));
+  // A client holding an old base (e.g. back from a reconnect with a cached revision) must never silently win:
+  const stale = clipboardWriteResultSchema.parse(await f.session.command('clipboard.write',
+    { subscriptionId: sub.subscriptionId, baseRevision: r0, text: 'stale text' }));
+  assert.equal(stale.status, 'conflict');
+  await new Promise(r => setTimeout(r, 100));
+  assert.ok(!f.desktopClipboard.writes.includes('stale text'), 'the newer clipboard content was not overwritten');
+  // With the fresh revision the same text goes through normally.
+  const retry = clipboardWriteResultSchema.parse(await f.session.command('clipboard.write',
+    { subscriptionId: sub.subscriptionId, baseRevision: w1.revision, text: 'stale text' }));
+  assert.equal(retry.status, 'applied');
 });

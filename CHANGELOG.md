@@ -30,7 +30,7 @@ The first full version of Orbit: a private phone-companion for your PC over your
 - Clipboard history apply now syncs the chosen clip back to the phone that tapped it - the desktop was excluding the applying phone from the change event, so tapping an old clip updated the PC but looked dead on the phone
 
 ### Testing
-- 345 desktop tests, 132 phone-core tests, 73 end-to-end tests (phone core against the real desktop over real pinned TLS) - desktop suites green in CI on Ubuntu and Windows, e2e on Ubuntu
+- 345 desktop tests, 132 phone-core tests, 74 end-to-end tests (phone core against the real desktop over real pinned TLS) - desktop suites green in CI on Ubuntu and Windows, e2e on Ubuntu
 - Real-device verification on the Omen + iPhone is in progress; per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
 ### Known limits (by design or platform)
