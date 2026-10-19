@@ -32,6 +32,8 @@ export interface SessionOptions {
   /** Called after the desktop was found at a new address, so the caller can persist it. */
   onEndpointChanged?: (endpoint: string) => void;
   searchCooldownMs?: number;
+  /** Commands sent on one session token before it is dropped and a fresh one is requested. Default 3000. */
+  renewAfterCommands?: number;
 }
 const RENEW_AFTER_COMMANDS = 3_000;
 const MAX_QUEUED = 16;
@@ -99,7 +101,7 @@ export class OrbitSession {
       this.drain();
       return;
     }
-    if (this.submitted >= RENEW_AFTER_COMMANDS) {
+    if (this.submitted >= (this.options.renewAfterCommands ?? RENEW_AFTER_COMMANDS)) {
       entry.reject(new NotSent('Session renewing; command was not sent'));
       void this.reconnect();
       return;

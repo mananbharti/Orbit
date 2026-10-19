@@ -68,3 +68,23 @@ test('rapid stop/start cycles settle connected, not wedged', async t => {
   await new MemoryApi(session).remember({ name: 'settled' });
   session.stop();
 });
+
+test('the session token is dropped after the command budget and a fresh one is issued, transparently', async t => {
+  const { addPhone } = await world(t);
+  const { paired, transport } = await addPhone();
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID, renewAfterCommands: 3 });
+  t.after(() => session.stop());
+  await session.start();
+  const memory = new MemoryApi(session);
+  await memory.remember({ name: 'one' });
+  await memory.remember({ name: 'two' });
+  await memory.remember({ name: 'three' }); // budget spent: 3 commands on this token
+  await assert.rejects(memory.remember({ name: 'four' }),
+    (e: unknown) => e instanceof NotSent && /renewing/i.test(e.message)); // the 4th is refused, never sent on the old token
+  const deadline = Date.now() + 10_000;
+  while (session.status !== 'connected' && Date.now() < deadline) await new Promise(r => setTimeout(r, 25));
+  assert.equal(session.status, 'connected', 'a fresh session was issued on its own');
+  await memory.remember({ name: 'four' }); // and it goes through on the new token
+  assert.equal((await memory.recall('four'))[0]?.name, 'four');
+  assert.equal((await memory.recall('one'))[0]?.name, 'one'); // desktop state survived the renewal
+});
