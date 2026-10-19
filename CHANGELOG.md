@@ -29,7 +29,7 @@ The first full version of Orbit: a private phone-companion for your PC over your
 - Permission changes on a paired phone now apply to its live session on the next command - previously they only took effect after the phone reconnected
 
 ### Testing
-- 344 desktop tests, 130 phone-core tests, 51 end-to-end tests (phone core against the real desktop over real pinned TLS) - desktop suites green in CI on Ubuntu and Windows, e2e on Ubuntu
+- 344 desktop tests, 132 phone-core tests, 51 end-to-end tests (phone core against the real desktop over real pinned TLS) - desktop suites green in CI on Ubuntu and Windows, e2e on Ubuntu
 - Real-device verification on the Omen + iPhone is in progress; per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
 ### Known limits (by design or platform)
