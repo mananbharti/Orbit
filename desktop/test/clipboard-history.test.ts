@@ -96,3 +96,29 @@ test('history is bounded at 50 entries', () => {
   assert.equal(entries[0]!.text, 'clip 59');
   assert.equal(entries[49]!.text, 'clip 10');
 });
+
+test('apply notifies the applying phone itself, unlike a typed write', async t => {
+  const setup = core();
+  const root = mkdtempSync(join(tmpdir(), 'orbit-clipboard-apply-'));
+  const adapter = new MemoryClipboard();
+  const history = new ClipboardHistory(join(root, 'history.json'));
+  const sync = new ClipboardSync(setup.registry, () => adapter, setup.log, 10, history);
+  t.after(async () => { await sync.stop(); rmSync(root, { recursive: true, force: true }); });
+  const issued = setup.auth.issue(setup.credential)!;
+  const abort = new AbortController();
+  const events: { type: string; data: unknown }[] = [];
+  const binding: CommandConnection = { id: randomUUID(), closed: abort.signal,
+    isAuthorized: () => !abort.signal.aborted && !!setup.auth.authenticate(issued.sessionToken),
+    publish: (type, data) => events.push({ type, data }) };
+  const command = (type: string, payload: JsonValue) => setup.router.dispatch(
+    { version: 1, type, requestId: randomUUID(), payload }, issued.sessionToken, binding);
+  const sub = clipboardSubscriptionSchema.parse(success(await command('clipboard.subscribe', {})));
+  success(await command('clipboard.write', { subscriptionId: sub.subscriptionId, baseRevision: sub.revision, text: 'typed on phone' }));
+  assert.equal(events.filter(e => e.type === 'clipboard.changed').length, 0, 'typed writes do not echo to the writer');
+  const entry = clipboardHistoryResultSchema.parse(success(await command('clipboard.history', {}))).entries.find(e => e.text === 'typed on phone')!;
+  adapter.value = { kind: 'text', text: 'other' };
+  await new Promise(r => setTimeout(r, 40)); // let a poll observe 'other' so the apply is a real change
+  success(await command('clipboard.apply', { subscriptionId: sub.subscriptionId, historyId: entry.id }));
+  const applied = events.filter(e => e.type === 'clipboard.changed').map(e => (e.data as { text: string }).text);
+  assert.deepEqual(applied, ['other', 'typed on phone'], 'the applying phone is told about PC changes AND its own applied clip');
+});

@@ -94,7 +94,8 @@ export class ClipboardApi {
     const result = await this.session.command('clipboard.apply', { subscriptionId: sub.id, historyId });
     const parsed = clipboardWriteResultSchema.safeParse(result);
     if (!parsed.success) throw new InvalidDesktopReply();
-    if (this.sub === sub) sub.revision = Math.max(sub.revision, parsed.data.revision);
+    // Unlike send(), do not pre-bump the revision: the desktop includes this phone in the applied
+    // clip's changed event, and accepting that event is how the clip surfaces as incoming here.
   }
 
   private onEvent(event: DesktopEvent): void {

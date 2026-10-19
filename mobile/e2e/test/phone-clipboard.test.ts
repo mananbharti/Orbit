@@ -73,3 +73,32 @@ test('a phone never sees its own text echoed back, while the other phone gets it
   await new Promise(r => setTimeout(r, 150));
   assert.equal(b.getState().incoming?.text, 'echo me', 'second writer keeps the earlier incoming, not its own echo');
 });
+
+test('history pages newest-first by byte budget, marks sources, and apply puts an old clip back', async t => {
+  const f = await phone(t);
+  await f.api.start();
+  for (let i = 0; i < 7; i++) {
+    const text = `clip-${i}-` + 'x'.repeat(7900);
+    f.desktopClipboard.value = { kind: 'text', text };
+    await waitForClipboard(() => f.api.getState().incoming?.text === text);
+    f.api.dismissIncoming();
+  }
+  assert.equal(await f.api.send('from-the-phone'), 'sent');
+  await waitForClipboard(() => f.api.getState().incoming === undefined); // no echo of own clip
+  const page1 = await f.api.history();
+  assert.ok(page1.entries.length >= 1 && page1.entries.length < 8, `page 1 bounded by bytes, got ${page1.entries.length}`);
+  assert.equal(page1.entries[0]!.text, 'from-the-phone');
+  assert.equal(page1.entries[0]!.source, 'phone');
+  assert.ok(page1.entries.slice(1).every(e => e.source === 'pc'));
+  assert.ok(page1.nextCursor, 'more pages exist past 48 KB');
+  const page2 = await f.api.history(page1.nextCursor!);
+  assert.equal(page2.nextCursor, null);
+  const all = [...page1.entries, ...page2.entries];
+  assert.equal(new Set(all.map(e => e.id)).size, all.length, 'no duplicates across pages');
+  assert.equal(all.length, 8);
+  for (let i = 1; i < all.length; i++) assert.ok(all[i - 1]!.at >= all[i]!.at, 'newest first across page boundaries');
+  const oldest = all[all.length - 1]!;
+  await f.api.apply(oldest.id);
+  await waitForClipboard(() => f.api.getState().incoming?.text === oldest.text);
+  assert.ok(f.desktopClipboard.writes.includes(oldest.text), 'old clip written back to the PC clipboard');
+});

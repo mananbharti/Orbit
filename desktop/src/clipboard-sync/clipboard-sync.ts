@@ -72,8 +72,8 @@ export class ClipboardSync {
           if (!entry) { this.record('clipboard.conflict', context, 'rejected'); throw new ProtocolError('CLIPBOARD_NOT_FOUND'); }
           try { await this.adapter!.write(entry.text); }
           catch { this.unavailable(); throw new ProtocolError('CLIPBOARD_UNAVAILABLE'); }
-          // Same propagation as a typed write: subscribers (including the phone itself) see clipboard.changed.
-          this.observe({ kind: 'text', text: entry.text }, context.connection!.id);
+          // Unlike a typed write, the applying phone MUST get the event: it asked to sync this clip to itself.
+          this.observe({ kind: 'text', text: entry.text });
           return { status: 'applied', revision: this.revision };
         }) }),
     ];
