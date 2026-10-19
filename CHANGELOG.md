@@ -26,9 +26,10 @@ The first full version of Orbit: a private phone-companion for your PC over your
 ### Fixes during hardening
 - system.panic no longer reports "locked" on machines with no lock adapter - it honestly reports "unpaired" (the phone is revoked either way)
 - Windows brightness reports null instead of a fake 0% on PCs without a controllable backlight
+- Permission changes on a paired phone now apply to its live session on the next command - previously they only took effect after the phone reconnected
 
 ### Testing
-- 340 desktop tests, 127 phone-core tests, 37 end-to-end tests (phone core against the real desktop over real pinned TLS), all green in CI on Ubuntu and Windows
+- 344 desktop tests, 130 phone-core tests, 44 end-to-end tests (phone core against the real desktop over real pinned TLS), all green in CI on Ubuntu and Windows
 - Real-device verification on the Omen + iPhone is in progress; per-feature status lives in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
 ### Known limits (by design or platform)

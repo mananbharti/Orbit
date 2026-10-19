@@ -53,3 +53,22 @@ test('configuration rejects legacy TLS overrides and wildcard/public bind addres
   }
   assert.equal(readConfig({}).host, '127.0.0.1');
 });
+
+test('scope changes apply to live sessions on the next command, not only on reconnect', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'orbit-scopes-live-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, 'paired.json');
+  const credential = randomBytes(32).toString('base64url');
+  const deviceId = randomUUID();
+  writeFileSync(path, JSON.stringify([{ deviceId, credentialHash: credentialHash(credential) }]));
+  const store = new FilePairedCredentialStore(path);
+  const auth = new SessionAuth(store, new ActivityLog());
+  const issued = auth.issue(credential)!;
+  assert.equal(issued.session.scopes, undefined); // full access at pairing time
+  assert.equal(store.setScopes(deviceId, ['memory']), true);
+  assert.deepEqual(auth.authenticate(issued.sessionToken)?.scopes, ['memory']); // narrowed without reconnect
+  assert.equal(store.setScopes(deviceId, undefined), true);
+  assert.equal(auth.authenticate(issued.sessionToken)?.scopes, undefined); // restored without reconnect
+  assert.equal(store.setScopes(deviceId, ['memory', 'agent']), true);
+  assert.deepEqual(auth.authenticate(issued.sessionToken)?.scopes, ['memory', 'agent']); // sets of scopes, any stored order
+});

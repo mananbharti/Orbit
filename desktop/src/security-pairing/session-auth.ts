@@ -18,6 +18,11 @@ export interface Session {
   readonly scopes?: readonly Scope[];
 }
 
+function sameScopes(a: readonly Scope[] | undefined, b: readonly Scope[] | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',');
+}
+
 export const SESSION_TTL_MS = 5 * 60 * 1_000;
 const MAX_SESSIONS = 128;
 const MAX_SESSIONS_PER_DEVICE = 8;
@@ -59,6 +64,14 @@ export class SessionAuth {
     if (session.expiresAt <= this.now() || !this.credentials.isActive(session.deviceId)) {
       this.sessions.delete(key);
       return undefined;
+    }
+    // Permission changes apply to live sessions on the next command, not only on reconnect.
+    const scopes = this.credentials.scopesOf?.(session.deviceId);
+    if (!sameScopes(session.scopes, scopes)) {
+      const refreshed: Session = Object.freeze({ deviceId: session.deviceId, sessionId: session.sessionId,
+        expiresAt: session.expiresAt, ...(scopes ? { scopes: Object.freeze([...scopes]) } : {}) });
+      this.sessions.set(key, refreshed);
+      return refreshed;
     }
     return session;
   }
