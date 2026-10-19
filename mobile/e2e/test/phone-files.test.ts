@@ -52,6 +52,24 @@ test('a multi-chunk file sent from the phone arrives intact on the desktop', asy
   assert.equal(f.api.getState().transfer?.state, 'completed');
   assert.ok(received(f.root).some(b => b.equals(data)));
 });
+test('an interrupted upload resumes from where it stopped, not from zero', async t => {
+  const f = await phone(t);
+  const data = randomBytes(100_000);
+  const reads: number[] = [];
+  let failAt = 2; // die during the third chunk read
+  const flaky: FileSource = { name: 'resume.bin', size: data.length,
+    sha256: async () => createHash('sha256').update(data).digest('hex'),
+    read: async (o, l) => { reads.push(o); if (failAt-- <= 0 && o > 0) throw new Error('network died'); return new Uint8Array(data.subarray(o, o + l)); } };
+  await assert.rejects(f.api.upload(flaky));
+  assert.equal(f.api.getState().transfer?.state, 'paused'); // honest pause, not a fake failure or a hang
+  failAt = Number.MAX_SAFE_INTEGER;
+  reads.length = 0;
+  await f.api.retry();
+  assert.equal(f.api.getState().transfer?.state, 'completed');
+  assert.ok(received(f.root).some(b => b.equals(data)));
+  assert.equal(reads[0]! > 0, true, `resumed from an offset, got reads at ${reads.join(',')}`);
+});
+
 test('an empty-looking small file also transfers', async t => {
   const f = await phone(t);
   const data = Buffer.from('hello');
