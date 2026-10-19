@@ -69,3 +69,25 @@ test('the desktop rejects an invalid event and ends the session instead of guess
   assert.equal(f.api.getState().status, 'ended');
   assert.deepEqual(f.device.applied, []);
 });
+
+test('macros are saved on the desktop and run as one ordered batch inside the session', async t => {
+  const f = await phone(t, true);
+  await f.api.begin();
+  const saved = await f.api.saveMacro('Copy-paste-enter', [
+    { key: 'c', modifiers: ['ctrl'] },
+    { key: 'v', modifiers: ['ctrl'] },
+    { key: 'enter' },
+  ]);
+  assert.equal(saved.length, 1);
+  assert.deepEqual((await f.api.macros()).map(m => m.name), ['Copy-paste-enter']);
+  await f.api.runMacro(saved[0]!);
+  assert.deepEqual(f.device.applied, [
+    { t: 'key', key: 'c', modifiers: ['ctrl'] },
+    { t: 'key', key: 'v', modifiers: ['ctrl'] },
+    { t: 'key', key: 'enter' },
+  ], 'every chord landed as one batch, in order');
+  const edited = await f.api.saveMacro('Just enter', [{ key: 'enter' }], saved[0]!.id);
+  assert.deepEqual(edited.map(m => [m.name, m.steps.length]), [['Just enter', 1]]);
+  assert.deepEqual((await f.api.deleteMacro(saved[0]!.id)).length, 0);
+  await f.api.end();
+});
