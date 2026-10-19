@@ -3,7 +3,7 @@ import { request } from 'node:https';
 import { X509Certificate } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { identityHostname } from '../../../desktop/src/security-pairing/desktop-identity.js';
-import { AuthenticationRejected, type Channel, type ChannelHandlers, type PinnedTransport, type PinnedTrust } from '../../core/src/transport.js';
+import { AuthenticationRejected, TransportError, type Channel, type ChannelHandlers, type PinnedTransport, type PinnedTrust } from '../../core/src/transport.js';
 
 /** certificates maps fingerprint to PEM; production phones pin the fingerprint natively without needing the PEM. */
 export class NodePinnedTransport implements PinnedTransport {
@@ -26,11 +26,15 @@ export class NodePinnedTransport implements PinnedTransport {
         res.on('data', (c: Buffer) => { body += c.toString('utf8'); });
         res.on('end', () => {
           if (res.statusCode === 401) return reject(new AuthenticationRejected());
-          if (res.statusCode !== 200) return reject(new Error('rejected'));
+          if (res.statusCode !== 200) return reject(new TransportError('desktop-refused', String(res.statusCode)));
           try { resolve(JSON.parse(body)); } catch { reject(new Error('bad json')); }
         });
       });
-      req.on('error', () => reject(new Error('request failed')));
+      req.on('error', (e: NodeJS.ErrnoException) => {
+        const kind = e.code === 'ECONNREFUSED' ? 'refused' : e.code === 'ETIMEDOUT' ? 'timeout'
+          : /pin|certificate/i.test(e.message) ? 'pin-mismatch' : 'unreachable';
+        reject(new TransportError(kind, e.code));
+      });
       req.end();
     });
   }
