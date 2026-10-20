@@ -90,3 +90,36 @@ test('interrupt stops a running command like Ctrl+C and the session stays usable
   assert.equal(after.exitCode, 0);
   await api.end();
 });
+
+test('runaway output is capped and flagged truncated, and the session still works afterwards', async t => {
+  const api = await phone(t, true);
+  await api.begin();
+  let bytes = 0;
+  api.onOutput((_s, data) => { bytes += data.length; });
+  const flood = await api.exec('i=0; while [ $i -lt 4000 ]; do echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; i=$((i+1)); done', 30_000);
+  assert.equal(flood.truncated, true);
+  await new Promise(r => setTimeout(r, 200));
+  assert.ok(bytes <= 64 * 1024, `streamed output stays near the 48KB budget, got ${bytes}`);
+  assert.equal((await api.exec('echo still-alive')).exitCode, 0);
+});
+
+test('a command past its timeout is stopped and flagged, and the session stays usable', async t => {
+  const api = await phone(t, true);
+  await api.begin();
+  const slow = await api.exec('sleep 30', 1_000);
+  assert.equal(slow.timedOut, true);
+  assert.equal((await api.exec('echo after-timeout')).exitCode, 0);
+});
+
+test('the working directory persists between commands in one session', async t => {
+  const api = await phone(t, true);
+  await api.begin();
+  const moved = await api.exec('cd /tmp');
+  assert.equal(moved.exitCode, 0);
+  assert.equal(moved.cwd, '/tmp');
+  const chunks: string[] = [];
+  api.onOutput((_s, data) => chunks.push(data));
+  await api.exec('pwd');
+  await new Promise(r => setTimeout(r, 100));
+  assert.ok(chunks.join('').includes('/tmp'));
+});
