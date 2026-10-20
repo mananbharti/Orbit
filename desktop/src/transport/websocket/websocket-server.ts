@@ -33,9 +33,12 @@ export function createWebSocketTransport(options: TransportOptions) {
   const connections = new ConnectionManager(options.router, options.auth, options.log, options.heartbeatMs);
   const sockets = new Set<Duplex>();
   const upgrades = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES, perMessageDeflate: false });
-  const attempts = new Map<string, { count: number; until: number }>();
+  const attempts = new Map<string, { count: number; failures: number; until: number }>();
   const rateWindowMs = 60_000;
-  const maxAttemptsPerWindow = 60;
+  // Valid traffic is cheap, failed traffic is expensive: a device guessing credentials is cut off after a few
+  // misses, while the real phone reconnecting and syncing never runs into the much larger overall cap.
+  const maxAttemptsPerWindow = 600;
+  const maxFailuresPerWindow = 20;
   let stopping = false;
 
   function allowed(request: IncomingMessage): boolean {
@@ -47,10 +50,15 @@ export function createWebSocketTransport(options: TransportOptions) {
     let entry = attempts.get(address);
     if (!entry) {
       if (attempts.size >= MAX_CONNECTIONS * 4) return false;
-      entry = { count: 0, until: now + rateWindowMs };
+      entry = { count: 0, failures: 0, until: now + rateWindowMs };
       attempts.set(address, entry);
     }
-    return ++entry.count <= maxAttemptsPerWindow;
+    return ++entry.count <= maxAttemptsPerWindow && entry.failures < maxFailuresPerWindow;
+  }
+
+  function fail(request: IncomingMessage): void {
+    const entry = attempts.get(request.socket.remoteAddress ?? '');
+    if (entry) entry.failures += 1;
   }
 
   const server = createServer({ ...options.tls, minVersion: 'TLSv1.2', maxHeaderSize: 8_192 }, (request, response) => {
@@ -58,6 +66,7 @@ export function createWebSocketTransport(options: TransportOptions) {
     response.setHeader('Content-Type', 'application/json');
     request.on('error', () => response.destroy());
     response.on('error', () => response.destroy());
+    response.on('finish', () => { if (response.statusCode >= 400 && response.statusCode !== 403) fail(request); });
     if (!allowed(request)) {
       response.writeHead(403).end(JSON.stringify({ version: PROTOCOL_VERSION, error: 'REJECTED' }));
       return;
@@ -112,6 +121,7 @@ export function createWebSocketTransport(options: TransportOptions) {
   server.on('upgrade', (request, socket, head) => {
     socket.on('error', () => socket.destroy());
     const reject = () => {
+      fail(request);
       options.log.record({ severity: 'warn', eventType: 'authentication.rejected', outcome: 'rejected' });
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
     };

@@ -36,11 +36,29 @@ test('unknown paths and wrong methods are 404, and a bad pairing token is a plai
   assert.ok(!bad.body.includes('not-a-real-token'), 'the reply never echoes the credential');
 });
 
-test('a guessing flood is cut off after the per-minute budget, even for a correct token', async t => {
+test('a guessing flood is cut off after a few misses, even for a correct token from that address', async t => {
   const { service, call } = await desktop(t);
   let refused = 0;
-  for (let i = 0; i < 70; i++) { if ((await call('/v1/pair', { Authorization: `Bearer guess-${i}` })).status === 403) refused += 1; }
-  assert.ok(refused >= 5, `later attempts were refused, got ${refused}`);
+  for (let i = 0; i < 40; i++) { if ((await call('/v1/pair', { Authorization: `Bearer guess-${i}` })).status === 403) refused += 1; }
+  assert.ok(refused >= 15, `later guesses were refused, got ${refused}`);
   const qr = service.pairing.open();
   assert.equal((await call('/v1/pair', { Authorization: `Bearer ${qr.pairingToken}` })).status, 403, 'the budget applies to everything from that address');
+});
+
+test('successful traffic is nowhere near the budget, so busy real use is never locked out', async t => {
+  const { service, call } = await desktop(t);
+  const qr = service.pairing.open();
+  const paired = JSON.parse((await call('/v1/pair', { Authorization: `Bearer ${qr.pairingToken}` })).body) as { credential?: string; deviceCredential?: string; token?: string };
+  const credential = paired.credential ?? paired.deviceCredential ?? paired.token ?? '';
+  assert.ok(credential, `pairing returned a credential, got keys ${Object.keys(paired).join(',')}`);
+  for (let i = 0; i < 150; i++) assert.equal((await call('/v1/session', { Authorization: `Bearer ${credential}` })).status, 200, `request ${i}`);
+});
+
+test('a few mistakes do not lock the real phone out of reconnecting', async t => {
+  const { service, call } = await desktop(t);
+  const qr = service.pairing.open();
+  const paired = JSON.parse((await call('/v1/pair', { Authorization: `Bearer ${qr.pairingToken}` })).body) as Record<string, string>;
+  const credential = paired.credential ?? paired.deviceCredential ?? paired.token ?? '';
+  for (let i = 0; i < 5; i++) assert.equal((await call('/v1/session', { Authorization: `Bearer ${'x'.repeat(43)}` })).status, 401);
+  assert.equal((await call('/v1/session', { Authorization: `Bearer ${credential}` })).status, 200);
 });
