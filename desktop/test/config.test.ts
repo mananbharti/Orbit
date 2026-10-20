@@ -1,6 +1,7 @@
 /** Service settings accept only local addresses and valid values, and refuse legacy overrides. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { resolve } from 'node:path';
 import { isLocalAddress, readConfig } from '../src/config.js';
 
 test('private, loopback and link-local addresses are local; public and malformed ones are not', () => {
@@ -16,7 +17,7 @@ test('defaults bind loopback on 8765 and honor the environment', () => {
   const c = readConfig({ ORBIT_HOST: '192.168.137.1', ORBIT_PORT: '9000', ORBIT_DISPLAY_NAME: 'Omen', ORBIT_RECEIVE_DIR: '/tmp/in' });
   assert.equal(c.host, '192.168.137.1');
   assert.equal(c.port, 9000);
-  assert.equal(c.inbox, '/tmp/in');
+  assert.equal(c.inbox, resolve('/tmp/in'));
 });
 
 test('a public host, bad port, bad display name or legacy override is refused', () => {
