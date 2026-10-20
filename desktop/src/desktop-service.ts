@@ -106,7 +106,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (options.memory !== false) memory = new MemoryService(registry, new GraphStore(join(directory, 'memory.json')), log);
     const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);
     if (systemFactory) system = new SystemControl(registry, systemFactory, log);
-    panic = new PanicLock(registry, store, systemFactory, log);
+    panic = new PanicLock(registry, store, systemFactory, log, () => transport?.closeUnauthenticated());
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,

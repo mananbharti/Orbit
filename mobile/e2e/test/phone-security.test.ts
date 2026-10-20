@@ -73,3 +73,13 @@ test('panic lock unpairs the calling phone and leaves other phones alone', async
   await assert.rejects(a.memory.recall('panic-check'), 'the panicking phone is cut off');
   assert.equal((await b.memory.recall('panic-check'))[0]?.name, 'panic-check', 'the other phone still works');
 });
+
+test('after panic the calling phone ends in authentication-required right away, not after the next heartbeat', async t => {
+  const { addPhone } = await world(t);
+  const a = await addPhone(); const b = await addPhone();
+  await a.system.panic();
+  const by = Date.now() + 5_000;
+  while (a.session.status !== 'authentication-required' && Date.now() < by) await new Promise(r => setTimeout(r, 50));
+  assert.equal(a.session.status, 'authentication-required');
+  assert.equal(b.session.status, 'connected', 'the other phone stays connected');
+});

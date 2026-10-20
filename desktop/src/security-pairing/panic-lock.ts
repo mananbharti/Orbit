@@ -11,7 +11,8 @@ export class PanicLock {
   private readonly unregister: () => void;
 
   constructor(registry: CommandRegistry, private readonly credentials: FilePairedCredentialStore,
-    private readonly createLockAdapter: (() => SystemControlAdapter) | undefined, private readonly log: ActivityLog) {
+    private readonly createLockAdapter: (() => SystemControlAdapter) | undefined, private readonly log: ActivityLog,
+    private readonly onRevoked: () => void = () => undefined) {
     this.unregister = registry.register('system.panic', {
       validate: payload => emptySystemSchema.safeParse(payload).success,
       execute: (_payload, context) => this.panic(context),
@@ -32,6 +33,7 @@ export class PanicLock {
     // The reply must reach the phone first: revoking closes the socket before the response frame is written, so the unpair lands a tick after dispatch returns.
     setTimeout(() => {
       const unpaired = this.credentials.revoke(deviceId);
+      this.onRevoked();
       this.log.record({ severity: 'warn', eventType: 'system.panic', outcome: unpaired ? 'success' : 'failed', deviceId });
     }, 25).unref();
     return { status: locked ? 'locked' : 'unpaired' };
