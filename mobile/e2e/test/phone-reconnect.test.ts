@@ -8,6 +8,7 @@ import { test, type TestContext } from 'node:test';
 import { startDesktop } from '../../../desktop/src/desktop-service.js';
 import { MemoryApi } from '../../core/src/memory.js';
 import { pairWithQr } from '../../core/src/pairing.js';
+import { SystemApi } from '../../core/src/system.js';
 import { NotSent, OrbitSession } from '../../core/src/session.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
 
@@ -118,4 +119,28 @@ test('when the desktop goes away the phone reports reconnecting, and it recovers
   while (session.status !== 'connected' && Date.now() < backBy) await new Promise(r => setTimeout(r, 50));
   assert.equal(session.status, 'connected', `recovered without re-pairing; saw ${seen.join(' > ')}`);
   assert.equal((await memory.recall('survives'))[0]?.facts[0], 'yes');
+});
+
+test('a desktop command that hangs times out on the phone, and the session recovers for the next command', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-hang-'));
+  let calls = 0;
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    system: { createAdapter: () => ({
+      power: async () => {}, getVolume: async () => ({ level: 10, muted: false }), setVolume: async () => {}, setBrightness: async () => {},
+      getBrightness: async () => { calls += 1; if (calls === 1) await new Promise(() => undefined); return 55; },
+      getDisplayMode: async () => ({ theme: null, nightLight: null }), setDisplayMode: async () => {},
+    }) } });
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID, commandTimeoutMs: 300, retryBaseMs: 20, retryMaxMs: 100 });
+  t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  await session.start();
+  const system = new SystemApi(session);
+  await assert.rejects(() => system.getBrightness(), 'the hung command fails instead of waiting forever');
+  const by = Date.now() + 5_000;
+  while (session.status !== 'connected' && Date.now() < by) await new Promise(r => setTimeout(r, 25));
+  assert.equal(session.status, 'connected');
+  assert.equal(await system.getBrightness(), 55, 'the next command works on the fresh connection');
 });
