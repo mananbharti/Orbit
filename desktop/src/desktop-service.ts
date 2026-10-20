@@ -118,7 +118,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     const hint: DesktopHint = { desktopServiceId: identity.desktopServiceId, displayName: options.displayName,
       endpoint: `wss://${host}:${address.port}/v1/channel`, certificate: identity.certificate };
     const pairing = new PairingService({ ...hint, macAddresses, certificateFingerprint: certificateFingerprint(identity.certificate) }, store, log);
-    devices = new DeviceDirectory(registry, store);
+    devices = new DeviceDirectory(registry, store, () => transport?.closeUnauthenticated());
     automations = new AutomationService(registry, new AutomationStore(join(directory, 'automations.json')), {
       launchScene: sceneId => launcher!.launchSceneLocal(sceneId),
       launchApp: appId => launcher!.launchLocal(appId),

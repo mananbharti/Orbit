@@ -138,6 +138,7 @@ export function createWebSocketTransport(options: TransportOptions) {
   });
 
   return {
+    closeUnauthenticated(): void { connections.closeUnauthenticated(); },
     publish(deviceId: string, eventType: string, data: JsonValue): void {
       connections.publish(deviceId, eventType, data);
     },

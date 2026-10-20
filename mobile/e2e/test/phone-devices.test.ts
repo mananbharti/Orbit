@@ -71,3 +71,17 @@ test('a phone can revoke itself; the reply still lands before the cutoff', async
   await assert.rejects(b.memory.remember({ name: 'late' }));
   await a.memory.remember({ name: 'fine' }); // the other phone is unaffected
 });
+
+test('a revoked phone ends in authentication-required and stops retrying, instead of looping on a dead credential', async t => {
+  const { addPhone } = await world(t);
+  const a = await addPhone(); const b = await addPhone();
+  const seen: string[] = [];
+  b.session.onStatus(s => seen.push(s));
+  await a.devices.revoke(b.paired.deviceId);
+  const by = Date.now() + 10_000;
+  while (b.session.status !== 'authentication-required' && Date.now() < by) await new Promise(r => setTimeout(r, 50));
+  assert.equal(b.session.status, 'authentication-required', `saw ${seen.join(' > ')}`);
+  const settled = seen.length;
+  await new Promise(r => setTimeout(r, 1_500));
+  assert.equal(seen.length, settled, 'no further status churn once the credential is known to be dead');
+});

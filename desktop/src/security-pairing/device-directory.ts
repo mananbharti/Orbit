@@ -11,7 +11,8 @@ import type { FilePairedCredentialStore } from './paired-credential-store.js';
 export class DeviceDirectory {
   private readonly unregister: (() => void)[];
 
-  constructor(registry: CommandRegistry, private readonly store: FilePairedCredentialStore) {
+  constructor(registry: CommandRegistry, private readonly store: FilePairedCredentialStore,
+    private readonly onRevoked: () => void = () => undefined) {
     this.unregister = [
       registry.register('pair.devices', { validate: p => p === null || (typeof p === 'object' && Object.keys(p).length === 0),
         execute: async (_p, context) => {
@@ -33,11 +34,12 @@ export class DeviceDirectory {
           if (deviceId === context.session.deviceId) {
             // The reply must reach the phone first: revoking closes the socket before the response frame is written,
             // so a phone unpairing itself lands a tick after dispatch returns (same pattern as panic lock).
-            setTimeout(() => { this.store.revoke(deviceId); }, 25).unref();
+            setTimeout(() => { this.store.revoke(deviceId); this.onRevoked(); }, 25).unref();
             return { current: context.session.deviceId, devices: this.store.list().filter(d => d.deviceId !== deviceId)
               .map(d => ({ deviceId: d.deviceId, scopes: d.scopes === 'all' ? 'all' : [...d.scopes] })) } as unknown as JsonValue;
           }
           if (!this.store.revoke(deviceId)) throw new ProtocolError('PAIR_NOT_FOUND');
+          this.onRevoked();
           return this.current(context.session.deviceId);
         } }),
     ];

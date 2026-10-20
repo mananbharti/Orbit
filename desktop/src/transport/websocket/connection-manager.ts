@@ -144,6 +144,15 @@ export class ConnectionManager {
     connection.expiryTimer.unref();
   }
 
+  /** Closes every socket whose credential is gone (revoked), so an idle phone learns at once instead of at the next heartbeat. */
+  closeUnauthenticated(): void {
+    for (const [socket, connection] of this.connections) {
+      if (socket.readyState === WebSocket.OPEN && !this.auth.authenticate(connection.token)) {
+        this.close(socket, connection, 4001, 'Session expired or revoked');
+      }
+    }
+  }
+
   private checkConnections(): void {
     for (const [socket, connection] of this.connections) {
       if (socket.readyState !== WebSocket.OPEN) continue;
