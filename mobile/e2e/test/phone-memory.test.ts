@@ -80,3 +80,14 @@ test('memory survives a desktop restart in the same directory', async t => {
   const hits = await new MemoryApi(session2).recall('orbit launch');
   assert.deepEqual(hits[0]?.facts, ['ships on the 24th']);
 });
+
+test('odd search text is just text: regex, SQL and path characters never break recall or match everything', async t => {
+  const api = await phone(t);
+  await api.remember({ name: 'Plain note', fact: 'nothing special' });
+  for (const q of ['.*', '(', '[a-', "'; DROP TABLE x;--", '../../etc/passwd', '%', '\\', '\u0000', '🙂', ' '.repeat(5)]) {
+    let hits: Awaited<ReturnType<typeof api.recall>> | undefined;
+    try { hits = await api.recall(q); } catch { /* a clean refusal is fine */ }
+    if (hits) assert.ok(!hits.some(h => h.name === 'Plain note') || q.trim() === '', `query ${JSON.stringify(q)} must not match everything`);
+  }
+  assert.equal((await api.recall('plain note'))[0]?.name, 'Plain note', 'memory still works afterwards');
+});
