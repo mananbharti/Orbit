@@ -141,3 +141,15 @@ test('unsubscribe stops the stream; a fresh subscribe resumes with a clean state
   f.desktopClipboard.value = { kind: 'text', text: 'third copy' };
   await waitForClipboard(() => f.api.getState().incoming?.text === 'third copy'); // new changes flow again
 });
+
+test('after the phone reconnects, clipboard sharing resumes by itself without starting it again', async t => {
+  const f = await phone(t);
+  await f.api.start();
+  f.desktopClipboard.value = { kind: 'text', text: 'before the drop' };
+  await waitForClipboard(() => f.api.getState().incoming?.text === 'before the drop');
+  f.session.stop();
+  await f.session.start();
+  await waitForClipboard(() => f.api.getState().active === true); // resubscribed by itself
+  f.desktopClipboard.value = { kind: 'text', text: 'after the drop' };
+  await waitForClipboard(() => f.api.getState().incoming?.text === 'after the drop');
+});
