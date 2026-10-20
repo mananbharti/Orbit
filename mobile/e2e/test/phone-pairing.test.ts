@@ -57,3 +57,14 @@ test('a tampered token is rejected without burning the real QR, and an expired c
   await session.start();
   assert.equal((await new DevicesApi(session).refresh()).length, 2); // exactly the two real pairings, no phantoms
 });
+
+test('a QR whose pinned certificate does not match the desktop is refused, and the real invitation is not burned', async t => {
+  const { service, transport } = await world(t);
+  const qr = service.pairing.open();
+  const wrongFingerprint = randomBytes(32).toString('hex');
+  const impostor = JSON.stringify({ ...qr, certificateFingerprint: wrongFingerprint });
+  await assert.rejects(pairWithQr(impostor, transport(wrongFingerprint)),
+    (e: unknown) => e instanceof PairingError && /not the computer/i.test(e.message), 'a certificate that does not hash to the pinned value is never trusted');
+  const paired = await pairWithQr(JSON.stringify(qr), transport(qr.certificateFingerprint));
+  assert.ok(paired.deviceId, 'the real QR still pairs');
+});
