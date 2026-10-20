@@ -175,3 +175,24 @@ test('an upload cut by a desktop restart resumes from the partial on disk after 
   assert.ok(received(root).some(b => b.equals(data)), 'the whole file arrived intact');
   assert.ok(reads[0]! > 0, `resumed from the saved partial, not from zero (reads at ${reads.slice(0, 3).join(',')})`);
 });
+
+test('a download interrupted on the phone resumes from the bytes already saved and still verifies', async t => {
+  const f = await phone(t);
+  const data = randomBytes(150_000);
+  const path = join(f.root, 'big-from-pc.bin'); writeFileSync(path, data);
+  await f.api.watch();
+  await f.service.files.offerLocal(path, f.deviceId);
+  const [offer] = await f.api.refreshOffers();
+  assert.ok(offer);
+  const sink = memorySink();
+  let writes = 0;
+  const flaky: FileSink = { ...sink.sink, write: async (o, b) => { if (++writes === 2) throw new Error('phone storage hiccup'); await sink.sink.write(o, b); } };
+  await assert.rejects(f.api.download(offer, flaky));
+  assert.equal(f.api.getState().transfer?.state, 'paused');
+  const saved = sink.data.length;
+  assert.ok(saved > 0 && saved < data.length, `some but not all bytes saved, got ${saved}`);
+  await f.api.retry();
+  assert.equal(f.api.getState().transfer?.state, 'completed');
+  assert.ok(sink.data.equals(data), 'the full file is byte-identical, no duplicated or missing range');
+  assert.equal(sink.finalized, true);
+});
