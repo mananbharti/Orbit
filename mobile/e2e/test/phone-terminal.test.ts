@@ -1,7 +1,7 @@
 /** Phone core runs a real terminal session through the real desktop service; harmless sh commands only. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -122,4 +122,30 @@ test('the working directory persists between commands in one session', async t =
   await api.exec('pwd');
   await new Promise(r => setTimeout(r, 100));
   assert.ok(chunks.join('').includes('/tmp'));
+});
+
+test('when the phone drops mid-command, the desktop stops that command and the terminal is free again after reconnecting', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-terminal-drop-'));
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    terminal: { confirmation: { verify: async () => true } } });
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  const api = new TerminalApi(session);
+  t.after(async () => { api.dispose(); session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  await session.start();
+  const marker = join(root, 'should-not-exist');
+  await api.begin();
+  const running = api.exec(`sleep 2; touch ${marker}`).catch(() => undefined);
+  await new Promise(r => setTimeout(r, 300));
+  session.stop(); // the phone goes away mid-command
+  await running;
+  await session.start();
+  await new Promise(r => setTimeout(r, 2_500));
+  assert.equal(existsSync(marker), false, 'the abandoned command was stopped, not left running');
+  await api.begin(); // not BUSY: the dead session was released
+  assert.equal((await api.exec('echo fresh')).exitCode, 0);
+  await api.end();
 });
