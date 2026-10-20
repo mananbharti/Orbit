@@ -166,7 +166,7 @@ export class OrbitSession {
         },
         onMessage: text => { if (this.channel === channel) this.onMessage(channel, text); },
         onClose: () => {
-          if (!opened) { reject(new Error('Encrypted channel closed before opening')); return; }
+          if (!opened) { reject(new TransportError('desktop-refused', 'channel-closed')); return; }
           this.onChannelClosed(channel);
         },
       });
