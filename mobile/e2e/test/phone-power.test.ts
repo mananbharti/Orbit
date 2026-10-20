@@ -12,7 +12,7 @@ import { CommandError, OrbitSession } from '../../core/src/session.js';
 import { SystemApi } from '../../core/src/system.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
 
-async function phone(t: TestContext, failing = false) {
+async function phone(t: TestContext, failing = false, uuid: () => string = randomUUID) {
   const powered: string[] = [];
   const root = mkdtempSync(join(tmpdir(), 'orbit-power-'));
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
@@ -25,7 +25,7 @@ async function phone(t: TestContext, failing = false) {
   const qr = service.pairing.open();
   (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
   const paired = await pairWithQr(JSON.stringify(qr), transport);
-  const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  const session = new OrbitSession(paired, transport, { uuid });
   t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
   await session.start();
   return { system: new SystemApi(session), session, powered };
@@ -51,4 +51,13 @@ test('when the machine cannot do it the phone gets an honest error, not a fake s
   const { system, powered } = await phone(t, true);
   await assert.rejects(system.power('sleep'), (e: unknown) => e instanceof CommandError);
   assert.deepEqual(powered, []);
+});
+
+test('a replayed request id never powers the machine a second time', async t => {
+  const fixed = '11111111-1111-4111-8111-111111111111';
+  let used = 0;
+  const { system, powered } = await phone(t, false, () => (used++ === 0 ? fixed : used > 1 && used < 5 ? fixed : randomUUID()));
+  await system.power('restart');
+  await assert.rejects(system.power('restart'), (e: unknown) => e instanceof CommandError && e.code === 'DUPLICATE_REQUEST');
+  assert.deepEqual(powered, ['restart'], 'the adapter ran once');
 });
