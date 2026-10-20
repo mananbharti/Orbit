@@ -16,6 +16,8 @@ class Channel extends EventEmitter {
   subscribeGate?: ReturnType<typeof deferred>;
   writeGate?: ReturnType<typeof deferred>;
   unsubscribeError?: ErrorCode;
+  busyWrites = 0;
+  writes = 0;
   commands: string[] = [];
   async command(type: string, _payload: JsonValue): Promise<ResponseMessage> {
     this.commands.push(type);
@@ -32,6 +34,8 @@ class Channel extends EventEmitter {
       this.subscribed = false;
       return success(randomUUID(), { unsubscribed: true });
     }
+    this.writes += 1;
+    if (this.busyWrites > 0) { this.busyWrites -= 1; return failure(randomUUID(), 'BUSY'); }
     await this.writeGate?.promise;
     return success(randomUUID(), { status: 'applied', revision: 1 });
   }
@@ -159,4 +163,16 @@ test('stop cancels an in-flight clipboard write without replaying it', async t =
   assert.equal(channel.connected, false);
   assert.equal(channel.subscribed, false);
   assert.equal(channel.commands.filter(command => command === 'clipboard.write').length, 1);
+});
+
+test('a copy refused as BUSY is sent again on the next poll instead of being dropped', async t => {
+  const channel = new Channel();
+  channel.busyWrites = 2;
+  const local = new MemoryClipboard();
+  const bridge = new ClipboardClient(channel, local, 10);
+  t.after(async () => { channel.stop(); await bridge.stop(); });
+  await waitForClipboard(() => channel.subscribed);
+  await delay(50);
+  local.value = { kind: 'text', text: 'copied while the connection was busy' };
+  await waitForClipboard(() => channel.writes >= 3);
 });

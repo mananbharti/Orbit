@@ -135,6 +135,7 @@ export class ClipboardClient extends EventEmitter {
       return;
     }
     if (!changedLocally) return;
+    const previousFingerprint = subscription.fingerprint;
     subscription.fingerprint = fingerprint;
     if (local.kind !== 'text') { this.status(local.kind); return; }
     let response;
@@ -148,7 +149,8 @@ export class ClipboardClient extends EventEmitter {
     } finally { this.commandPending = false; }
     if (!this.current(generation) || this.subscription !== subscription) return;
     if (!response.payload.ok) {
-      if (response.payload.error.code === 'BUSY') this.status('unknown-outcome');
+      // BUSY is refused before dispatch, so nothing was written: forget that this copy was seen and send it on the next poll.
+      if (response.payload.error.code === 'BUSY') subscription.fingerprint = previousFingerprint;
       else this.disable();
       return;
     }
