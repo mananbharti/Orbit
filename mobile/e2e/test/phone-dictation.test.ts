@@ -101,3 +101,19 @@ test('cancelling mid-stream frees the clip; double-cancel and finish-after-cance
   assert.deepEqual(await new DictationApi(session).transcribe(speech(), 'en'), { status: 'text', text: 'After cancel' });
   assert.equal(called, 1);
 });
+
+test('an over-long clip is refused on the phone before any audio is sent, and the engine is never called', async t => {
+  let calls = 0;
+  const api = await phone(t, { transcribe: async () => { calls += 1; return 'x'; } });
+  await assert.rejects(api.transcribe(new Int16Array(16_000 * 120 + 1), 'en'), /too long/i);
+  await assert.rejects(api.transcribeCompressed(new Uint8Array(3 * 1024 * 1024 + 1), 'en'), /too long/i);
+  assert.equal(calls, 0);
+  assert.deepEqual(await api.transcribe(speech(), 'en'), { status: 'text', text: 'X' }, 'the session still works');
+});
+
+test('a decoder that returns more audio than the limit is a safe error, not an engine run', async t => {
+  let calls = 0;
+  const api = await phone(t, { transcribe: async () => { calls += 1; return 'x'; } }, undefined, async () => new Int16Array(16_000 * 121).fill(5000));
+  await assert.rejects(api.transcribeCompressed(new Uint8Array(100).fill(1), 'en'));
+  assert.equal(calls, 0, 'the engine never saw the oversize decode');
+});
