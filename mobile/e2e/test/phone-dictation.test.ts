@@ -117,3 +117,25 @@ test('a decoder that returns more audio than the limit is a safe error, not an e
   await assert.rejects(api.transcribeCompressed(new Uint8Array(100).fill(1), 'en'));
   assert.equal(calls, 0, 'the engine never saw the oversize decode');
 });
+
+test('when the phone drops mid-clip, the desktop discards the audio and the old clip cannot be finished later', async t => {
+  let called = 0;
+  const root = mkdtempSync(join(tmpdir(), 'orbit-phone-dict-drop-'));
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    dictation: { engine: { transcribe: async () => { called++; return 'late words'; } }, cleanup: () => ({ dictionary: {} }) } });
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  await session.start();
+  const begun = await session.command('dictation.begin', {}) as { dictationId: string };
+  await session.command('dictation.chunk', { dictationId: begun.dictationId, offset: 0, dataBase64: Buffer.alloc(3200).toString('base64') });
+  session.stop();
+  await session.start();
+  await assert.rejects(session.command('dictation.finish', { dictationId: begun.dictationId }),
+    (e: unknown) => e instanceof CommandError && e.code === 'INVALID_PAYLOAD');
+  assert.equal(called, 0, 'the engine never saw the abandoned audio');
+  assert.deepEqual(await new DictationApi(session).transcribe(speech(), 'en'), { status: 'text', text: 'Late words' });
+});
