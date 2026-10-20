@@ -88,3 +88,34 @@ test('the session token is dropped after the command budget and a fresh one is i
   assert.equal((await memory.recall('four'))[0]?.name, 'four');
   assert.equal((await memory.recall('one'))[0]?.name, 'one'); // desktop state survived the renewal
 });
+
+test('when the desktop goes away the phone reports reconnecting, and it recovers by itself when the desktop is back', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-auto-reconnect-'));
+  const dir = join(root, 'private');
+  const base = { directory: dir, host: '127.0.0.1', displayName: 'Orbit Test', discovery: false } as const;
+  let service = await startDesktop({ ...base, port: 0 });
+  const port = Number(new URL(service.hint.endpoint).port);
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID, retryBaseMs: 100, retryMaxMs: 400 });
+  t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const seen: string[] = [];
+  session.onStatus(s => seen.push(s));
+  await session.start();
+  const memory = new MemoryApi(session);
+  await memory.remember({ name: 'survives', fact: 'yes' });
+
+  await service.stop();
+  const lostBy = Date.now() + 10_000;
+  while (session.status === 'connected' && Date.now() < lostBy) await new Promise(r => setTimeout(r, 50));
+  assert.notEqual(session.status, 'connected', 'the phone noticed the desktop was gone');
+  await assert.rejects(() => memory.recall('survives'), 'commands fail honestly while the desktop is away');
+
+  service = await startDesktop({ ...base, port });
+  const backBy = Date.now() + 15_000;
+  while (session.status !== 'connected' && Date.now() < backBy) await new Promise(r => setTimeout(r, 50));
+  assert.equal(session.status, 'connected', `recovered without re-pairing; saw ${seen.join(' > ')}`);
+  assert.equal((await memory.recall('survives'))[0]?.facts[0], 'yes');
+});
