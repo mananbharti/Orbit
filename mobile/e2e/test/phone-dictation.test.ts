@@ -139,3 +139,25 @@ test('when the phone drops mid-clip, the desktop discards the audio and the old 
   assert.equal(called, 0, 'the engine never saw the abandoned audio');
   assert.deepEqual(await new DictationApi(session).transcribe(speech(), 'en'), { status: 'text', text: 'Late words' });
 });
+
+test('only one clip is open at a time: a second phone is refused as BUSY, and can start once the first finishes', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-phone-dict-two-'));
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    dictation: { engine: { transcribe: async () => 'one at a time' }, cleanup: () => ({ dictionary: {} }) } });
+  const sessions: OrbitSession[] = [];
+  t.after(async () => { for (const s of sessions) s.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const add = async () => {
+    const transport = new NodePinnedTransport(new Map());
+    const qr = service.pairing.open();
+    (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+    const paired = await pairWithQr(JSON.stringify(qr), transport);
+    const session = new OrbitSession(paired, transport, { uuid: randomUUID }); sessions.push(session);
+    await session.start();
+    return session;
+  };
+  const a = await add(); const b = await add();
+  const begun = await a.command('dictation.begin', {}) as { dictationId: string };
+  await assert.rejects(b.command('dictation.begin', {}), (e: unknown) => e instanceof CommandError && e.code === 'BUSY');
+  await a.command('dictation.cancel', { dictationId: begun.dictationId });
+  assert.deepEqual(await new DictationApi(b).transcribe(speech(), 'en'), { status: 'text', text: 'One at a time' });
+});
