@@ -126,3 +126,44 @@ test('a power automation fires on the real clock and reaches the system adapter 
   assert.ok(fired !== undefined, 'the power automation fired on the desktop clock');
   assert.deepEqual(powered, ['lock'], 'the lock action reached the system adapter exactly once');
 });
+
+test('at the same minute only the enabled, day-matching automation fires; a disabled one and a wrong-weekday one stay quiet', { timeout: 200_000 }, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-auto-select-'));
+  const launches: string[] = [];
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    launcher: { createAdapter: () => ({
+      list: async () => [{ key: 'registration', name: 'Notes', revision: 'one' }],
+      launch: async (app, authorize) => { authorize(); launches.push(app.key); } }) } });
+  t.after(async () => { await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  t.after(() => session.stop());
+  await session.start();
+
+  const appId = (await new LauncherApi(session).list())[0]!.appId;
+  const target = new Date(Date.now() + 70_000);
+  const hhmm = `${String(target.getHours()).padStart(2, '0')}:${String(target.getMinutes()).padStart(2, '0')}`;
+  const automations = new AutomationApi(session);
+  const action = { type: 'app', appId } as const;
+  const live = (await automations.save({ time: hhmm, days: [target.getDay()], action }))[0]!.id;
+  const off = (await automations.save({ time: hhmm, days: [], action })).find(a => a.id !== live)!.id;
+  await automations.setEnabled(off, false);
+  const wrongDay = (await automations.save({ time: hhmm, days: [(target.getDay() + 3) % 7], action })).find(a => a.id !== live && a.id !== off)!.id;
+
+  const deadline = Date.now() + 150_000;
+  let fired: number | undefined;
+  while (Date.now() < deadline) {
+    await sleep(5_000);
+    fired = (await automations.refresh()).find(a => a.id === live)?.lastFiredAt;
+    if (fired !== undefined) break;
+  }
+  assert.ok(fired !== undefined, 'the enabled, day-matching automation fired');
+  await sleep(3_000);
+  const all = await automations.refresh();
+  assert.equal(all.find(a => a.id === off)?.lastFiredAt, undefined, 'the disabled one never fired');
+  assert.equal(all.find(a => a.id === wrongDay)?.lastFiredAt, undefined, 'the wrong-weekday one never fired');
+  assert.deepEqual(launches, ['registration'], 'exactly one launch happened');
+});
