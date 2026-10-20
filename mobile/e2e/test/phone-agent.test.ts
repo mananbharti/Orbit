@@ -145,3 +145,36 @@ test('a cancelled task can be run again as a new task; the old one stays cancell
   assert.equal((await api.get(slow.taskId)).state, 'cancelled');
   await assert.rejects(api.retry(again.taskId), (e: unknown) => e instanceof CommandError && e.code === 'AGENT_INVALID_STATE');
 });
+
+test('safe mode survives a desktop restart: still paused after restart, and resume persists too', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-agent-pause-'));
+  const start = () => startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test',
+    discovery: false, agent: { runner: new DemoRunner() } });
+  const transport = new NodePinnedTransport(new Map());
+  let service = await start();
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  let session = new OrbitSession(paired, transport, { uuid: randomUUID });
+  await session.start();
+  await new AgentApi(session, randomUUID).pause();
+  session.stop();
+  await service.stop();
+
+  service = await start();
+  t.after(async () => { session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  session = new OrbitSession({ ...paired, endpoint: service.pairing.open().endpoint }, transport, { uuid: randomUUID });
+  await session.start();
+  let api = new AgentApi(session, randomUUID);
+  assert.equal(await api.safeMode(), true, 'a restart must not silently lift the kill switch');
+  await assert.rejects(api.submit('sneak in'), (e: CommandError) => e.code === 'AGENT_PAUSED');
+  await api.resume();
+  session.stop();
+  await service.stop();
+
+  service = await start();
+  session = new OrbitSession({ ...paired, endpoint: service.pairing.open().endpoint }, transport, { uuid: randomUUID });
+  await session.start();
+  api = new AgentApi(session, randomUUID);
+  assert.equal(await api.safeMode(), false, 'resume is remembered as well');
+});
