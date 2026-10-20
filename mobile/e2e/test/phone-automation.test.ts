@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { startDesktop } from '../../../desktop/src/desktop-service.js';
 import { AutomationApi } from '../../core/src/automation.js';
+import { DevicesApi } from '../../core/src/devices.js';
 import { pairWithQr } from '../../core/src/pairing.js';
 import { CommandError, OrbitSession } from '../../core/src/session.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
@@ -74,4 +75,27 @@ test('the desktop rejects invalid schedules at the protocol boundary', async t =
   await assert.rejects(api.save({ time: '25:00', days: [], action: { type: 'power', action: 'lock' } }), (e: CommandError) => e.code === 'INVALID_PAYLOAD');
   await assert.rejects(api.save({ time: '07:30', days: [7], action: { type: 'power', action: 'lock' } }), (e: CommandError) => e.code === 'INVALID_PAYLOAD');
   await assert.rejects(api.remove('not-a-uuid'), (e: CommandError) => e.code === 'INVALID_PAYLOAD');
+});
+
+test('two phones share one schedule list, and a phone that is removed does not take its automations with it', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-phone-auto-two-'));
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  t.after(async () => { await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  const add = async () => {
+    const transport = new NodePinnedTransport(new Map());
+    const qr = service.pairing.open();
+    (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+    const paired = await pairWithQr(JSON.stringify(qr), transport);
+    const session = new OrbitSession(paired, transport, { uuid: randomUUID });
+    t.after(() => session.stop());
+    await session.start();
+    return { paired, api: new AutomationApi(session), devices: new DevicesApi(session) };
+  };
+  const a = await add(); const b = await add();
+  await a.api.save({ time: '07:00', days: [], action: { type: 'power', action: 'lock' } });
+  await b.api.save({ time: '22:30', days: [5], action: { type: 'power', action: 'sleep' } });
+  assert.deepEqual((await a.api.refresh()).map(x => x.time).sort(), ['07:00', '22:30']);
+  assert.deepEqual((await b.api.refresh()).map(x => x.time).sort(), ['07:00', '22:30']);
+  await b.devices.revoke(a.paired.deviceId);
+  assert.deepEqual((await b.api.refresh()).map(x => x.time).sort(), ['07:00', '22:30'], 'the removed phone\'s schedule stays on the computer');
 });
