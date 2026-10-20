@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { startDesktop } from '../../../desktop/src/desktop-service.js';
 import { FileApi, type FileEnv, type FileSink, type FileSource } from '../../core/src/files.js';
 import { pairWithQr } from '../../core/src/pairing.js';
@@ -136,4 +137,41 @@ test('a hostile file name can never write outside the desktop inbox', async t =>
   assert.ok(!received(f.root).some(b => b.equals(data)), 'every hostile name was refused, the payload was stored nowhere');
   await f.api.upload(memorySource('fine.txt', data));
   assert.ok(received(f.root).some(b => b.equals(data)), 'a normal name still works afterwards');
+});
+
+test('an upload cut by a desktop restart resumes from the partial on disk after the desktop is back', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-files-restart-'));
+  const base = { directory: join(root, 'private'), host: '127.0.0.1', displayName: 'Orbit Test', discovery: false } as const;
+  let service = await startDesktop({ ...base, port: 0 });
+  const port = Number(new URL(service.hint.endpoint).port);
+  const transport = new NodePinnedTransport(new Map());
+  const qr = service.pairing.open();
+  (transport as unknown as { certificates: Map<string, string> }).certificates.set(qr.certificateFingerprint, service.hint.certificate);
+  const paired = await pairWithQr(JSON.stringify(qr), transport);
+  const session = new OrbitSession(paired, transport, { uuid: randomUUID, retryBaseMs: 50, retryMaxMs: 200 });
+  const api = new FileApi(session, env, 10);
+  t.after(async () => { api.dispose(); session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
+  await session.start();
+  const data = randomBytes(100_000);
+  const reads: number[] = [];
+  let cut = true;
+  const source: FileSource = { name: 'restart.bin', size: data.length, sha256: async () => createHash('sha256').update(data).digest('hex'),
+    read: async (o, l) => {
+      reads.push(o);
+      if (cut && o >= 20_000) { cut = false; await service.stop(); throw new Error('desktop went away'); }
+      return new Uint8Array(data.subarray(o, o + l));
+    } };
+  await assert.rejects(api.upload(source));
+  assert.equal(api.getState().transfer?.state, 'paused');
+  const lost = Date.now() + 10_000;
+  while (session.status === 'connected' && Date.now() < lost) await delay(25);
+  service = await startDesktop({ ...base, port });
+  const by = Date.now() + 15_000;
+  while (session.status !== 'connected' && Date.now() < by) await delay(50);
+  assert.equal(session.status, 'connected');
+  reads.length = 0;
+  await api.retry();
+  assert.equal(api.getState().transfer?.state, 'completed');
+  assert.ok(received(root).some(b => b.equals(data)), 'the whole file arrived intact');
+  assert.ok(reads[0]! > 0, `resumed from the saved partial, not from zero (reads at ${reads.slice(0, 3).join(',')})`);
 });
