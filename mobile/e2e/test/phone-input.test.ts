@@ -33,7 +33,7 @@ async function phone(t: TestContext, approve: boolean) {
   const api = new InputApi(session);
   t.after(async () => { api.dispose(); session.stop(); await service.stop(); rmSync(root, { recursive: true, force: true }); });
   await session.start();
-  return { api, device, session };
+  return { api, device, session, service, paired };
 }
 
 test('without the owner confirming, no control starts and the device is never opened', async t => {
@@ -105,4 +105,16 @@ test('when the phone goes silent the desktop releases control on its own, and a 
   await again.begin(); // the lease is truly free: the owner can hand control right back
   assert.equal(again.getState().status, 'active');
   await again.end();
+});
+
+test('revoking the phone while it controls the computer ends control at once, not after the heartbeat', async t => {
+  const f = await phone(t, true);
+  await f.api.begin();
+  f.api.push({ t: 'button', button: 'left', action: 'down' });
+  await f.api.flush();
+  const started = Date.now();
+  assert.equal(f.service.credentials.revoke(f.paired.deviceId), true);
+  while (f.device.released === 0 && Date.now() - started < 4_000) await new Promise(r => setTimeout(r, 25));
+  assert.ok(f.device.released >= 1, 'held buttons and keys were let go');
+  assert.ok(Date.now() - started < 4_000, `released in ${Date.now() - started}ms, well inside the heartbeat window`);
 });
