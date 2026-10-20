@@ -118,3 +118,21 @@ test('revoking the phone while it controls the computer ends control at once, no
   assert.ok(f.device.released >= 1, 'held buttons and keys were let go');
   assert.ok(Date.now() - started < 4_000, `released in ${Date.now() - started}ms, well inside the heartbeat window`);
 });
+
+test('when the phone connection drops while a button is held, the desktop lets go at once and control can start again after reconnecting', async t => {
+  const f = await phone(t, true);
+  await f.api.begin();
+  f.api.push({ t: 'button', button: 'left', action: 'down' });
+  await f.api.flush();
+  const started = Date.now();
+  f.session.stop(); // the connection is gone, with the button still held
+  while (f.device.released === 0 && Date.now() - started < 4_000) await new Promise(r => setTimeout(r, 25));
+  assert.ok(f.device.released >= 1, 'the held button was let go');
+  assert.ok(Date.now() - started < 4_000, `released in ${Date.now() - started}ms, not after the heartbeat`);
+  await f.session.start();
+  const again = new InputApi(f.session);
+  t.after(() => again.dispose());
+  await again.begin();
+  assert.equal(again.getState().status, 'active');
+  await again.end();
+});
