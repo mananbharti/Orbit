@@ -178,3 +178,15 @@ test('safe mode survives a desktop restart: still paused after restart, and resu
   api = new AgentApi(session, randomUUID);
   assert.equal(await api.safeMode(), false, 'resume is remembered as well');
 });
+
+test('a live-update listener keeps receiving task events after the connection is dropped and re-established', async t => {
+  const { api, session } = await phone(t);
+  const seen: string[] = [];
+  session.onEvent(e => { if (e.eventType === 'agent.task') seen.push((e.data as { state: string }).state); });
+  session.stop();
+  await session.start();
+  const task = await api.submit('tidy my downloads');
+  await until(() => api.get(task.taskId), s => TERMINAL_TASK_STATES.has(s.state));
+  await delay(50);
+  assert.ok(seen.includes('completed'), `saw ${seen.join(',')} after reconnecting`);
+});
