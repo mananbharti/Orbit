@@ -151,3 +151,25 @@ test('an extension that answers with garbage gives a safe error and the next req
   await assert.rejects(api.list(), CommandError);
   assert.deepEqual((await api.list()).tabs, []);
 });
+
+test('an extension that never answers is a clean timeout error, and a dropped extension fails the waiting request at once', { timeout: 30_000 }, async t => {
+  const { api, connect } = await withRelay(t);
+  const ext = await connect();
+  let calls = 0;
+  ext.on('message', raw => {
+    const req = JSON.parse(raw.toString()) as { id: string };
+    calls += 1;
+    if (calls === 1) return; // silent: never answers
+    if (calls === 2) { ext.close(); return; } // answers by vanishing
+    ext.send(JSON.stringify({ id: req.id, ok: true, result: { tabs: [] } }));
+  });
+  const started = Date.now();
+  await assert.rejects(api.list(), CommandError);
+  assert.ok(Date.now() - started < 9_000, `timed out cleanly in ${Date.now() - started}ms, before the phone's own 10s limit`);
+  const second = Date.now();
+  await assert.rejects(api.list(), CommandError);
+  assert.ok(Date.now() - second < 3_000, 'a dropped extension fails the request right away, not after the timeout');
+  const again = await connect();
+  again.on('message', raw => { const req = JSON.parse(raw.toString()) as { id: string }; again.send(JSON.stringify({ id: req.id, ok: true, result: { tabs: [] } })); });
+  assert.deepEqual((await api.list()).tabs, []);
+});
