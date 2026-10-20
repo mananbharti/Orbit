@@ -190,3 +190,14 @@ test('a live-update listener keeps receiving task events after the connection is
   await delay(50);
   assert.ok(seen.includes('completed'), `saw ${seen.join(',')} after reconnecting`);
 });
+
+test('an approval left waiting while the phone disconnects can still be answered after it reconnects', async t => {
+  const { api, session } = await phone(t);
+  const task = await api.submit('please approve after a drop');
+  await until(() => api.get(task.taskId), s => s.state === 'awaiting-approval');
+  session.stop();
+  await session.start();
+  assert.equal((await api.get(task.taskId)).state, 'awaiting-approval', 'the desktop kept waiting for the owner, it did not auto-decide');
+  assert.equal(await api.approve(task.taskId, true), 'approved');
+  assert.equal((await until(() => api.get(task.taskId), s => TERMINAL_TASK_STATES.has(s.state))).state, 'completed');
+});
