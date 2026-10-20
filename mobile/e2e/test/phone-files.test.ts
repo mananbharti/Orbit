@@ -121,3 +121,19 @@ test('cancelling a paused upload wipes the partial on the desktop and nothing ca
   assert.equal(record.state, 'cancelled', 'the desktop remembers it as cancelled, never as delivered');
   assert.ok(!received(f.root).some(b => b.equals(data)), 'the full file never materialized');
 });
+
+test('a hostile file name can never write outside the desktop inbox', async t => {
+  const f = await phone(t);
+  const outside = join(f.root, 'escaped.txt');
+  const data = Buffer.from('payload');
+  for (const name of ['../escaped.txt', '../../escaped.txt', '..\\..\\escaped.txt', '/etc/orbit-escape.txt', 'a/../../escaped.txt']) {
+    try { await f.api.upload(memorySource(name, data)); } catch { /* refusing is fine; escaping is not */ }
+  }
+  assert.throws(() => readFileSync(outside), 'nothing landed beside the private directory');
+  assert.throws(() => readFileSync('/etc/orbit-escape.txt'));
+  const inside = readdirSync(f.root, { recursive: true }).map(String);
+  assert.ok(inside.every(p => !p.includes('..')), `no path component escapes: ${inside.join(', ')}`);
+  assert.ok(!received(f.root).some(b => b.equals(data)), 'every hostile name was refused, the payload was stored nowhere');
+  await f.api.upload(memorySource('fine.txt', data));
+  assert.ok(received(f.root).some(b => b.equals(data)), 'a normal name still works afterwards');
+});
