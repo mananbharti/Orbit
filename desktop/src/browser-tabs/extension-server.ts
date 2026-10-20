@@ -39,7 +39,7 @@ export class ExtensionServer {
   private readonly inflight = new Map<string, { resolve: (r: ExtensionResponse) => void; timer: NodeJS.Timeout }>();
   private readonly keys: LoopbackKeys;
 
-  constructor(dir: string, private readonly onConnection?: (connected: boolean) => void) {
+  constructor(private readonly dir: string, private readonly onConnection?: (connected: boolean) => void) {
     this.keys = loadOrCreateKeys(dir);
   }
 
@@ -51,18 +51,30 @@ export class ExtensionServer {
     if (this.http) return;
     this.http = createServer((_req, res) => { res.writeHead(404).end(); });
     this.wss = new WebSocketServer({ server: this.http });
+    this.wss.on('error', () => { /* ws re-emits the http server's listen errors; start() handles them itself */ });
     this.wss.on('connection', (socket, req) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (url.searchParams.get('token') !== this.keys.token) { socket.close(4001, 'bad token'); return; }
       this.attach(socket);
     });
-    await new Promise<void>((resolve, reject) => {
+    const listen = (port: number) => new Promise<void>((resolve, reject) => {
       const server = this.http!;
-      server.once('error', reject);
-      server.listen(this.keys.port, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+      const fail = (error: Error) => { server.off('listening', ok); reject(error); };
+      const ok = () => { server.off('error', fail); resolve(); };
+      server.once('error', fail);
+      server.once('listening', ok);
+      server.listen(port, '127.0.0.1');
     });
-    const bound = this.http.address() as AddressInfo;
-    if (bound.port !== this.keys.port) this.keys.port = bound.port; // tolerate the persisted port being taken
+    try { await listen(this.keys.port); }
+    catch (error) {
+      // The persisted port is taken by something else: take any free loopback port instead of failing the whole desktop.
+      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+      await listen(0);
+      this.keys.port = (this.http.address() as AddressInfo).port;
+      const tmp = join(this.dir, '.browser-extension.tmp');
+      writeFileSync(tmp, JSON.stringify(this.keys, null, 2), { mode: 0o600 });
+      renameSync(tmp, join(this.dir, 'browser-extension.json'));
+    }
   }
 
   private attach(socket: WebSocket): void {

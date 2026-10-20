@@ -80,3 +80,20 @@ test('a newer extension connection replaces the older one', () => withServer(asy
   assert.equal(firstCode, 4000);
   second.close();
 }));
+
+test('a taken persisted port falls back to a free one and the new port is persisted, instead of failing startup', async () => {
+  const { createServer } = await import('node:net');
+  const dir = mkdtempSync(join(tmpdir(), 'orbit-ext-'));
+  const first = new ExtensionServer(dir);
+  const taken = first.port; // persisted in dir by the constructor
+  const blocker = createServer();
+  await new Promise<void>(resolve => blocker.listen(taken, '127.0.0.1', resolve));
+  try {
+    const server = new ExtensionServer(dir);
+    await server.start();
+    assert.notEqual(server.port, taken);
+    assert.ok(server.port > 1024);
+    await server.stop();
+    assert.equal(new ExtensionServer(dir).port, server.port, 'the working port is what is remembered');
+  } finally { blocker.close(); rmSync(dir, { recursive: true, force: true }); }
+});
