@@ -36,6 +36,7 @@ export async function setPlaceTrigger(desktopServiceId: string, trigger: PlaceTr
   list.push(trigger);
   all[desktopServiceId] = list;
   await writeAll(all);
+  notifyTriggerListeners();
   return list;
 }
 
@@ -44,6 +45,7 @@ export async function clearPlaceTrigger(desktopServiceId: string, sceneId: strin
   const list = (all[desktopServiceId] ?? []).filter(t => t.sceneId !== sceneId);
   all[desktopServiceId] = list;
   await writeAll(all);
+  notifyTriggerListeners();
   return list;
 }
 
@@ -55,23 +57,58 @@ export async function currentCoordinates(): Promise<{ latitude: number; longitud
   return { latitude: fix.coords.latitude, longitude: fix.coords.longitude };
 }
 
+/** Live watchers told when any trigger list changes, so a trigger added after connect still arms watching. */
+const triggerListeners = new Set<() => void>();
+const notifyTriggerListeners = (): void => { for (const l of [...triggerListeners]) l(); };
+
 /** Watches the phone's position while Orbit is open and launches scenes whose place trigger fires. */
 export class ScenePlaceWatcher {
   private readonly evaluator = new GeoTriggerEvaluator();
   private subscription?: { remove(): void };
   private lastLaunch = new Map<string, number>();
+  private watching = false;
+  private syncing = false;
+  private dirty = false;
+  private readonly onTriggersChanged = (): void => { void this.sync(); };
 
   constructor(private readonly desktopServiceId: string, private readonly launcher: LauncherApi,
     private readonly onLaunch: (sceneId: string) => void, private readonly onError: (message: string) => void) {}
 
-  async start(): Promise<void> {
-    if (!location || this.subscription) return;
-    if ((await placeTriggers(this.desktopServiceId)).length === 0) return;
-    const permission = await location.requestForegroundPermissionsAsync();
-    if (!permission.granted) { this.onError('Orbit needs location access for place-based scenes'); return; }
-    this.subscription = await location.watchPositionAsync(
-      { accuracy: location.Accuracy.Balanced, timeInterval: 30_000, distanceInterval: 25 },
-      fix => { void this.evaluate(fix.coords.latitude, fix.coords.longitude); });
+  /** Arms watching when a trigger exists; sleeps (no permission prompt, no GPS) while none does. Re-checks on every trigger change. */
+  start(): void {
+    if (this.watching) return;
+    this.watching = true;
+    triggerListeners.add(this.onTriggersChanged);
+    void this.sync();
+  }
+
+  private async sync(): Promise<void> {
+    if (this.syncing) { this.dirty = true; return; }
+    if (!this.watching) return;
+    this.syncing = true;
+    try {
+      const loc = location;
+      const wanted = !!loc && (await placeTriggers(this.desktopServiceId)).length > 0;
+      if (!this.watching) return;
+      if (!wanted || !loc) {
+        this.subscription?.remove();
+        this.subscription = undefined;
+        this.evaluator.reset();
+        return;
+      }
+      if (this.subscription) return;
+      const permission = await loc.requestForegroundPermissionsAsync();
+      if (!permission.granted) { this.onError('Orbit needs location access for place-based scenes'); return; }
+      if (!this.watching) return; // stopped while the permission prompt was up
+      const subscription = await loc.watchPositionAsync(
+        { accuracy: loc.Accuracy.Balanced, timeInterval: 30_000, distanceInterval: 25 },
+        fix => { void this.evaluate(fix.coords.latitude, fix.coords.longitude); });
+      if (!this.watching) { subscription.remove(); return; } // stopped while subscribing
+      this.subscription = subscription;
+    } finally {
+      this.syncing = false;
+      if (this.dirty) { this.dirty = false; void this.sync(); }
+    }
   }
 
   private async evaluate(latitude: number, longitude: number): Promise<void> {
@@ -85,5 +122,11 @@ export class ScenePlaceWatcher {
     }
   }
 
-  stop(): void { this.subscription?.remove(); this.subscription = undefined; this.evaluator.reset(); }
+  stop(): void {
+    this.watching = false;
+    triggerListeners.delete(this.onTriggersChanged);
+    this.subscription?.remove();
+    this.subscription = undefined;
+    this.evaluator.reset();
+  }
 }
