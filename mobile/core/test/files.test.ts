@@ -129,6 +129,21 @@ test('a download chunk whose hash does not match is never written and fails the 
   api.dispose(); s.stop();
 });
 
+test('a download chunk served at the wrong offset fails instead of corrupting the file', async () => {
+  const manifest: TransferManifest = { transferId: env.uuid(), direction: 'to-client', name: 'video.mp4', sizeBytes: 100, sha256: hex(new Uint8Array(100).fill(3)), chunkBytes: FILE_CHUNK_BYTES };
+  const sink = memSink();
+  const { s, api } = await setup(type => {
+    if (type === 'file.status') return { manifest, state: 'transferring', nextOffset: 0, leaseId: LEASE };
+    if (type === 'file.resume') return { manifest, state: 'transferring', nextOffset: 0, leaseId: LEASE };
+    if (type === 'file.read') return { transferId: manifest.transferId, offset: 50, dataBase64: toBase64(new Uint8Array(100).fill(3)), sha256: hex(new Uint8Array(100).fill(3)) }; // a chunk for the wrong position
+    throw new Error(`unexpected ${type}`);
+  });
+  await assert.rejects(api.download(manifest, sink), (e: unknown) => e instanceof CommandError && e.code === 'FILE_OFFSET');
+  assert.equal(sink.writes.length, 0, 'a wrong-offset chunk is never written');
+  assert.equal(api.getState().transfer!.state, 'failed');
+  api.dispose(); s.stop();
+});
+
 test('watch loads waiting offers and a pushed offer is added once', async () => {
   const offer: TransferManifest = { transferId: LEASE, direction: 'to-client', name: 'a.txt', sizeBytes: 5, sha256: hex(new Uint8Array(5)), chunkBytes: FILE_CHUNK_BYTES };
   const { t, s, api } = await setup(type => type === 'file.subscribe' ? { subscriptionId: LEASE }
