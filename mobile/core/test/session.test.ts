@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CommandError, NotSent, OrbitSession, OutcomeUnknown, type SessionStatus } from '../src/session.js';
+import { TransportError } from '../src/transport.js';
 import { AuthenticationRejected, FakeTransport, DEVICE, paired, parseSent, sleep, token } from './fakes.js';
 
 let n = 0;
@@ -163,6 +164,29 @@ test('transient network failures back off and recover', async () => {
   assert.equal(s.status, 'reconnecting');
   t.failPost = undefined;
   await sleep(80);
+  assert.equal(s.status, 'connected');
+  s.stop();
+});
+test('a lost desktop is found through the locator once per cooldown, and the new address is persisted', async () => {
+  let now = 1_000_000;
+  let finds = 0;
+  const changed: string[] = [];
+  const t = new FakeTransport();
+  const locator = { find: async () => { finds++; return { endpoint: 'wss://192.168.1.99:8443/v1/channel',
+    raw: { version: 1, deviceId: DEVICE, sessionId: DEVICE, expiresAt: now + 9e5, sessionToken: token('s') } }; } };
+  const { s } = make(t, { locator, onEndpointChanged: (e: string) => changed.push(e), now: () => now });
+  t.failPost = new TransportError('unreachable');
+  await s.start();
+  assert.equal(s.status, 'connected');
+  assert.equal(finds, 1);
+  assert.deepEqual(changed, ['wss://192.168.1.99:8443/v1/channel']);
+  t.last.drop();
+  await sleep(60); // several retries, all inside the cooldown window
+  assert.equal(finds, 1, 'no second search inside the cooldown');
+  assert.equal(s.status, 'reconnecting');
+  now += 9_000;
+  await sleep(80);
+  assert.equal(finds, 2, 'a failure after the cooldown searches again');
   assert.equal(s.status, 'connected');
   s.stop();
 });
