@@ -81,6 +81,14 @@ test('the command queue is bounded; the command past the cap is refused', async 
   assert.equal(t.last.sent.length, 1, 'only the in-flight command reached the wire');
   s.stop();
 });
+test('immediate commands are capped; the fifth waiting one is refused', async () => {
+  const { t, s } = make(new FakeTransport(), { commandTimeoutMs: 5_000 }); await s.start();
+  for (let i = 0; i < 4; i++) void s.command('terminal.interrupt', { sessionId: 'x' }, { immediate: true }).catch(() => {});
+  await assert.rejects(s.command('terminal.end', { sessionId: 'x' }, { immediate: true }),
+    (e: NotSent) => e instanceof NotSent && e.message === 'Too many commands waiting');
+  assert.equal(t.last.sent.length, 4, 'only the four admitted commands reached the wire');
+  s.stop();
+});
 test('invalid or reserved command names and oversized payloads never reach the wire', async () => {
   const { t, s } = make(); await s.start();
   await assert.rejects(s.command('Bad Name', {}), NotSent);
