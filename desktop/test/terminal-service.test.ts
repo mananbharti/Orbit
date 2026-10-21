@@ -30,7 +30,7 @@ function context(conn: CommandConnection, authorized = true): CommandContext {
 const approve: BiometricConfirmation = { verify: async () => true };
 const deny: BiometricConfirmation = { verify: async () => false };
 
-function setup(opts: { confirm?: BiometricConfirmation; spawn?: (command: string, cwd: string) => FakeChild; home?: string } = {}) {
+function setup(opts: { confirm?: BiometricConfirmation; spawn?: (command: string, cwd: string) => FakeChild; home?: string; idleMs?: number } = {}) {
   const registry = new CommandRegistry();
   const children: FakeChild[] = [];
   const spawn = (command: string, cwd: string): ChildProcessWithoutNullStreams => {
@@ -40,7 +40,7 @@ function setup(opts: { confirm?: BiometricConfirmation; spawn?: (command: string
     return child.asChild();
   };
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'orbit-term-home-'));
-  const service = new TerminalService(registry, new ActivityLog(), opts.confirm ?? approve, spawn, home);
+  const service = new TerminalService(registry, new ActivityLog(), opts.confirm ?? approve, spawn, home, opts.idleMs);
   return { registry, children, home, service };
 }
 
@@ -98,6 +98,31 @@ test('terminal tracks cd itself and rejects bad directories', async () => {
   assert.match(String((published.find(e => e.eventType === 'terminal.output')!.data as { data: string }).data), /no such directory/);
   await service.stop();
   rmSync(sub, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true });
+});
+
+test('a running command pauses the idle watchdog instead of being killed by it', async () => {
+  const child = new FakeChild();
+  const { registry, service } = setup({ spawn: () => child, idleMs: 60 });
+  const conn = connection();
+  const ctx = context(conn);
+  const started = await registry.get('terminal.begin')!.execute({}, ctx) as { sessionId: string };
+  const exec = registry.get('terminal.exec')!.execute({ sessionId: started.sessionId, command: 'npm run build', timeoutMs: 10_000 }, ctx) as Promise<{ exitCode: number | null }>;
+  await new Promise(resolve => setTimeout(resolve, 140)); // well past the idle window, command still running
+  child.emit('exit', 0);
+  assert.equal((await exec).exitCode, 0, 'the command outlived the idle window and completed normally');
+  const interrupt = await registry.get('terminal.interrupt')!.execute({ sessionId: started.sessionId }, ctx) as { interrupted: boolean };
+  assert.equal(interrupt.interrupted, false, 'the session is still alive afterwards (nothing to interrupt)');
+  await service.stop();
+});
+
+test('the idle watchdog still ends a session with no command running', async () => {
+  const { registry, service } = setup({ idleMs: 50 });
+  const ctx = context(connection());
+  const started = await registry.get('terminal.begin')!.execute({}, ctx) as { sessionId: string };
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await assert.rejects(registry.get('terminal.exec')!.execute({ sessionId: started.sessionId, command: 'echo ok' }, ctx),
+    (e: ProtocolError) => e.code === 'TERMINAL_SESSION_REQUIRED');
+  await service.stop();
 });
 
 test('terminal enforces one command at a time, interrupt kills it, and foreign sessions are rejected', async () => {

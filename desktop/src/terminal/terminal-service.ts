@@ -46,7 +46,8 @@ export class TerminalService {
 
   constructor(registry: CommandRegistry, private readonly log: ActivityLog,
     private readonly confirmation: BiometricConfirmation = requireBiometricConfirmation,
-    private readonly spawnShell: SpawnShell = defaultSpawnShell, private readonly home: string = homedir()) {
+    private readonly spawnShell: SpawnShell = defaultSpawnShell, private readonly home: string = homedir(),
+    private readonly idleMs: number = TERMINAL_IDLE_MS) {
     this.unregister = [
       registry.register('terminal.begin', { validate: p => p === null || (typeof p === 'object' && Object.keys(p).length === 0),
         execute: async (_p, context) => this.begin(context) }),
@@ -80,61 +81,65 @@ export class TerminalService {
     }
     this.log.record({ severity: 'info', eventType: 'terminal.started', outcome: 'success',
       deviceId: context.session.deviceId, sessionId: context.session.sessionId });
-    return { sessionId: session.id, cwd: session.cwd, idleTimeoutMs: TERMINAL_IDLE_MS };
+    return { sessionId: session.id, cwd: session.cwd, idleTimeoutMs: this.idleMs };
   }
 
   private async exec(context: CommandContext, payload: { sessionId: string; command: string; timeoutMs?: number }): Promise<JsonValue> {
     const session = this.owned(context, payload.sessionId);
     if (session.current) throw new ProtocolError('BUSY');
     clearTimeout(session.idle);
-    session.idle = this.idleTimer(session);
-    const command = payload.command;
-
-    // cd is handled by the service so the working directory is real state, not a shell quirk; other shell state (variables, functions) does not carry between commands.
-    const cd = /^\s*cd(?:\s+(?<target>[^;&|]*))?\s*$/.exec(command)?.groups?.target;
-    if (cd !== undefined) {
-      let wanted = (cd.trim() || this.home).replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
-      // A real shell expands ~ to the home directory; without this, "cd ~" looked for a folder literally named ~.
-      if (wanted === '~' || wanted.startsWith('~/') || wanted.startsWith('~\\')) wanted = join(this.home, wanted.slice(1));
-      const target = resolve(session.cwd, wanted);
-      try { if (!statSync(target).isDirectory()) throw new Error('not a directory'); }
-      catch {
-        session.connection.publish('terminal.output', { sessionId: session.id, stream: 'stderr', data: `cd: no such directory: ${cd.trim()}\n` });
-        return { exitCode: 1, cwd: session.cwd, truncated: false, timedOut: false };
-      }
-      session.cwd = target;
-      return { exitCode: 0, cwd: session.cwd, truncated: false, timedOut: false };
-    }
-
-    const timeoutMs = payload.timeoutMs ?? TERMINAL_DEFAULT_TIMEOUT_MS;
-    let child: ChildProcessWithoutNullStreams;
-    try { child = this.spawnShell(command, session.cwd); }
-    catch { throw new ProtocolError('TERMINAL_UNAVAILABLE'); }
-    const running: Running = { child, outputBytes: 0, truncated: false, timedOut: false,
-      timer: setTimeout(() => { running.timedOut = true; this.kill(child); }, timeoutMs) };
-    session.current = running;
+    session.idle = undefined; // a running command is not idle; the watchdog re-arms when it finishes.
     try {
-      const onData = (stream: 'stdout' | 'stderr') => (chunk: Buffer | string): void => {
-        const text = chunk.toString();
-        if (running.outputBytes >= MAX_TERMINAL_OUTPUT) {
-          if (!running.truncated) { running.truncated = true; this.kill(child); }
-          return;
+      const command = payload.command;
+
+      // cd is handled by the service so the working directory is real state, not a shell quirk; other shell state (variables, functions) does not carry between commands.
+      const cd = /^\s*cd(?:\s+(?<target>[^;&|]*))?\s*$/.exec(command)?.groups?.target;
+      if (cd !== undefined) {
+        let wanted = (cd.trim() || this.home).replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+        // A real shell expands ~ to the home directory; without this, "cd ~" looked for a folder literally named ~.
+        if (wanted === '~' || wanted.startsWith('~/') || wanted.startsWith('~\\')) wanted = join(this.home, wanted.slice(1));
+        const target = resolve(session.cwd, wanted);
+        try { if (!statSync(target).isDirectory()) throw new Error('not a directory'); }
+        catch {
+          session.connection.publish('terminal.output', { sessionId: session.id, stream: 'stderr', data: `cd: no such directory: ${cd.trim()}\n` });
+          return { exitCode: 1, cwd: session.cwd, truncated: false, timedOut: false };
         }
-        running.outputBytes += text.length;
-        for (let i = 0; i < text.length; i += TERMINAL_CHUNK) {
-          session.connection.publish('terminal.output', { sessionId: session.id, stream, data: text.slice(i, i + TERMINAL_CHUNK) });
-        }
-      };
-      child.stdout.on('data', onData('stdout'));
-      child.stderr.on('data', onData('stderr'));
-      const exitCode = await new Promise<number | null>(resolvePromise => {
-        child.once('exit', code => resolvePromise(code));
-        child.once('error', () => resolvePromise(null));
-      });
-      return { exitCode, cwd: session.cwd, truncated: running.truncated, timedOut: running.timedOut };
+        session.cwd = target;
+        return { exitCode: 0, cwd: session.cwd, truncated: false, timedOut: false };
+      }
+
+      const timeoutMs = payload.timeoutMs ?? TERMINAL_DEFAULT_TIMEOUT_MS;
+      let child: ChildProcessWithoutNullStreams;
+      try { child = this.spawnShell(command, session.cwd); }
+      catch { throw new ProtocolError('TERMINAL_UNAVAILABLE'); }
+      const running: Running = { child, outputBytes: 0, truncated: false, timedOut: false,
+        timer: setTimeout(() => { running.timedOut = true; this.kill(child); }, timeoutMs) };
+      session.current = running;
+      try {
+        const onData = (stream: 'stdout' | 'stderr') => (chunk: Buffer | string): void => {
+          const text = chunk.toString();
+          if (running.outputBytes >= MAX_TERMINAL_OUTPUT) {
+            if (!running.truncated) { running.truncated = true; this.kill(child); }
+            return;
+          }
+          running.outputBytes += text.length;
+          for (let i = 0; i < text.length; i += TERMINAL_CHUNK) {
+            session.connection.publish('terminal.output', { sessionId: session.id, stream, data: text.slice(i, i + TERMINAL_CHUNK) });
+          }
+        };
+        child.stdout.on('data', onData('stdout'));
+        child.stderr.on('data', onData('stderr'));
+        const exitCode = await new Promise<number | null>(resolvePromise => {
+          child.once('exit', code => resolvePromise(code));
+          child.once('error', () => resolvePromise(null));
+        });
+        return { exitCode, cwd: session.cwd, truncated: running.truncated, timedOut: running.timedOut };
+      } finally {
+        clearTimeout(running.timer);
+        if (session.current === running) session.current = undefined;
+      }
     } finally {
-      clearTimeout(running.timer);
-      if (session.current === running) session.current = undefined;
+      if (!session.abort.signal.aborted && this.session === session) session.idle = this.idleTimer(session);
     }
   }
 
@@ -169,7 +174,7 @@ export class TerminalService {
   }
 
   private idleTimer(session: Session): ReturnType<typeof setTimeout> {
-    const timer = setTimeout(() => { void this.endSession(session); }, TERMINAL_IDLE_MS);
+    const timer = setTimeout(() => { void this.endSession(session); }, this.idleMs);
     timer.unref?.();
     return timer;
   }
