@@ -30,6 +30,17 @@ const BY_CODE: Partial<Record<string, string>> = {
   TABS_EXTENSION_OFFLINE: 'Connect the Orbit browser extension on your computer first.',
   TABS_NOT_FOUND: 'That tab is already gone.',
   TERMINAL_SESSION_REQUIRED: 'Start a terminal session first.',
+  BIOMETRIC_REQUIRED: 'Confirm on the computer first, then try again.',
+  INPUT_UNAVAILABLE: 'Remote control is not available on this computer.',
+  INPUT_SESSION_REQUIRED: 'Start remote control first.',
+  CLIPBOARD_UNAVAILABLE: 'The computer clipboard is not available right now.',
+  FILE_QUOTA: 'That file is too large, or too many transfers are running. Wait for one to finish.',
+  FILE_IO: 'The computer could not read or save the file. Check its disk and try again.',
+  FILE_INTEGRITY: 'The file did not arrive intact. Send it again.',
+  FILE_SOURCE_CHANGED: 'The file changed while it was being sent. Send it again.',
+  FILE_NOT_FOUND: 'That transfer no longer exists.',
+  FILE_EXPIRED: 'That transfer expired. Start it again.',
+  FILE_INVALID_STATE: 'That transfer has already finished or stopped.',
 };
 
 export function describeError(error: unknown): string {
