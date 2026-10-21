@@ -8,7 +8,7 @@ export interface RotationRate { x: number; y: number }
 
 /** One axis: 0 inside the dead zone, linear past it with the zone subtracted so motion starts smoothly. */
 export function gyroAxis(rate: number, deadZone = GYRO_DEAD_ZONE, scale = GYRO_SCALE): number {
-  return Math.abs(rate) < deadZone ? 0 : (rate - Math.sign(rate) * deadZone) * scale;
+  return !Number.isFinite(rate) || Math.abs(rate) < deadZone ? 0 : (rate - Math.sign(rate) * deadZone) * scale;
 }
 
 /** dx from roll (tilt left/right = y), dy from pitch (tilt forward/back = x). Null when the hand is still. */

@@ -26,3 +26,11 @@ test('a custom dead zone and scale are honored', () => {
   assert.equal(gyroAxis(0.2, 0.1, 100), 10);
   assert.equal(gyroDeltas({ x: 0.05, y: 0.05 }, 0.1), null);
 });
+
+test('a glitchy sensor reading (NaN or infinite) never becomes cursor motion', () => {
+  assert.equal(gyroAxis(Number.NaN), 0);
+  assert.equal(gyroAxis(Number.POSITIVE_INFINITY), 0);
+  assert.equal(gyroAxis(Number.NEGATIVE_INFINITY), 0);
+  assert.deepEqual(gyroDeltas({ x: Number.NaN, y: 1 }), { dx: gyroAxis(1), dy: 0 });
+  assert.equal(gyroDeltas({ x: Number.NaN, y: Number.NaN }), null);
+});
