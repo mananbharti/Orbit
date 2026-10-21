@@ -67,6 +67,22 @@ test('an upload resumes from the computer offset, sends each chunk once in order
   api.dispose(); s.stop();
 });
 
+test('an upload the computer acknowledges at the wrong offset fails instead of corrupting', async () => {
+  const bytes = new Uint8Array(1000).fill(3);
+  const source = memSource('data.bin', bytes);
+  const { s, api } = await setup((type, p, ctx) => {
+    if (type === 'file.status') return new CommandError('FILE_NOT_FOUND');
+    if (type === 'file.offer') { ctx.manifest = p; return { manifest: p, state: 'transferring', nextOffset: 0, leaseId: LEASE }; }
+    if (type === 'file.resume') return { manifest: ctx.manifest, state: 'transferring', nextOffset: 0, leaseId: LEASE };
+    if (type === 'file.chunk') return { transferId: p.transferId, nextOffset: p.offset + 1, state: 'transferring' }; // an ack that does not match the chunk sent
+    throw new Error(`unexpected ${type}`);
+  });
+  await assert.rejects(api.upload(source), (e: CommandError) => e instanceof CommandError && e.code === 'FILE_OFFSET');
+  assert.equal(api.getState().transfer!.state, 'failed');
+  assert.equal(api.getState().transfer!.doneBytes < bytes.length, true, 'never reports completion');
+  api.dispose(); s.stop();
+});
+
 test('a source whose hash changes after the offer fails permanently and cannot be retried', async () => {
   const bytes = new Uint8Array(1000).fill(7);
   const source = memSource('changing.bin', bytes);
