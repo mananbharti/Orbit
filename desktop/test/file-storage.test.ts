@@ -17,7 +17,7 @@ test('safeDirectory creates a missing private directory and refuses files and li
   const root = tmp();
   const made = safeDirectory(join(root, 'new-dir'));
   assert.ok(statSync(made).isDirectory());
-  assert.equal(statSync(made).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal(statSync(made).mode & 0o777, 0o700); // Windows reports 0o666; permissions are ACLs there
   const file = join(root, 'plain'); writeFileSync(file, 'x');
   assert.throws(() => safeDirectory(file), FILE_IO);
   const real = join(root, 'real'); mkdirSync(real);
@@ -71,7 +71,7 @@ test('writeChunk writes at the offset and a gap stays zero-filled', () => {
   writeChunk(path, 0, Buffer.from('ab'));
   writeChunk(path, 4, Buffer.from('ef'));
   assert.deepEqual(readFileSync(path), Buffer.from([0x61, 0x62, 0, 0, 0x65, 0x66]));
-  assert.equal(statSync(path).mode & 0o777, 0o600, 'partial is owner-only');
+  if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600, 'partial is owner-only'); // ACLs on Windows
 });
 
 test('decodeChunk accepts valid chunks and rejects every malformed variant', () => {
