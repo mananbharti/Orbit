@@ -1,6 +1,6 @@
 /** One approved remote-terminal session at a time; depends on the registry, an injectable shell spawner and the approval hook; owns no PTY. */
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -93,7 +93,10 @@ export class TerminalService {
     // cd is handled by the service so the working directory is real state, not a shell quirk; other shell state (variables, functions) does not carry between commands.
     const cd = /^\s*cd(?:\s+(?<target>[^;&|]*))?\s*$/.exec(command)?.groups?.target;
     if (cd !== undefined) {
-      const target = resolve(session.cwd, (cd.trim() || this.home).replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1'));
+      let wanted = (cd.trim() || this.home).replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+      // A real shell expands ~ to the home directory; without this, "cd ~" looked for a folder literally named ~.
+      if (wanted === '~' || wanted.startsWith('~/') || wanted.startsWith('~\\')) wanted = join(this.home, wanted.slice(1));
+      const target = resolve(session.cwd, wanted);
       try { if (!statSync(target).isDirectory()) throw new Error('not a directory'); }
       catch {
         session.connection.publish('terminal.output', { sessionId: session.id, stream: 'stderr', data: `cd: no such directory: ${cd.trim()}\n` });
