@@ -45,3 +45,8 @@ export function removeComputer(list: PairedDesktop[], desktopServiceId: string, 
   const nextActive = activeId === desktopServiceId ? next[0]?.desktopServiceId : activeId;
   return { list: next, activeId: nextActive };
 }
+
+/** Whether pairing this desktop keeps the list within its limit: re-pairing an existing computer replaces it, only a genuinely new one needs a free slot. */
+export function fitsComputer(list: PairedDesktop[], desktopServiceId: string): boolean {
+  return list.some(d => d.desktopServiceId === desktopServiceId) || list.length < MAX_COMPUTERS;
+}

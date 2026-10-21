@@ -25,4 +25,4 @@ export { isSharedFileUrl, sharedFileName } from './share-intake.js';
 export { TabsApi, browserTabSchema, type BrowserTab } from './tabs.js';
 export { GeoTriggerEvaluator, haversineMeters, type PlaceTrigger } from './geo.js';
 export { emptyCursor, selectNewPhotos, advanceCursor, recordFailure, forgetFailure, migrateBackupState, MAX_FAILED_PHOTOS, MAX_BOUNDARY_IDS, type PhotoRef, type BackupCursor, type BackupState } from './photo-backup.js';
-export { MAX_COMPUTERS, parseComputerList, serializeComputerList, chooseActive, migrateSingle, upsertComputer, rewriteComputer, removeComputer, type ComputerList } from './computer-list.js';
+export { MAX_COMPUTERS, parseComputerList, serializeComputerList, chooseActive, migrateSingle, upsertComputer, rewriteComputer, removeComputer, fitsComputer, type ComputerList } from './computer-list.js';

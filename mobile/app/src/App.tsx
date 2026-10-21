@@ -26,7 +26,7 @@ import { ComputersScreen } from './screens/ComputersScreen';
 import { AutomationsScreen } from './screens/AutomationsScreen';
 import { TerminalScreen } from './screens/TerminalScreen';
 import { TabsScreen } from './screens/TabsScreen';
-import type { PairedDesktop } from '@orbit/core';
+import { fitsComputer, peekPairingDesktopId, type PairedDesktop } from '@orbit/core';
 import { ThemeProvider, useTheme } from './theme';
 
 export function App() {
@@ -128,16 +128,25 @@ function Shell() {
   useEffect(() => () => { connected?.store.dispose(); connected?.clipboard.dispose(); connected?.files.dispose(); connected?.input.dispose(); connected?.session.stop(); }, [connected]);
 
   const onScanned = useCallback(async (text: string) => {
-    const paired = await pair(text);
-    if (appLock && !(await authenticate('Confirm it is you to pair this computer'))) {
-      pendingPaired.current = paired; setLocked(true); return;
+    try {
+      const scannedId = peekPairingDesktopId(text);
+      if (scannedId && !fitsComputer(pairedList, scannedId)) {
+        showBanner('Orbit connects to up to 8 computers. Remove one from your list first.');
+        return; // refuse before redeeming: the code stays valid for after a removal
+      }
+      const paired = await pair(text);
+      if (appLock && !(await authenticate('Confirm it is you to pair this computer'))) {
+        pendingPaired.current = paired; setLocked(true); return;
+      }
+      setPairedList(await upsertPaired(pairedList, paired));
+      setActiveId(paired.desktopServiceId);
+      setPairing(false);
+      disconnect(connected);
+      setConnected(connect(paired));
+    } catch (error) {
+      showBanner(error instanceof Error ? error.message : 'Pairing did not work. Show a new code on your computer and try again.');
     }
-    setPairedList(await upsertPaired(pairedList, paired));
-    setActiveId(paired.desktopServiceId);
-    setPairing(false);
-    disconnect(connected);
-    setConnected(connect(paired));
-  }, [appLock, connected, pairedList]);
+  }, [appLock, connected, pairedList, showBanner]);
   const unlock = useCallback(async () => {
     if (await authenticate('Unlock Orbit to connect to your computer')) {
       setLocked(false);

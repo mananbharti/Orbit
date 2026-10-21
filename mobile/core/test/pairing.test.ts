@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PairingError, pairWithQr } from '../src/pairing.js';
+import { PairingError, pairWithQr, peekPairingDesktopId } from '../src/pairing.js';
 import { AuthenticationRejected, TransportError, explainTransportFailure } from '../src/transport.js';
 import { DESKTOP, DEVICE, ENDPOINT, FINGERPRINT, FakeTransport, token } from './fakes.js';
 
@@ -68,4 +68,12 @@ test('each classified network failure gets its own plain explanation', async () 
   const used = new FakeTransport();
   used.failPost = new AuthenticationRejected();
   assert.match(((await pairWithQr(qr(), used).catch(e => e)) as PairingError).message, /did not accept this code/);
+});
+
+test('peekPairingDesktopId reads the identity for a capacity check without touching the network', () => {
+  assert.equal(peekPairingDesktopId(qr()), DESKTOP, 'a recognizable code names its desktop');
+  assert.equal(peekPairingDesktopId(qr({ expiresAt: 1 })), DESKTOP, 'even an expired code: pairWithQr reports the expiry properly');
+  for (const bad of ['hello', '', '{}', qr({ version: 2 }), qr({ desktopServiceId: 'not-a-uuid' }), 'null']) {
+    assert.equal(peekPairingDesktopId(bad), undefined, `not recognizable: ${bad.slice(0, 24)}`);
+  }
 });

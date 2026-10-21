@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { PairedDesktop } from '../src/protocol.js';
-import { MAX_COMPUTERS, chooseActive, migrateSingle, parseComputerList, removeComputer, rewriteComputer,
+import { MAX_COMPUTERS, chooseActive, fitsComputer, migrateSingle, parseComputerList, removeComputer, rewriteComputer,
   serializeComputerList, upsertComputer } from '../src/computer-list.js';
 
 const desktop = (n: number): PairedDesktop => ({
@@ -78,4 +78,12 @@ test('removeComputer switches the active computer only when the active one went 
   assert.deepEqual(removedLast, { list: [], activeId: undefined }, 'the last computer leaves no active id');
   const removedUnknown = removeComputer(list, '00000000-0000-4000-8000-999999999999', activeId);
   assert.deepEqual(removedUnknown, { list, activeId }, 'an unknown id changes nothing');
+});
+
+test('fitsComputer allows re-pairing at the limit but blocks a ninth new computer', () => {
+  const full = Array.from({ length: MAX_COMPUTERS }, (_, i) => desktop(i + 1));
+  assert.equal(fitsComputer(full, full[0]!.desktopServiceId), true, 're-pairing replaces; it does not grow the list');
+  assert.equal(fitsComputer(full, desktop(9).desktopServiceId), false, 'a ninth new computer does not fit');
+  assert.equal(fitsComputer(full.slice(0, MAX_COMPUTERS - 1), desktop(9).desktopServiceId), true, 'one free slot fits one new computer');
+  assert.equal(fitsComputer([], desktop(1).desktopServiceId), true);
 });

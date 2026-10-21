@@ -31,3 +31,11 @@ export async function pairWithQr(qrText: string, transport: PinnedTransport, now
     endpoint: qr.endpoint, certificateFingerprint: qr.certificateFingerprint, credential: result.data.credential,
     ...(qr.macAddresses?.length ? { macAddresses: qr.macAddresses } : {}) };
 }
+
+/** Reads just the desktop identity out of a scanned code, before anything is redeemed. Undefined when the text is not a recognizable Orbit code; pairWithQr gives the full error. */
+export function peekPairingDesktopId(qrText: string): string | undefined {
+  try {
+    const parsed = pairingPayloadSchema.safeParse(JSON.parse(qrText));
+    return parsed.success ? parsed.data.desktopServiceId : undefined;
+  } catch { return undefined; }
+}
