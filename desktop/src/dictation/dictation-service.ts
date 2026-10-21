@@ -78,7 +78,8 @@ export class DictationService {
         } finally { this.drop(clip); }
       } }),
       registry.register('dictation.cancel', { validate: p => refSchema.safeParse(p).success, execute: async (p, context) => {
-        const clip = this.owned(context, refSchema.parse(p).dictationId, ok(context));
+        // A busy clip is exactly the one worth cancelling: dropping it aborts the engine run.
+        const clip = this.owned(context, refSchema.parse(p).dictationId, ok(context), true);
         this.drop(clip);
         return { cancelled: true };
       } }),
@@ -86,10 +87,10 @@ export class DictationService {
   }
   async stop(): Promise<void> { for (const remove of this.unregister) remove(); this.drop(); }
 
-  private owned(context: CommandContext, id: string, connection: NonNullable<CommandContext['connection']>): Clip {
+  private owned(context: CommandContext, id: string, connection: NonNullable<CommandContext['connection']>, allowBusy = false): Clip {
     const clip = this.clip;
     if (!clip || clip.id !== id || clip.connection !== connection || clip.owner !== context.session.deviceId) throw new ProtocolError('INVALID_PAYLOAD');
-    if (clip.busy) throw new ProtocolError('BUSY');
+    if (clip.busy && !allowBusy) throw new ProtocolError('BUSY');
     return clip;
   }
   private drop(clip: Clip | undefined = this.clip): void {

@@ -115,6 +115,27 @@ test('engine failures map to COMMAND_FAILED and still free the slot', async t =>
   await begin(handle, context);
 });
 
+test('cancel during transcription aborts the engine instead of refusing with BUSY', async t => {
+  let signalSeen: AbortSignal | undefined;
+  const engine: Transcriber = { transcribe: (_pcm, { signal }) => new Promise<string>((_resolve, reject) => {
+    signalSeen = signal;
+    signal.addEventListener('abort', () => reject(new Error('aborted mid-engine')), { once: true });
+  }) };
+  const { handle } = fixture(t, { engine });
+  const { conn } = connection();
+  const context = contextFor(conn);
+  const id = await begin(handle, context);
+  await handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: loudPcm(16_000) }, context);
+  const finishing = handle('dictation.finish').execute({ dictationId: id }, context);
+  for (let i = 0; i < 100 && !signalSeen; i++) await new Promise(resolve => setImmediate(resolve)); // let the engine take the clip
+  assert.ok(signalSeen, 'the engine is running before the cancel lands');
+  assert.deepEqual(await handle('dictation.cancel').execute({ dictationId: id }, context), { cancelled: true });
+  assert.ok(signalSeen.aborted, 'the engine saw the abort');
+  await assert.rejects(finishing, /COMMAND_FAILED/);
+  const again = await begin(handle, context);
+  assert.notEqual(again, id, 'the slot is free right away');
+});
+
 test('cancel drops the clip; later chunks are rejected', async t => {
   const { handle } = fixture(t);
   const { conn } = connection();
