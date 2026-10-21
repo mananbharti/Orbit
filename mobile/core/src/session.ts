@@ -207,7 +207,11 @@ export class OrbitSession {
     try {
       const value: unknown = JSON.parse(text);
       const event = eventSchema.safeParse(value);
-      if (event.success) { for (const l of [...this.eventListeners]) l(event.data.payload); return; }
+      if (event.success) {
+        // A listener is app code: its exception is not a protocol violation, so it must not cost the channel. Isolate each one and keep going.
+        for (const l of [...this.eventListeners]) { try { l(event.data.payload); } catch { /* listener bug; other listeners and the connection carry on */ } }
+        return;
+      }
       const response = responseSchema.parse(value);
       const immediate = response.requestId === null ? undefined : this.immediate.get(response.requestId);
       if (immediate && response.requestId !== null) {

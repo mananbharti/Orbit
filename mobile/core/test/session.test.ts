@@ -94,6 +94,18 @@ test('server events reach listeners; malformed server messages close the channel
   assert.notEqual(t.last, bad);
   s.stop();
 });
+test('a throwing event listener does not drop the connection', async () => {
+  const { t, s } = make(); await s.start(); echo(t);
+  const events: unknown[] = [];
+  s.onEvent(() => { throw new Error('ui blew up'); });
+  s.onEvent(e => events.push(e));
+  t.last.deliver({ version: 1, type: 'event', requestId: null, payload: { eventType: 'agent.task', data: { a: 1 } } });
+  assert.equal(s.status, 'connected');
+  assert.equal(t.last.closed, false, 'a local listener bug is not a protocol violation');
+  assert.deepEqual(events, [{ eventType: 'agent.task', data: { a: 1 } }], 'later listeners still receive the event');
+  assert.deepEqual(await s.command('agent.list', {}), { echo: 'agent.list' }, 'commands still flow');
+  s.stop();
+});
 test('a response with an unknown id is ignored', async () => {
   const { t, s } = make(); await s.start();
   const p = s.command('agent.list', {}); await sleep(5);
