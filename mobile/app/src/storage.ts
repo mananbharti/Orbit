@@ -1,7 +1,7 @@
 /** Keeps the paired desktop record in the OS secure store; nothing else may hold the credential. */
 import * as SecureStore from 'expo-secure-store';
-import { z } from 'zod';
-import { pairedDesktopSchema, type PairedDesktop } from '@orbit/core';
+import { pairedDesktopSchema, type PairedDesktop,
+  chooseActive, migrateSingle, parseComputerList, removeComputer, rewriteComputer, serializeComputerList, upsertComputer } from '@orbit/core';
 
 const KEY = 'orbit.paired-desktop.v1';
 const LIST_KEY = 'orbit.paired-desktops.v1';
@@ -17,21 +17,23 @@ export async function loadPaired(): Promise<PairedDesktop | undefined> {
 export async function loadPairedList(): Promise<{ list: PairedDesktop[]; activeId?: string }> {
   const raw = await SecureStore.getItemAsync(LIST_KEY);
   if (raw) {
-    try {
-      const list = z.array(pairedDesktopSchema).max(8).parse(JSON.parse(raw));
+    const list = parseComputerList(raw);
+    if (list) {
       const activeId = await SecureStore.getItemAsync(ACTIVE_KEY) ?? undefined;
-      return { list, activeId: list.some(d => d.desktopServiceId === activeId) ? activeId : list[0]?.desktopServiceId };
-    } catch { await SecureStore.deleteItemAsync(LIST_KEY); }
+      return { list, activeId: chooseActive(list, activeId) };
+    }
+    await SecureStore.deleteItemAsync(LIST_KEY); // corrupt blob: drop it, then migrate below
   }
   const single = await loadPaired(); // one-time migration from the single-desktop record
   if (!single) return { list: [] };
-  await savePairedList([single], single.desktopServiceId);
+  const migrated = migrateSingle(single);
+  await savePairedList(migrated.list, migrated.activeId);
   await SecureStore.deleteItemAsync(KEY);
-  return { list: [single], activeId: single.desktopServiceId };
+  return migrated;
 }
 
 export async function savePairedList(list: PairedDesktop[], activeId?: string): Promise<void> {
-  await SecureStore.setItemAsync(LIST_KEY, JSON.stringify(z.array(pairedDesktopSchema).max(8).parse(list)), {
+  await SecureStore.setItemAsync(LIST_KEY, serializeComputerList(list), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
   if (activeId) await SecureStore.setItemAsync(ACTIVE_KEY, activeId);
 }
@@ -39,21 +41,21 @@ export async function savePairedList(list: PairedDesktop[], activeId?: string): 
 /** Rewrites one computer's record in place (used when its network address changes). */
 export async function updatePaired(paired: PairedDesktop): Promise<void> {
   const { list, activeId } = await loadPairedList();
-  if (!list.some(d => d.desktopServiceId === paired.desktopServiceId)) return;
-  await savePairedList(list.map(d => d.desktopServiceId === paired.desktopServiceId ? paired : d), activeId);
+  const next = rewriteComputer(list, paired);
+  if (!next) return;
+  await savePairedList(next, activeId);
 }
 
 /** Adds or replaces one computer (same desktopServiceId re-pairs) and makes it active. */
 export async function upsertPaired(list: PairedDesktop[], paired: PairedDesktop): Promise<PairedDesktop[]> {
-  const next = [...list.filter(d => d.desktopServiceId !== paired.desktopServiceId), paired];
+  const next = upsertComputer(list, paired);
   await savePairedList(next, paired.desktopServiceId);
   return next;
 }
 
 /** Removes one computer; returns the remaining list and the new active id. */
 export async function removePaired(list: PairedDesktop[], desktopServiceId: string, activeId?: string): Promise<{ list: PairedDesktop[]; activeId?: string }> {
-  const next = list.filter(d => d.desktopServiceId !== desktopServiceId);
-  const nextActive = activeId === desktopServiceId ? next[0]?.desktopServiceId : activeId;
+  const { list: next, activeId: nextActive } = removeComputer(list, desktopServiceId, activeId);
   await savePairedList(next, nextActive);
   if (!nextActive) await SecureStore.deleteItemAsync(ACTIVE_KEY);
   return { list: next, activeId: nextActive };
