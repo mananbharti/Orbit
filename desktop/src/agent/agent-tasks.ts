@@ -10,6 +10,7 @@ import type { AgentRunner } from './agent-runner.js';
 import type { AuditTrail } from './audit-trail.js';
 import { AUDIT_PAGE } from './audit-trail.js';
 import type { TaskLedger, TaskRecord } from './task-ledger.js';
+import type { TaskState } from '../protocol/agent-task.js';
 
 export const MAX_CONCURRENT_TASKS = 2;
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000;
@@ -139,20 +140,20 @@ export class AgentTasks {
     const signal = AbortSignal.any([abort.signal, this.stopping.signal]);
     const publish = (): void => { try { context.connection?.publish('agent.task', summary(task)); } catch { /* socket gone; ledger remains the record */ } };
     const job = this.runner.run({ taskId: task.taskId, prompt: task.prompt, signal,
-      step: text => { this.ledger.note(task, 'step', text); publish(); },
-      output: text => { this.ledger.note(task, 'output', text); publish(); },
+      step: text => { this.noteSafely(task, 'step', text); publish(); },
+      output: text => { this.noteSafely(task, 'output', text); publish(); },
       requestApproval: description => new Promise<boolean>(resolve => {
         if (signal.aborted || TERMINAL_TASK_STATES.has(task.state)) return resolve(false);
         const timer = setTimeout(() => { this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'approval-timeout' }); settle(false); }, APPROVAL_TIMEOUT_MS);
         const settle = (approved: boolean): void => {
           clearTimeout(timer); this.approvals.delete(task.taskId);
-          if (task.state === 'awaiting-approval') this.ledger.transition(task, 'running', approved ? 'Approved' : 'Denied');
+          if (task.state === 'awaiting-approval') this.transitionSafely(task, 'running', approved ? 'Approved' : 'Denied');
           publish(); resolve(approved);
         };
         this.approvals.set(task.taskId, settle);
-        this.ledger.transition(task, 'awaiting-approval', 'Waiting for approval');
+        this.transitionSafely(task, 'awaiting-approval', 'Waiting for approval');
         this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'approval-requested' });
-        this.ledger.note(task, 'approval-request', description);
+        this.noteSafely(task, 'approval-request', description);
         publish();
       }) })
       .then(result => {
@@ -165,8 +166,17 @@ export class AgentTasks {
 
   private finish(task: TaskRecord, state: 'completed' | 'failed' | 'cancelled', text: string): void {
     if (TERMINAL_TASK_STATES.has(task.state)) return;
-    this.ledger.transition(task, state, text);
+    this.transitionSafely(task, state, text);
     this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'finished', outcome: state });
+  }
+
+  // Disk trouble on the async path must never reach the runner or reject the job: transitionInternal has already
+  // moved the in-memory record before save() throws, so the service keeps a true picture and the next save persists it.
+  private noteSafely(task: TaskRecord, kind: 'step' | 'output' | 'approval-request', text: string): void {
+    try { this.ledger.note(task, kind, text); } catch { /* keep serving; memory holds the event */ }
+  }
+  private transitionSafely(task: TaskRecord, next: TaskState, text: string): void {
+    try { this.ledger.transition(task, next, text); } catch { /* keep serving; memory holds the state */ }
   }
 }
 

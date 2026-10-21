@@ -55,6 +55,17 @@ test('a task runs, streams events to the owner and completes with a summary', as
   assert.ok(published.length >= 3);
 });
 
+test('a disk failure mid-run cannot crash the service: the task still settles in memory', async t => {
+  const { command, runner, ledger, tasks } = fixture(t);
+  const created = result(await command('agent.submit', submit()));
+  (ledger as unknown as { save: () => void }).save = () => { throw new Error('ENOSPC: disk full'); };
+  runner.contexts[0]!.step('still streaming'); // note() must not throw into the runner
+  runner.releases[0]!('Done anyway'); await tick(); await tick(); await tick();
+  const view = result(await command('agent.get', { taskId: created.taskId }));
+  assert.equal(view.state, 'completed', 'the in-memory record settles even though persistence failed');
+  await tasks.stop();
+});
+
 test('retrying a submit with the same idempotency key does not start a second run', async t => {
   const { command, runner } = fixture(t);
   const body = submit();
