@@ -144,6 +144,20 @@ test('a download chunk served at the wrong offset fails instead of corrupting th
   api.dispose(); s.stop();
 });
 
+test('a download the computer calls complete is only trusted when the local bytes match', async () => {
+  const manifest: TransferManifest = { transferId: env.uuid(), direction: 'to-client', name: 'archive.zip', sizeBytes: 100, sha256: hex(new Uint8Array(100).fill(3)), chunkBytes: FILE_CHUNK_BYTES };
+  const sink = memSink();
+  await sink.write(0, new Uint8Array(100).fill(9)); // local bytes that do not match the manifest
+  const { s, api } = await setup(type => {
+    if (type === 'file.status') return { manifest, state: 'completed', nextOffset: 100 };
+    if (type === 'file.resume') return { manifest, state: 'completed', nextOffset: 100 };
+    throw new Error(`unexpected ${type}`);
+  });
+  await assert.rejects(api.download(manifest, sink), (e: unknown) => e instanceof CommandError && e.code === 'FILE_INTEGRITY');
+  assert.equal(api.getState().transfer!.state, 'failed');
+  api.dispose(); s.stop();
+});
+
 test('watch loads waiting offers and a pushed offer is added once', async () => {
   const offer: TransferManifest = { transferId: LEASE, direction: 'to-client', name: 'a.txt', sizeBytes: 5, sha256: hex(new Uint8Array(5)), chunkBytes: FILE_CHUNK_BYTES };
   const { t, s, api } = await setup(type => type === 'file.subscribe' ? { subscriptionId: LEASE }
