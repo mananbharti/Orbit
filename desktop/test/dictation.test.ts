@@ -19,6 +19,11 @@ test('spacing and sentence capitals are fixed, Hindi danda handled', () => {
   assert.equal(cleanTranscript('hello  ,world . this is fine'), 'Hello, world. This is fine');
   assert.equal(cleanTranscript('kal aana। phir baat karenge'), 'Kal aana। Phir baat karenge');
 });
+test('numbers keep their commas: amounts and grouped digits are never split apart', () => {
+  assert.equal(cleanTranscript('send 1,000 rupees'), 'Send 1,000 rupees');
+  assert.equal(cleanTranscript('it costs 3,50,000 and 98,76,54,3210 more'), 'It costs 3,50,000 and 98,76,54,3210 more');
+  assert.equal(cleanTranscript('call 98765,43210'), 'Call 98765,43210');
+});
 test('empty or filler-only input gives empty text', () => {
   assert.equal(cleanTranscript('  '), '');
   assert.equal(cleanTranscript('um uh'), '');

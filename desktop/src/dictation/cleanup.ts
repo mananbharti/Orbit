@@ -22,7 +22,9 @@ export function cleanTranscript(raw: string, options: CleanupOptions = {}): stri
   for (const [heard, meant] of entries) {
     text = text.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escape(heard.trim())}(?![\\p{L}\\p{N}])`, 'giu'), () => meant);
   }
-  text = text.replace(/\s+([,.!?;:।])/g, '$1').replace(/([,;:!?।])(?=[\p{L}\p{N}])/gu, '$1 ').replace(/\s+/g, ' ').trim();
+  // A comma followed by a digit is never spaced: "1,000" or "3,50,000" must stay one number. Other punctuation gets its space.
+  text = text.replace(/\s+([,.!?;:।])/g, '$1').replace(/([;:!?।])(?=[\p{L}\p{N}])/gu, '$1 ').replace(/,(?=\p{L})/gu, ', ')
+    .replace(/\s+/g, ' ').trim();
   text = text.replace(SENTENCE_START, (_m, lead: string, ch: string) => lead + ch.toUpperCase());
   return text;
 }
