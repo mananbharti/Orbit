@@ -73,6 +73,14 @@ test('commands are refused, not queued, while disconnected', async () => {
   await s.start(); s.stop();
   await assert.rejects(s.command('agent.list', {}), NotSent);
 });
+test('the command queue is bounded; the command past the cap is refused', async () => {
+  const { t, s } = make(new FakeTransport(), { commandTimeoutMs: 5_000 }); await s.start();
+  // One command is in flight; the next sixteen fill the queue (MAX_QUEUED).
+  for (let i = 0; i < 17; i++) void s.command('agent.list', {}).catch(() => {});
+  await assert.rejects(s.command('agent.list', {}), (e: NotSent) => e instanceof NotSent && e.message === 'Too many commands waiting');
+  assert.equal(t.last.sent.length, 1, 'only the in-flight command reached the wire');
+  s.stop();
+});
 test('invalid or reserved command names and oversized payloads never reach the wire', async () => {
   const { t, s } = make(); await s.start();
   await assert.rejects(s.command('Bad Name', {}), NotSent);

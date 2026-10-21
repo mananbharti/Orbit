@@ -141,6 +141,14 @@ test('session requests carrying a body or chunked encoding are rejected as inval
   assert.equal(chunked.body.error, 'INVALID_REQUEST');
 });
 
+test('twenty failed credential guesses lock the address out, even for the real credential', { timeout: 15_000 }, async t => {
+  const context = await fixture(t);
+  const wrong = randomBytes(32).toString('base64url');
+  for (let i = 0; i < 20; i++) assert.equal((await context.exchange(wrong)).status, 401, `guess ${i}`);
+  assert.equal((await context.exchange(wrong)).status, 403, 'guess 21 hits the failure lockout');
+  assert.equal((await context.exchange()).status, 403, 'even the valid credential is refused until the window passes');
+});
+
 test('a wrong certificate pin rejects the connection', { timeout: 10_000 }, async t => {
   const context = await fixture(t);
   const { body } = await context.exchange();
