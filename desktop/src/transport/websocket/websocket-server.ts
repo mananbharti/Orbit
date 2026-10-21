@@ -66,7 +66,8 @@ export function createWebSocketTransport(options: TransportOptions) {
     response.setHeader('Content-Type', 'application/json');
     request.on('error', () => response.destroy());
     response.on('error', () => response.destroy());
-    response.on('finish', () => { if (response.statusCode >= 400 && response.statusCode !== 403) fail(request); });
+    // Client faults (4xx) burn the budget; a server fault (5xx) is our problem and must never lock the phone out.
+    response.on('finish', () => { if (response.statusCode >= 400 && response.statusCode < 500 && response.statusCode !== 403) fail(request); });
     if (!allowed(request)) {
       response.writeHead(403).end(JSON.stringify({ version: PROTOCOL_VERSION, error: 'REJECTED' }));
       return;

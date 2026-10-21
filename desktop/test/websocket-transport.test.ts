@@ -10,6 +10,7 @@ import { WebSocket } from 'ws';
 import { MAX_MESSAGE_BYTES } from '../src/config.js';
 import type { ResponseMessage } from '../src/protocol/messages.js';
 import { createWebSocketTransport } from '../src/transport/websocket/websocket-server.js';
+import type { PairingService } from '../src/security-pairing/pairing-service.js';
 import { core, testIdentity } from './helpers.js';
 
 const identity = await testIdentity();
@@ -85,6 +86,26 @@ test('pinned WSS dispatches commands and never logs credentials or payloads', { 
   for (const secret of [context.credential, String(issued.body.sessionToken), 'sensitive clipboard text']) {
     assert.ok(!logs.includes(secret));
   }
+});
+
+test('a server fault (503) never burns the caller failure budget', { timeout: 10_000 }, async t => {
+  const context = core();
+  const transport = createWebSocketTransport({ host: '127.0.0.1', port: 0, tls: identity.channel.tls, ...context,
+    pairing: { redeem: () => { throw new Error('pairing store exploded'); } } as unknown as PairingService });
+  const address = await transport.start();
+  t.after(() => transport.stop());
+  const base = `https://127.0.0.1:${address.port}`;
+  const call = (path: string, credential?: string) => new Promise<number>((resolve, reject) => {
+    const req = request(`${base}${path}`, { ...pinnedTls(), method: 'POST', agent: false,
+      ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}) }, response => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode!));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+  for (let i = 0; i < 25; i++) assert.equal(await call('/v1/pair'), 503, `fault ${i}`);
+  assert.equal(await call('/v1/session', context.credential), 200, 'the address is not punished for server faults');
 });
 
 test('unpaired credentials, durable credentials as session tokens, and browser origins are rejected', { timeout: 10_000 }, async t => {
