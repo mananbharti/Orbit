@@ -6,7 +6,7 @@ import { CommandError, NotSent, type OrbitSession } from './session.js';
 export type InputStatus = 'idle' | 'waiting' | 'active' | 'ended';
 export interface InputState { status: InputStatus; error?: string }
 
-const clampStep = (n: number): number => Math.max(-MAX_POINTER_STEP, Math.min(MAX_POINTER_STEP, Math.round(n)));
+const clampStep = (n: number): number => Number.isNaN(n) ? 0 : Math.max(-MAX_POINTER_STEP, Math.min(MAX_POINTER_STEP, Math.round(n)));
 
 export class InputApi {
   private state: InputState = { status: 'idle' };
