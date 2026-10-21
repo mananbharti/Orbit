@@ -148,6 +148,13 @@ test('a session for another device is treated as rejected', async () => {
   await assert.rejects(s.start(), AuthenticationRejected);
   assert.equal(s.status, 'stopped');
 });
+test('a session reply that is already expired is treated as rejected', async () => {
+  const t = new FakeTransport();
+  t.postResult = () => ({ version: 1, deviceId: DEVICE, sessionId: DEVICE, expiresAt: Date.now() - 1, sessionToken: token('s') });
+  const { s } = make(t);
+  await assert.rejects(s.start(), AuthenticationRejected);
+  assert.equal(s.status, 'stopped');
+});
 test('transient network failures back off and recover', async () => {
   const { t, s } = make(); await s.start();
   t.failPost = new Error('offline');
