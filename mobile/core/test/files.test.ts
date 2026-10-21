@@ -83,6 +83,20 @@ test('an upload the computer acknowledges at the wrong offset fails instead of c
   api.dispose(); s.stop();
 });
 
+test('an upload the computer echoes with a different manifest fails before any bytes are sent', async () => {
+  const bytes = new Uint8Array(1000).fill(5);
+  const source = memSource('report.pdf', bytes);
+  const { s, api } = await setup((type, p) => {
+    if (type === 'file.status') return new CommandError('FILE_NOT_FOUND');
+    if (type === 'file.offer') return { manifest: { ...p, sha256: hex(new Uint8Array(1000).fill(6)) }, state: 'transferring', nextOffset: 0, leaseId: LEASE }; // not the manifest the phone offered
+    throw new Error(`unexpected ${type}`);
+  });
+  await assert.rejects(api.upload(source), (e: CommandError) => e instanceof CommandError && e.code === 'FILE_INTEGRITY');
+  assert.equal(api.getState().transfer!.state, 'failed');
+  assert.deepEqual(source.reads, [], 'no file bytes are read or sent against a mismatched manifest');
+  api.dispose(); s.stop();
+});
+
 test('a source whose hash changes after the offer fails permanently and cannot be retried', async () => {
   const bytes = new Uint8Array(1000).fill(7);
   const source = memSource('changing.bin', bytes);
