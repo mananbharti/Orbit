@@ -22,12 +22,20 @@ function answer(message) {
   try {
     switch (message.type) {
       case 'list':
-        chrome.tabs.query({}, tabs => reply(true, {
-          tabs: tabs.map(t => ({ id: t.id, title: t.title || '', url: t.url || '', active: !!t.active, windowId: t.windowId }))
-        }));
+        chrome.tabs.query({}, tabs => {
+          const err = chrome.runtime.lastError;
+          if (err) { reply(false, undefined, err.message); return; }
+          reply(true, {
+            tabs: (tabs || []).map(t => ({ id: t.id, title: t.title || '', url: t.url || '', active: !!t.active, windowId: t.windowId }))
+          });
+        });
         break;
       case 'open':
-        chrome.tabs.create({ url: message.url }, tab => reply(true, { id: tab.id }));
+        chrome.tabs.create({ url: message.url }, tab => {
+          const err = chrome.runtime.lastError;
+          if (err || !tab) { reply(false, undefined, err ? err.message : 'tab was not created'); return; }
+          reply(true, { id: tab.id });
+        });
         break;
       case 'close':
         chrome.tabs.remove(message.tabId, () => {
