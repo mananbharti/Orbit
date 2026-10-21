@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { GraphStore, MAX_FACTS_PER_ENTITY } from '../src/memory/graph-store.js';
 
@@ -61,10 +61,17 @@ test('duplicate facts are ignored and the oldest fact makes room at the limit', 
   assert.equal(facts.length, MAX_FACTS_PER_ENTITY);
   assert.equal(facts.at(-1)!.text, `fact number ${MAX_FACTS_PER_ENTITY + 4}`);
 });
-test('hostile input is rejected and a corrupt file is refused rather than overwritten', t => {
+test('hostile input is rejected and a corrupt file is set aside intact rather than fatal or overwritten', t => {
   const f = store(t); const s = f.make();
   assert.throws(() => s.remember('', 'x')); assert.throws(() => s.remember('ok', 'Bad Kind!')); assert.throws(() => s.remember('x'.repeat(81)));
   writeFileSync(f.path, '{"version":1,"entities":"nope"}');
-  assert.throws(() => f.make());
-  assert.equal(readFileSync(f.path, 'utf8'), '{"version":1,"entities":"nope"}');
+  const recovered = f.make();
+  assert.equal(recovered.size(), 0, 'one unreadable file never takes the desktop down: memory starts empty');
+  const aside = readdirSync(dirname(f.path)).find(name => name.startsWith('memory.json.corrupt-'));
+  assert.ok(aside, 'the unreadable file was set aside, not overwritten or deleted');
+  assert.equal(readFileSync(join(dirname(f.path), aside), 'utf8'), '{"version":1,"entities":"nope"}', 'every byte preserved');
+  recovered.remember('Still works', 'thing');
+  assert.equal(recovered.size(), 1, 'the store is usable right away');
+  writeFileSync(f.path, '{ not json at all');
+  assert.equal(f.make().size(), 0, 'invalid JSON is handled the same way');
 });

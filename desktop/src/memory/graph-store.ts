@@ -1,5 +1,5 @@
 /** Local graph memory: entities, typed relations and short facts with sources, kept in one private file; depends on node:fs; never calls a network or model, and only stores what the caller explicitly remembers. */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { atomicWrite } from '../security-pairing/atomic-file.js';
@@ -26,7 +26,13 @@ export class GraphStore {
   private relations: Relation[] = [];
   constructor(private readonly path: string, private readonly now: () => number = Date.now) {
     if (!existsSync(path)) return;
-    const data = fileSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+    let data: z.infer<typeof fileSchema>;
+    try { data = fileSchema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
+    catch {
+      // One unreadable memory file must never take the whole desktop down: set it aside intact and start fresh.
+      try { renameSync(path, `${path}.corrupt-${this.now()}`); } catch { /* no matter; the store still starts empty */ }
+      return;
+    }
     for (const e of data.entities) this.entities.set(e.id, e);
     const ids = new Set(this.entities.keys());
     this.relations = data.relations.filter(r => ids.has(r.from) && ids.has(r.to));
