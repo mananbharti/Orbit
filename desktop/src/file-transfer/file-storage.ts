@@ -69,7 +69,7 @@ export function writeChunk(path: string, offset: number, bytes: Buffer): void {
 export function decodeChunk(data: string, hash: string, offset: number, size: number): Buffer {
   const bytes = Buffer.from(data, 'base64');
   if (bytes.toString('base64') !== data || bytes.length !== Math.min(CHUNK_BYTES, size - offset)
-    || !bytes.length || offset % CHUNK_BYTES !== 0 || sha256(bytes) !== hash) throw new ProtocolError('FILE_INTEGRITY');
+    || !bytes.length || offset < 0 || offset % CHUNK_BYTES !== 0 || sha256(bytes) !== hash) throw new ProtocolError('FILE_INTEGRITY');
   return bytes;
 }
 export function createPartial(path: string): void {
