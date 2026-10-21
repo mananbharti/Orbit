@@ -29,6 +29,22 @@ test('session tokens are distinct from credentials and expire or revoke immediat
   assert.ok(fixture.log.snapshot().every(event => !JSON.stringify(event).includes(fixture.credential)));
 });
 
+test('session issue caps evict the oldest session of a device and refuse a full store', () => {
+  const fixture = core();
+  const tokens: string[] = [];
+  for (let i = 0; i < 8; i++) tokens.push(fixture.auth.issue(fixture.credential)!.sessionToken);
+  for (const token of tokens) assert.ok(fixture.auth.authenticate(token));
+  const ninth = fixture.auth.issue(fixture.credential)!.sessionToken;
+  assert.equal(fixture.auth.authenticate(tokens[0]!), undefined, 'the ninth session of one device evicts its oldest');
+  assert.ok(fixture.auth.authenticate(ninth));
+  for (let d = 0; d < 15; d++) {
+    const other = fixture.addDevice();
+    for (let i = 0; i < 8; i++) fixture.auth.issue(other.credential);
+  }
+  const extra = fixture.addDevice();
+  assert.equal(fixture.auth.issue(extra.credential), undefined, 'a full session store refuses new sessions');
+});
+
 test('durable credential hashes survive service reconstruction, session tokens do not', t => {
   const directory = mkdtempSync(join(tmpdir(), 'orbit-credentials-test-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
