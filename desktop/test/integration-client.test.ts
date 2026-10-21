@@ -43,6 +43,22 @@ test('automatic renewal uses new connections and keeps feature commands usable w
   assert.ok(service.log.snapshot().filter(event => event.eventType === 'session.issued').length >= 3);
 });
 
+test('a throwing desktop-event listener does not drop the connection', async t => {
+  const { client, registry } = await fixture(t, 60_000);
+  registry.register('test.ping', { validate: () => true, execute: async (_payload, context) => {
+    context.connection?.publish('test.event', { hello: 1 });
+    return { pong: true };
+  } });
+  const events: unknown[] = [];
+  client.on('desktop-event', () => { throw new Error('listener blew up'); });
+  client.on('desktop-event', event => events.push(event));
+  await client.start();
+  const response = await client.command('test.ping', null);
+  assert.equal(response.payload.ok, true, 'the command still completes');
+  assert.equal(client.connected, true, 'a local listener bug is not a protocol violation');
+  assert.deepEqual(events, [{ eventType: 'test.event', data: { hello: 1 } }], 'later listeners still receive the event');
+});
+
 test('renewal interrupts an in-flight command with unknown outcome and never replays it', async t => {
   const { client, registry } = await fixture(t, 400);
   let executions = 0;

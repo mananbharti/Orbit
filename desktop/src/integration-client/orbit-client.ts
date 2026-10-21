@@ -155,7 +155,13 @@ export class OrbitClient extends EventEmitter {
         if (binary) throw new Error('Binary server message');
         const value: unknown = JSON.parse(data.toString());
         const event = eventSchema.safeParse(value);
-        if (event.success) { this.emit('desktop-event', event.data.payload); return; }
+        if (event.success) {
+          // A listener is app code: its exception is not a protocol violation, so it must not cost the channel. Isolate each one and keep going.
+          for (const listener of this.listeners('desktop-event')) {
+            try { listener(event.data.payload); } catch { /* listener bug; other listeners and the connection carry on */ }
+          }
+          return;
+        }
         const response = responseSchema.parse(value);
         if (this.pending?.id === response.requestId) {
           const pending = this.pending;
