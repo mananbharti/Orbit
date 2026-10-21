@@ -5,7 +5,7 @@
   "description": "End-to-end: phone client core against the real Orbit Desktop over real pinned TLS, with a scripted agent",
   "type": "module",
   "scripts": {
-    "test": "tsc -p tsconfig.json && node --test --test-concurrency=1 --test-timeout=20000 $(ls dist/mobile/e2e/test/*.test.js | grep -v automation-firing) && node --test --test-timeout=240000 dist/mobile/e2e/test/phone-automation-firing.test.js"
+    "test": "tsc -p tsconfig.json && node --test --test-force-exit --test-concurrency=1 --test-timeout=20000 $(ls dist/mobile/e2e/test/*.test.js | grep -v automation-firing) && node --test --test-force-exit --test-timeout=240000 dist/mobile/e2e/test/phone-automation-firing.test.js"
   },
   "dependencies": { "@particle/dbus-next": "0.11.4", "bonjour-service": "1.4.4", "qrcode": "1.5.4", "selfsigned": "5.5.0", "ws": "8.21.3", "zod": "4.5.4" },
   "devDependencies": { "@types/node": "24.13.3", "@types/qrcode": "1.5.6", "@types/ws": "8.18.1", "typescript": "7.0.2" }
