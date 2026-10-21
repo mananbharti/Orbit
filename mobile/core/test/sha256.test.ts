@@ -19,3 +19,10 @@ test('sha256 in uneven pieces equals one shot', () => {
 test('sha256 of known vector', () => {
   assert.equal(sha256Hex(new TextEncoder().encode('abc')), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 });
+test('sha256 hex can be read twice and the hash can keep going afterwards', () => {
+  const h = new Sha256().update(new TextEncoder().encode('ab'));
+  const first = h.hex();
+  assert.equal(h.hex(), first);
+  assert.equal(first, ref(Buffer.from('ab')));
+  assert.equal(h.update(new TextEncoder().encode('c')).hex(), ref(Buffer.from('abc')));
+});

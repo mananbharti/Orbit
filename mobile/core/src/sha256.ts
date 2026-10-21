@@ -30,9 +30,11 @@ export class Sha256 {
     pad[0] = 0x80;
     const hi = Math.floor(bits / 0x100000000), lo = bits >>> 0;
     const v = new DataView(pad.buffer); v.setUint32(pad.length - 8, hi); v.setUint32(pad.length - 4, lo);
-    const keep = this.total;
-    this.update(pad); this.total = keep;
-    return [...this.h].map(x => x.toString(16).padStart(8, '0')).join('');
+    // Finish a copy so reading the digest never changes the running hash.
+    const done = new Sha256();
+    done.h.set(this.h); done.buf.set(this.buf); done.fill = this.fill; done.total = this.total;
+    done.update(pad);
+    return [...done.h].map(x => x.toString(16).padStart(8, '0')).join('');
   }
   private block(d: Uint8Array, o: number): void {
     const w = this.w;
