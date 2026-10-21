@@ -102,3 +102,24 @@ test('subscribers get a new snapshot object on every change, and can unsubscribe
   assert.equal(calls, seen);
   store.dispose(); s.stop();
 });
+test('a slow events reply that arrives after a newer one never rolls the event list back', async () => {
+  const log = [{ seq: 1, at: 1, kind: 'step', text: 'a' }];
+  const handler = (type: string, p: any): unknown => type === 'agent.list' ? { tasks: [sum(T1, 'running', 1, 1)] }
+    : { events: log.filter(e => e.seq > p.afterSeq), hasMore: false };
+  const { t, s, store } = await setup(handler);
+  await sleep(20);
+  let calls = 0;
+  // The first fetch is answered late, with what the log held when it was asked.
+  t.last.onSend = text => {
+    const m = parseSent(text); const body = handler(m.type, m.payload); const late = calls++ === 0;
+    setTimeout(() => t.last.reply(m.requestId, body), late ? 40 : 5);
+  };
+  log.push({ seq: 2, at: 2, kind: 'output', text: 'b' });
+  push(t, sum(T1, 'running', 1, 2));
+  await sleep(5);
+  log.push({ seq: 3, at: 3, kind: 'output', text: 'c' });
+  push(t, sum(T1, 'completed', 1, 3));
+  await sleep(120);
+  assert.deepEqual(store.getState().events[T1]!.map(e => e.seq), [1, 2, 3]);
+  store.dispose(); s.stop();
+});
