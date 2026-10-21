@@ -67,3 +67,23 @@ test('a session that disappeared and a set with nothing to change fail cleanly',
   if (badId.payload.ok) assert.fail('expected failure payload');
   assert.equal(badId.payload.error.code, 'INVALID_PAYLOAD');
 });
+
+test('more than 64 OS sessions are capped on the wire, and a malformed session is SYSTEM_UNAVAILABLE, not a generic failure', { timeout: 30_000 }, async t => {
+  const sessions: AudioSession[] = Array.from({ length: 70 }, (_, i) => ({ id: String(100 + i), name: `App ${i}`, volume: 50, muted: false }));
+  let listed = sessions;
+  const adapter: AudioMixerAdapter = {
+    listSessions: async () => listed.map(session => ({ ...session })),
+    setSession: async () => {},
+  };
+  const f = await fixture(t, adapter);
+  const capped = await f.client.command('system.audio.sessions', {});
+  assert.equal(capped.payload.ok, true);
+  const result = (capped.payload as unknown as { ok: true; result: { sessions: AudioSession[] } }).result;
+  assert.equal(result.sessions.length, 64, 'the wire contract caps at 64 sessions');
+  assert.equal(result.sessions[0]!.name, 'App 0');
+
+  listed = [{ id: 'not-a-pid', name: 'Garbage', volume: 500, muted: false }];
+  const malformed = await f.client.command('system.audio.sessions', {});
+  if (malformed.payload.ok) assert.fail('expected failure payload');
+  assert.equal(malformed.payload.error.code, 'SYSTEM_UNAVAILABLE', 'OS garbage must look like an unavailable mixer, not an internal failure');
+});

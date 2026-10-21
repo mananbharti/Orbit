@@ -29,10 +29,9 @@ export class AudioMixer {
     };
     this.unregister = [
       registry.register('system.audio.sessions', { validate: payload => emptySystemSchema.safeParse(payload).success,
-        execute: async (_payload, context) => {
-          const sessions = await call(context, a => a.listSessions());
-          return audioSessionsResultSchema.parse({ sessions: sessions.slice(0, 64) });
-        } }),
+        execute: (_payload, context) => call(context, async a =>
+          // Shape and validate inside the call: OS garbage takes the same logged SYSTEM_UNAVAILABLE path as an adapter failure.
+          audioSessionsResultSchema.parse({ sessions: (await a.listSessions()).slice(0, 64) })) }),
       registry.register('system.audio.session.set', { validate: payload => audioSessionSetSchema.safeParse(payload).success,
         execute: async (payload, context) => {
           const { id, level, muted } = audioSessionSetSchema.parse(payload);
