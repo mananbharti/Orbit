@@ -88,6 +88,25 @@ test('pinned WSS dispatches commands and never logs credentials or payloads', { 
   }
 });
 
+test('a connection storm past the concurrent cap is refused, not absorbed', { timeout: 15_000 }, async t => {
+  const context = await fixture(t);
+  const { body } = await context.exchange();
+  const token = String(body.sessionToken);
+  const sockets: WebSocket[] = [];
+  for (let i = 0; i < 32; i++) sockets.push(context.connect(token));
+  await Promise.all(sockets.map(socket => once(socket, 'open')));
+  const extra = context.connect(token);
+  const [error] = await once(extra, 'error');
+  assert.match(String(error), /401/);
+  const replacement = sockets.pop()!;
+  replacement.close();
+  await once(replacement, 'close');
+  const afterClose = context.connect(token);
+  await once(afterClose, 'open'); // a closed slot frees up for a real device again
+  assert.equal((await send(afterClose)).payload.ok, true);
+  for (const socket of [...sockets, afterClose]) socket.close();
+});
+
 test('a server fault (503) never burns the caller failure budget', { timeout: 10_000 }, async t => {
   const context = core();
   const transport = createWebSocketTransport({ host: '127.0.0.1', port: 0, tls: identity.channel.tls, ...context,
