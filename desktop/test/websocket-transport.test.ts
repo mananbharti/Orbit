@@ -120,6 +120,27 @@ test('unpaired credentials, durable credentials as session tokens, and browser o
   assert.equal(context.executions(), 0);
 });
 
+test('session requests carrying a body or chunked encoding are rejected as invalid', { timeout: 10_000 }, async t => {
+  const context = await fixture(t);
+  const post = (headers: Record<string, string>, body?: string) => new Promise<{ status: number; body: Record<string, unknown> }>((resolve, reject) => {
+    const req = request(`${context.base}/v1/session`, { ...pinnedTls(), method: 'POST', agent: false, headers }, response => {
+      let text = '';
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode!, body: JSON.parse(text) as Record<string, unknown> }));
+      response.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+  const credential = randomBytes(32).toString('base64url');
+  const withLength = await post({ Authorization: `Bearer ${credential}`, 'Content-Length': '5' }, 'hello');
+  assert.equal(withLength.status, 400);
+  assert.equal(withLength.body.error, 'INVALID_REQUEST');
+  const chunked = await post({ Authorization: `Bearer ${credential}`, 'Transfer-Encoding': 'chunked' }, '5\r\nhello\r\n0\r\n\r\n');
+  assert.equal(chunked.status, 400);
+  assert.equal(chunked.body.error, 'INVALID_REQUEST');
+});
+
 test('a wrong certificate pin rejects the connection', { timeout: 10_000 }, async t => {
   const context = await fixture(t);
   const { body } = await context.exchange();
