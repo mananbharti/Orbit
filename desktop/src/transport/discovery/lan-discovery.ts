@@ -39,35 +39,56 @@ export function decodeAdvertisement(txt: unknown): DesktopHint | undefined {
   } catch { return undefined; }
 }
 
-export function advertiseDesktop(hint: DesktopHint, onError: () => void): { stop(): Promise<void> } {
+/** Injectable for tests: the real Bonjour constructor. */
+type BonjourFactory = (onError: () => void) => Bonjour;
+const realBonjour: BonjourFactory = onError => new Bonjour(undefined, onError);
+
+export function advertiseDesktop(hint: DesktopHint, onError: () => void, createBonjour: BonjourFactory = realBonjour): { stop(): Promise<void> } {
   const txt = encodeAdvertisement(hint);
-  const bonjour = new Bonjour(undefined, onError);
+  const bonjour = createBonjour(onError);
   const service = bonjour.publish({ name: `Orbit-${hint.desktopServiceId}`, type: SERVICE_TYPE,
     port: Number(new URL(hint.endpoint).port || 443), txt, disableIPv6: true });
   service.on('error', onError);
   return { stop: () => new Promise<void>(resolve => {
-    let destroyed = false;
-    const destroy = () => { if (!destroyed) { destroyed = true; clearTimeout(timer); bonjour.destroy(resolve); } };
+    let settled = false;
+    const settle = () => { if (!settled) { settled = true; clearTimeout(timer); clearTimeout(hangGuard); resolve(); } };
+    // A wedged multicast socket can leave destroy's callback uncalled; stop must still settle.
+    const hangGuard = setTimeout(settle, 2_000);
+    hangGuard.unref();
+    let destroying = false;
+    const destroy = () => { if (!settled && !destroying) { destroying = true; clearTimeout(timer); bonjour.destroy(settle); } };
     const timer = setTimeout(destroy, 1_000);
     service.stop(destroy);
   }) };
 }
 
 export function discoverDesktop(expected: { desktopServiceId: string; certificateFingerprint: string },
-  timeoutMs = 10_000, signal?: AbortSignal): Promise<DesktopHint> {
+  timeoutMs = 10_000, signal?: AbortSignal, createBonjour: BonjourFactory = realBonjour): Promise<DesktopHint> {
   return new Promise((resolve, reject) => {
     let finished = false;
     let browser: ReturnType<Bonjour['find']> | undefined;
     let timer: NodeJS.Timeout | undefined;
-    const bonjour = new Bonjour(undefined, () => finish());
+    let hangGuard: NodeJS.Timeout | undefined;
+    const bonjour = createBonjour(() => finish());
     const aborted = () => finish();
+    let settled = false;
+    function settle(hint?: DesktopHint) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hangGuard);
+      if (hint) resolve(hint);
+      else reject(new Error('LAN discovery unavailable or timed out'));
+    }
     function finish(hint?: DesktopHint) {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       signal?.removeEventListener('abort', aborted);
       browser?.stop();
-      bonjour.destroy(() => hint ? resolve(hint) : reject(new Error('LAN discovery unavailable or timed out')));
+      // A wedged multicast socket can leave destroy's callback uncalled; settle anyway.
+      hangGuard = setTimeout(() => settle(hint), 2_000);
+      hangGuard.unref();
+      bonjour.destroy(() => settle(hint));
     }
     browser = bonjour.find({ type: SERVICE_TYPE }, service => {
       const hint = decodeAdvertisement(service.txt);
