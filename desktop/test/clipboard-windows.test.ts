@@ -101,3 +101,90 @@ test('dispose rejects pending requests and refuses new ones', async () => {
   await assert.rejects(clip.read(), ClipboardUnavailable);
   assert.equal(workers[0]!.killed, true);
 });
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const within = async (promise: Promise<unknown>, ms: number): Promise<'rejected' | 'resolved' | 'hung'> =>
+  Promise.race([promise.then(() => 'resolved' as const, () => 'rejected' as const), sleep(ms).then(() => 'hung' as const)]);
+
+test('a worker that has been replaced cannot disturb the one serving the current request', async () => {
+  let attempts = 0;
+  const { clip, workers } = clipboard(() => { attempts += 1; return attempts === 1 ? null : attempts === 2 ? null : null; }, 40);
+  await assert.rejects(clip.read(), ClipboardUnavailable);
+  const second = clip.read();
+  await sleep(5);
+  const [old, current] = workers as [FakeWorker, FakeWorker];
+  old.emit('exit'); old.emit('error', new Error('late')); old.stdin.emit('error', new Error('late')); old.stdout.emit('data', 'garbage\n');
+  assert.equal(current.killed, false, 'events from the old worker do not kill the new one');
+  current.stdout.emit('data', '{"kind":"text","text":"fine"}\n');
+  assert.deepEqual(await second, { kind: 'text', text: 'fine' });
+});
+
+test('a response split across chunks is assembled, and anything after it fails the request', async () => {
+  const { clip, workers } = clipboard(() => null);
+  const pending = clip.read();
+  workers[0]!.stdout.emit('data', '{"kind":"te');
+  workers[0]!.stdout.emit('data', 'xt","text":"split"}\n');
+  assert.deepEqual(await pending, { kind: 'text', text: 'split' });
+  const extra = clipboard(() => null);
+  const p2 = extra.clip.read();
+  extra.workers[0]!.stdout.emit('data', '{"kind":"text","text":"a"}\nsmuggled');
+  await assert.rejects(p2, ClipboardUnavailable);
+  assert.equal(extra.workers[0]!.killed, true);
+});
+
+test('an unsolicited line with no request waiting kills the worker without throwing', async () => {
+  const { clip, workers } = clipboard(() => JSON.stringify({ kind: 'text', text: 'one' }));
+  await clip.read();
+  assert.doesNotThrow(() => workers[0]!.stdout.emit('data', '{"kind":"text","text":"surprise"}\n'));
+  assert.equal(workers[0]!.killed, true);
+});
+
+test('a finished request cancels its timeout, and whitespace left after a response does not poison the next one', async () => {
+  const { clip, workers } = clipboard(() => JSON.stringify({ kind: 'text', text: 'ok' }), 40);
+  await clip.read();
+  await sleep(90);
+  assert.equal(workers[0]!.killed, false, 'the timeout of a finished request never fires');
+  const quiet = clipboard(() => null);
+  const first = quiet.clip.read();
+  quiet.workers[0]!.stdout.emit('data', '{"kind":"text","text":"a"}\n \n');
+  assert.deepEqual(await first, { kind: 'text', text: 'a' });
+  const second = quiet.clip.read();
+  quiet.workers[0]!.stdout.emit('data', '{"kind":"text","text":"b"}\n');
+  assert.deepEqual(await second, { kind: 'text', text: 'b' });
+});
+
+test('worker exit, process error and stdin error each fail the pending request promptly', async () => {
+  for (const trigger of [(w: FakeWorker) => w.emit('exit'), (w: FakeWorker) => w.emit('error', new Error('spawn')), (w: FakeWorker) => w.stdin.emit('error', new Error('EPIPE'))]) {
+    const { clip, workers } = clipboard(() => null, 5_000);
+    const pending = clip.read();
+    setTimeout(() => trigger(workers[0]!), 10);
+    assert.equal(await within(pending, 1_000), 'rejected');
+  }
+  const { clip } = clipboard(() => null, 5_000);
+  await clip.dispose();
+  assert.equal(await within(clip.read(), 500), 'rejected', 'a disposed bridge refuses at once instead of waiting on a new worker');
+});
+
+test('a failed request leaves no half-read output and no stale timer for the next request', async () => {
+  const { clip, workers } = clipboard(() => null, 60);
+  const first = clip.read();
+  workers[0]!.stdout.emit('data', 'abc');
+  await assert.rejects(first, ClipboardUnavailable);
+  const second = clip.read();
+  workers[1]!.stdout.emit('data', '{"kind":"text","text":"clean"}\n');
+  assert.deepEqual(await second, { kind: 'text', text: 'clean' }, 'leftovers from the dead worker were discarded');
+
+  const timed = clipboard(() => null, 200);
+  const early = timed.clip.read();
+  setTimeout(() => timed.workers[0]!.emit('exit'), 5);
+  await assert.rejects(early, ClipboardUnavailable);
+  await sleep(120);
+  const later = timed.clip.read();
+  setTimeout(() => timed.workers[1]!.stdout.emit('data', '{"kind":"text","text":"late"}\n'), 150);
+  assert.deepEqual(await later, { kind: 'text', text: 'late' }, 'the first request\'s timer did not fire into the second');
+});
+
+test('a text snapshot whose text is not a string, or another kind carrying text, is unavailable rather than quietly unsupported', async () => {
+  await assert.rejects(clipboard(() => JSON.stringify({ kind: 'text', text: 123 })).clip.read(), ClipboardUnavailable);
+  await assert.rejects(clipboard(() => JSON.stringify({ kind: 'unsupported', text: '\u0000bad' })).clip.read(), ClipboardUnavailable);
+});
