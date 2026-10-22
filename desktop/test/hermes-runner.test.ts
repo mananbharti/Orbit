@@ -105,3 +105,24 @@ test('bad credentials and non-loopback endpoints are refused', async t => {
   assert.throws(() => new HermesRunner({ apiKey: '', baseUrl: f.url }), /key is required/);
   assert.doesNotThrow(() => new HermesRunner({ apiKey: 'k', baseUrl: 'https://hermes.example', allowRemote: true }));
 });
+
+test('requests refuse redirects, and a run id that could steer a request path is rejected', async t => {
+  const f = await fake(t);
+  const seen: (RequestInit | undefined)[] = [];
+  const spy: typeof fetch = (input, init) => { seen.push(init); return fetch(input, init); };
+  await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url, fetchImpl: spy }).run(context().ctx);
+  assert.ok(seen.length >= 3 && seen.every(init => init?.redirect === 'error'), 'every call refuses redirects, so the API key never follows one');
+  for (const runId of ['../admin', 'run/1', 'a'.repeat(129), '', 5]) {
+    const stub: typeof fetch = async () => new Response(JSON.stringify({ run_id: runId }), { status: 202, headers: { 'Content-Type': 'application/json' } });
+    await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url, fetchImpl: stub }).run(context().ctx), /no run id/, `rejects ${JSON.stringify(runId)}`);
+  }
+});
+
+test('an event stream with an oversize line or an unbounded buffer is cut off, and a newline in the key is refused', async t => {
+  const f = await fake(t);
+  f.events = [`data: ${'x'.repeat(300 * 1_024)}\n\n`];
+  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx), /line too large/);
+  f.events = [`data: ${'y'.repeat(1_200_000)}`]; // never a newline, so only the buffer cap can stop it
+  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx), /stream too large/);
+  assert.throws(() => new HermesRunner({ apiKey: 'k\nX-Injected: 1', baseUrl: f.url }), /key is required/);
+});
