@@ -71,3 +71,67 @@ test('letters, digits and function keys are valid input events with real Windows
   assert.deepEqual(toOps({ t: 'key', key: 'f5' })[0], { k: 'key', vk: 0x74, flags: 0 });
   assert.deepEqual(toOps({ t: 'key', key: '9' })[0], { k: 'key', vk: 0x39, flags: 0 });
 });
+
+test('the store caps at 24 macros, hands out copies, and persists edits and deletes', t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-input-macros-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, 'keyboard-macros.json');
+  const store = new KeyboardMacroStore(path);
+  for (let i = 0; i < 24; i++) store.save(`Macro ${i}`, [{ key: 'a' }]);
+  const fresh = new KeyboardMacroStore();
+  const freshSteps = [{ key: 'a' as const }];
+  fresh.save('Alias', freshSteps);
+  freshSteps[0]!.key = 'q' as never;
+  assert.equal(fresh.list()[0]!.steps[0]!.key, 'a');
+  assert.throws(() => store.save('One too many', [{ key: 'a' }]), /INPUT_MACRO_LIMIT/);
+  assert.equal(store.list().length, 24);
+  const listed = store.list();
+  listed[0]!.name = 'tampered';
+  listed[0]!.steps[0]!.key = 'z';
+  assert.equal(store.list()[0]!.name, 'Macro 0');
+  assert.equal(store.list()[0]!.steps[0]!.key, 'a');
+  const id = store.list()[1]!.id;
+  const steps = [{ key: 'b' as const }];
+  store.save('Renamed', steps, id);
+  steps[0]!.key = 'q' as never;
+  assert.equal(store.list()[1]!.steps[0]!.key, 'b');
+  store.remove(store.list()[2]!.id);
+  const reloaded = new KeyboardMacroStore(path).list();
+  assert.equal(reloaded.length, 23);
+  assert.equal(reloaded[1]!.name, 'Renamed');
+  assert.equal(store.remove(randomUUID()).length, 23);
+});
+
+test('a file holding more than 24 macros is rejected whole', t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-input-macros-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, 'keyboard-macros.json');
+  const big = Array.from({ length: 25 }, (_, i) => ({ id: randomUUID(), name: `M${i}`, steps: [{ key: 'a' }] }));
+  writeFileSync(path, JSON.stringify(big), 'utf8');
+  assert.deepEqual(new KeyboardMacroStore(path).list(), []);
+});
+
+test('macro commands report INPUT_UNAVAILABLE without a store and UNAUTHENTICATED once the phone is gone', async t => {
+  const bare = core();
+  new InputControl(bare.registry, () => new FakeDevice(), bare.log);
+  const bareIssued = bare.auth.issue(bare.credential)!;
+  const bareConn = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => true, publish: () => {} };
+  for (const [type, payload] of [['input.macros', {}], ['input.macro.save', { name: 'x', steps: [{ key: 'a' }] }], ['input.macro.delete', { id: randomUUID() }]] as [string, JsonValue][]) {
+    error(await bare.router.dispatch({ version: 1, type, payload, requestId: randomUUID() }, bareIssued.sessionToken, bareConn), 'INPUT_UNAVAILABLE');
+  }
+  const root = mkdtempSync(join(tmpdir(), 'orbit-input-macros-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const setup = core();
+  new InputControl(setup.registry, () => new FakeDevice(), setup.log, undefined, new KeyboardMacroStore(join(root, 'm.json')));
+  const issued = setup.auth.issue(setup.credential)!;
+  let live = true;
+  const connection = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => live, publish: () => {} };
+  const run = (type: string, payload: JsonValue) => setup.router.dispatch({ version: 1, type, payload, requestId: randomUUID() }, issued.sessionToken, connection);
+  result(await run('input.macro.save', { name: 'ok', steps: [{ key: 'a' }] }));
+  live = false;
+  error(await run('input.macros', {}), 'UNAUTHENTICATED');
+  error(await run('input.macro.save', { name: 'again', steps: [{ key: 'a' }] }), 'UNAUTHENTICATED');
+  error(await run('input.macro.delete', { id: randomUUID() }), 'UNAUTHENTICATED');
+  live = true;
+  assert.equal((result(await run('input.macros', {})) as { macros: unknown[] }).macros.length, 1);
+});
