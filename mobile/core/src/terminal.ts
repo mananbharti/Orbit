@@ -1,7 +1,7 @@
 /** Runs commands on the computer inside an approved session; depends on OrbitSession and Zod; output arrives as events between exec start and its reply. */
 import { InvalidDesktopReply } from './agent.js';
 import { terminalBeginResultSchema, terminalExecResultSchema, terminalOutputEventSchema, type TerminalExecResult } from './protocol.js';
-import type { OrbitSession } from './session.js';
+import { NotSent, type OrbitSession } from './session.js';
 
 const TERMINAL_TIMEOUT_PAD_MS = 15_000; // the desktop caps a command at 120s; the wire waits a little longer
 
@@ -9,6 +9,8 @@ export class TerminalApi {
   private outputListeners = new Set<(stream: 'stdout' | 'stderr', data: string) => void>();
   private sessionId?: string;
   private off?: () => void;
+  /** Bumped when a pending begin is abandoned (end, dispose or a newer begin), so its late reply is released instead of opening a session. */
+  private epoch = 0;
 
   constructor(private readonly session: OrbitSession) {
     session.onStatus(status => { if (status !== 'connected') this.sessionId = undefined; });
@@ -30,9 +32,14 @@ export class TerminalApi {
 
   /** Opens a session; the computer shows an approval dialog and can say no. Returns the starting directory. */
   async begin(): Promise<{ cwd: string }> {
+    const epoch = ++this.epoch;
     const result: unknown = await this.session.command('terminal.begin', {}, { timeoutMs: 45_000 }); // the owner may need a moment at the PC
     const parsed = terminalBeginResultSchema.safeParse(result);
     if (!parsed.success) throw new InvalidDesktopReply();
+    if (epoch !== this.epoch) {
+      void this.session.command('terminal.end', { sessionId: parsed.data.sessionId }, { timeoutMs: 10_000, immediate: true }).catch(() => {});
+      throw new NotSent('Terminal cancelled');
+    }
     this.sessionId = parsed.data.sessionId;
     return { cwd: parsed.data.cwd };
   }
@@ -54,10 +61,11 @@ export class TerminalApi {
   async end(): Promise<void> {
     const id = this.sessionId;
     this.sessionId = undefined;
+    this.epoch++;
     if (id) await this.session.command('terminal.end', { sessionId: id }, { timeoutMs: 10_000, immediate: true }).catch(() => { /* already gone is fine */ });
   }
 
-  dispose(): void { this.off?.(); this.outputListeners.clear(); }
+  dispose(): void { this.epoch++; this.off?.(); this.outputListeners.clear(); }
 
   private requireSession(): string {
     if (!this.sessionId) throw new Error('TERMINAL_SESSION_REQUIRED');
