@@ -290,3 +290,23 @@ test('an adapter abort callback can reenter shutdown without duplicate release o
   await rejected;
   assert.deepEqual(f.adapters[0]!.calls, ['open', 'release', 'dispose']);
 });
+
+test('a different device id on the same login and connection cannot drive or keep alive the lease', async () => {
+  const f = fixture();
+  const session = await f.guard.begin(f.context);
+  const other = { ...f.context, session: { ...f.context.session, deviceId: randomUUID() } };
+  assert.throws(() => f.guard.keepalive(other, session.controlSessionId), code('INPUT_SESSION_REQUIRED'));
+  await assert.rejects(f.guard.execute(other, session.controlSessionId, 1, async () => {}), code('INPUT_SESSION_REQUIRED'));
+  await f.guard.end(f.context, session.controlSessionId);
+});
+
+test('a late timer cannot let a stale lease act: execute re-checks the heartbeat itself', async t => {
+  const f = fixture();
+  const session = await f.guard.begin(f.context);
+  await f.guard.execute(f.context, session.controlSessionId, 1, async adapter => { adapter.held = true; });
+  const real = performance.now();
+  t.mock.method(performance, 'now', () => real + INPUT_HEARTBEAT_TIMEOUT_MS + 1);
+  await assert.rejects(f.guard.execute(f.context, session.controlSessionId, 2, async adapter => { adapter.held = true; }), code('INPUT_SESSION_REQUIRED'));
+  await waitFor(() => !f.adapters[0]!.held);
+  assert.ok(f.adapters[0]!.calls.includes('release'));
+});
