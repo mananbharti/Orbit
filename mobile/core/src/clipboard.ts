@@ -41,6 +41,11 @@ export class ClipboardApi {
         const result = await this.session.command('clipboard.subscribe', {});
         const parsed = clipboardSubscriptionSchema.safeParse(result);
         if (!parsed.success) throw new InvalidDesktopReply();
+        if (!this.wanted) {
+          // The screen closed while this was in flight: release the subscription instead of keeping it live.
+          void this.session.command('clipboard.unsubscribe', { subscriptionId: parsed.data.subscriptionId }).catch(() => {});
+          return;
+        }
         this.sub = { id: parsed.data.subscriptionId, revision: parsed.data.revision };
         this.set({ active: true });
       } finally { this.starting = undefined; }
