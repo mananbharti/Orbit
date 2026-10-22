@@ -122,3 +122,24 @@ test('apply notifies the applying phone itself, unlike a typed write', async t =
   const applied = events.filter(e => e.type === 'clipboard.changed').map(e => (e.data as { text: string }).text);
   assert.deepEqual(applied, ['other', 'typed on phone'], 'the applying phone is told about PC changes AND its own applied clip');
 });
+
+test('consecutive duplicates collapse, and a page never exceeds the byte budget', () => {
+  const history = new ClipboardHistory();
+  history.add('same clip', 'pc');
+  history.add('same clip', 'pc'); // a consecutive repeat is not history
+  assert.equal(history.page().entries.length, 1);
+  history.add('different clip', 'phone');
+  history.add('same clip', 'pc'); // a non-consecutive repeat is a real new entry
+  assert.equal(history.page().entries.length, 3);
+
+  const big = new ClipboardHistory();
+  const chunk = 'x'.repeat(16_000); // 16,080 budget units per entry against the 48,000 budget
+  for (let i = 0; i < 4; i++) big.add(`${chunk}${i}`, 'pc');
+  const first = big.page();
+  assert.equal(first.entries.length, 2, 'three entries would exceed the budget, so the page stops at two');
+  assert.equal(first.nextCursor, first.entries[1]!.id);
+  const second = big.page(first.nextCursor!);
+  assert.equal(second.entries.length, 2);
+  assert.equal(second.nextCursor, null);
+  assert.equal(second.entries[0]!.text.endsWith('1'), true, 'paging resumes exactly where the last page stopped');
+});
