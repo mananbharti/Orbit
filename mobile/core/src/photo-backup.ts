@@ -20,7 +20,7 @@ export function selectNewPhotos(assets: PhotoRef[], cursor: BackupCursor): Photo
 export function advanceCursor(cursor: BackupCursor, photo: PhotoRef): BackupCursor {
   const failed = cursor.failed.filter(id => id !== photo.id);
   if (photo.creationTime > cursor.time) return { time: photo.creationTime, ids: [photo.id], failed };
-  if (photo.creationTime === cursor.time) return { time: cursor.time, ids: [...cursor.ids.slice(-(MAX_BOUNDARY_IDS - 1)), photo.id], failed };
+  if (photo.creationTime === cursor.time) return { time: cursor.time, ids: [...cursor.ids.filter(id => id !== photo.id).slice(-(MAX_BOUNDARY_IDS - 1)), photo.id], failed };
   return { time: cursor.time, ids: cursor.ids, failed };
 }
 
