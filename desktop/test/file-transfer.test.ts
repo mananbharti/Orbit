@@ -240,3 +240,39 @@ test('revocation during final hashing prevents publication', async t => {
   await waitFor(() => row.state === 'paused');
   assert.equal(existsSync(store.paths(row).destination), false);
 });
+
+test('downloads serve chunks only in order and verify every acknowledgement', async t => {
+  const { root, files, connect, store, deviceId } = fixture(t);
+  const client = connect();
+  const bytes = Buffer.alloc(protocol.CHUNK_BYTES + 100, 7); // one full chunk plus a short tail
+  const source = join(root, 'ordered.bin'); writeFileSync(source, bytes);
+  const offer = await files.offerLocal(source, deviceId);
+  const status = protocol.statusSchema.parse(ok(await client.command('file.accept', { transferId: offer.transferId })));
+  await waitFor(() => store.get(offer.transferId, deviceId).state === 'transferring'); // accept hashes the source before serving
+  const read = async (offset: number) => (ok(await client.command('file.read', { transferId: offer.transferId, leaseId: status.leaseId!, offset })) as { dataBase64: string }).dataBase64;
+  const ack = (nextOffset: number, hash: string) => client.command('file.ack', { transferId: offer.transferId, leaseId: status.leaseId!, nextOffset, sha256: hash });
+  const first = Buffer.from(await read(0), 'base64');
+  assert.equal(first.length, protocol.CHUNK_BYTES);
+  assert.deepEqual(first, bytes.subarray(0, protocol.CHUNK_BYTES));
+  assert.equal(Buffer.from(await read(0), 'base64').equals(first), true, 're-reading the current chunk is idempotent');
+  assert.deepEqual((await client.command('file.read', { transferId: offer.transferId, leaseId: status.leaseId!, offset: protocol.CHUNK_BYTES })).payload,
+    { ok: false, error: { code: 'FILE_OFFSET' } }, 'a read past the acknowledged offset is refused');
+  assert.deepEqual((await ack(protocol.CHUNK_BYTES, '0'.repeat(64))).payload, { ok: false, error: { code: 'FILE_INTEGRITY' } },
+    'an acknowledgement with a wrong digest never advances the transfer');
+  assert.equal(store.get(offer.transferId, deviceId).nextOffset, 0);
+  assert.deepEqual((await ack(bytes.length, sha256(bytes))).payload, { ok: false, error: { code: 'FILE_OFFSET' } },
+    'an acknowledgement cannot skip ahead of the served chunk');
+  ok(await ack(protocol.CHUNK_BYTES, sha256(first)));
+  assert.equal(store.get(offer.transferId, deviceId).nextOffset, protocol.CHUNK_BYTES);
+  ok(await ack(protocol.CHUNK_BYTES, sha256(first))); // an idempotent re-acknowledgement of the same offset is fine
+  assert.equal(store.get(offer.transferId, deviceId).nextOffset, protocol.CHUNK_BYTES);
+  assert.deepEqual((await client.command('file.read', { transferId: offer.transferId, leaseId: status.leaseId!, offset: 0 })).payload,
+    { ok: false, error: { code: 'FILE_OFFSET' } }, 'acknowledged chunks cannot be re-read');
+  const tail = Buffer.from(await read(protocol.CHUNK_BYTES), 'base64');
+  assert.equal(tail.length, 100);
+  assert.deepEqual(tail, bytes.subarray(protocol.CHUNK_BYTES));
+  ok(await ack(bytes.length, sha256(tail)));
+  assert.equal(store.get(offer.transferId, deviceId).nextOffset, bytes.length);
+  assert.deepEqual((await client.command('file.read', { transferId: offer.transferId, leaseId: status.leaseId!, offset: bytes.length })).payload,
+    { ok: false, error: { code: 'FILE_OFFSET' } }, 'no reads past the end of the file');
+});
