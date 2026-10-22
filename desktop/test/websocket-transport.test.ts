@@ -321,6 +321,27 @@ test('busy sockets cannot create unbounded handler work', { timeout: 10_000 }, a
   assert.equal((await send(socket)).payload.ok, true);
 });
 
+test('a client that stops reading is cut off instead of buffering forever', { timeout: 30_000 }, async t => {
+  const context = await fixture(t, { heartbeatMs: 60_000 }); // heartbeat cannot be what cuts this connection
+  const { body } = await context.exchange();
+  const socket = context.connect(String(body.sessionToken));
+  await once(socket, 'open');
+  (socket as unknown as { _socket: { pause(): void } })._socket.pause(); // the client stops reading
+  // Kernel buffers on both ends absorb some data first; the storm must exceed them plus the 256 KB app cap.
+  // A paused client never sees the close frame, so assert on the server-side log instead.
+  const payload = 'x'.repeat(64 * 1024);
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline
+    && !context.log.snapshot().some(event => event.eventType === 'connection.closed')) {
+    for (let i = 0; i < 10; i++) context.transport.publish(context.deviceId, 'test.event', payload);
+    await delay(10);
+  }
+  const closures = context.log.snapshot().filter(event => event.eventType === 'connection.closed');
+  assert.equal(closures.length, 1, 'the server cut the stalled connection');
+  assert.equal(closures[0]!.outcome, 'failed', 'closed with 1013 (client too slow), not a clean goodbye');
+  socket.terminate(); // a paused socket cannot finish a close handshake
+});
+
 test('desktop events reach only the addressed live device and exclude payloads from the log', { timeout: 10_000 }, async t => {
   const context = await fixture(t);
   const { body } = await context.exchange();
