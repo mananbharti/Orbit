@@ -276,3 +276,17 @@ test('downloads serve chunks only in order and verify every acknowledgement', as
   assert.deepEqual((await client.command('file.read', { transferId: offer.transferId, leaseId: status.leaseId!, offset: bytes.length })).payload,
     { ok: false, error: { code: 'FILE_OFFSET' } }, 'no reads past the end of the file');
 });
+
+test('a fifth active transfer is refused, and re-offering an existing transfer is idempotent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-file-active-'));
+  try {
+    const store = new TransferStore(root, join(root, 'received'), 'to-desktop');
+    const owners = Array.from({ length: 4 }, () => randomUUID());
+    const rows = owners.map(owner => store.create(manifest(Buffer.alloc(8)), owner)); // small files: the byte quota stays out of the way
+    assert.throws(() => store.create(manifest(Buffer.alloc(8)), randomUUID()), /FILE_QUOTA/); // four active transfers is the global cap
+    const again = store.create(rows[0]!.manifest, owners[0]!); // re-offering the identical transfer returns the existing record
+    assert.equal(again, rows[0]!);
+    assert.throws(() => store.create(rows[0]!.manifest, randomUUID()), /FILE_NOT_FOUND/); // another owner cannot see it
+    assert.throws(() => store.create({ ...rows[0]!.manifest, sizeBytes: 9 }, owners[0]!), /FILE_INTEGRITY/); // a conflicting re-offer is rejected
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
