@@ -21,6 +21,8 @@ export class TaskStore {
   private snapshot: TaskStoreState;
   private disposers: (() => void)[] = [];
   private refreshing = false;
+  /** Tasks changed by a push or update while a list request was in flight; the older list must not override them. */
+  private touched = new Set<string>();
 
   constructor(private readonly session: OrbitSession, private readonly api: AgentApi) {
     this.snapshot = this.build();
@@ -40,9 +42,15 @@ export class TaskStore {
   async refresh(): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
+    this.touched.clear();
     try {
       const list = await this.api.list();
-      this.tasks = new Map(list.map(t => [t.taskId, t]));
+      const next = new Map(list.map(t => [t.taskId, t]));
+      for (const id of this.touched) {
+        const local = this.tasks.get(id); const listed = next.get(id);
+        if (local && (!listed || local.updatedAt >= listed.updatedAt)) next.set(id, local);
+      }
+      this.tasks = next;
       this.lastError = undefined;
       for (const t of list) if (this.events.has(t.taskId) || !TERMINAL_TASK_STATES.has(t.state)) void this.loadEvents(t.taskId);
     } catch (error) { this.lastError = describe(error); }
@@ -84,6 +92,7 @@ export class TaskStore {
     const current = this.tasks.get(task.taskId);
     if (current && current.updatedAt > task.updatedAt) return;
     this.tasks.set(task.taskId, task);
+    this.touched.add(task.taskId);
     this.emit();
   }
 
