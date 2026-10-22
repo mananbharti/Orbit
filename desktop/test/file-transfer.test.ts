@@ -72,6 +72,19 @@ test('upload verifies chunks, refuses conflicting duplicates, completes once and
   for (const secret of [bytes.toString(), offer.name, offer.sha256]) assert.equal(metadata.includes(secret), false);
 });
 
+test('an acknowledgement of offset zero on a fresh download is rejected', async t => {
+  const { root, files, connect, store, deviceId } = fixture(t);
+  const client = connect();
+  const bytes = Buffer.alloc(protocol.CHUNK_BYTES * 2, 4);
+  const source = join(root, 'serve.bin'); writeFileSync(source, bytes);
+  const offer = await files.offerLocal(source, deviceId);
+  const status = protocol.statusSchema.parse(ok(await client.command('file.accept', { transferId: offer.transferId })));
+  await waitFor(() => store.get(offer.transferId, deviceId).state === 'transferring'); // accept hashes the source before serving
+  const zero = await client.command('file.ack', { transferId: offer.transferId, leaseId: status.leaseId!, nextOffset: 0, sha256: sha256(Buffer.alloc(0)) });
+  assert.deepEqual(zero.payload, { ok: false, error: { code: 'FILE_OFFSET' } }); // a zero ack would rewind into a negative read
+  assert.equal(store.get(offer.transferId, deviceId).nextOffset, 0, 'the transfer did not move');
+});
+
 test('fresh leases reject old sockets and ownership is checked before status or cancellation', async t => {
   const { connect, addDevice } = fixture(t);
   const a = connect(); const b = connect();
