@@ -1,7 +1,7 @@
 /** Tests agent task commands and the ledger; depends on the real router and synthetic runners; never starts a real agent harness. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -24,10 +24,10 @@ class ScriptedRunner implements AgentRunner {
   }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function fixture(t: TestContext, directory = mkdtempSync(join(tmpdir(), 'orbit-agent-test-'))) {
+function fixture(t: TestContext, directory = mkdtempSync(join(tmpdir(), 'orbit-agent-test-')), pauseFile?: string) {
   const setup = core(); const runner = new ScriptedRunner();
   const ledger = new TaskLedger(directory);
-  const tasks = new AgentTasks(setup.registry, ledger, runner);
+  const tasks = new AgentTasks(setup.registry, ledger, runner, undefined, pauseFile);
   t.after(() => { void tasks.stop(); rmSync(directory, { recursive: true, force: true }); });
   const published: JsonValue[] = [];
   const connectionFor = (token: string) => { const closed = new AbortController();
@@ -189,4 +189,26 @@ test('retry is refused while the agent is paused', async t => {
   result(await command('agent.pause', {}));
   error(await command('agent.retry', { taskId: first.taskId, idempotencyKey: randomUUID() }), 'AGENT_PAUSED');
   void tasks;
+});
+
+test('safe mode aborts running work, refuses new submissions, survives a restart, and fails closed on IO errors', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'orbit-agent-pause-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const pauseFile = join(dir, 'agent.paused');
+  const f = fixture(t, dir, pauseFile);
+  const { taskId } = result(await f.command('agent.submit', submit()));
+  result(await f.command('agent.pause', {}));
+  await tick(); await tick(); // the aborted run settles
+  assert.equal(result(await f.command('agent.get', { taskId })).state, 'cancelled', 'pausing aborts in-flight work');
+  error(await f.command('agent.submit', submit()), 'AGENT_PAUSED');
+  assert.equal(existsSync(pauseFile), true);
+  await f.tasks.stop();
+  const revived = new AgentTasks(f.registry, new TaskLedger(dir), new ScriptedRunner(), undefined, pauseFile);
+  t.after(() => { void revived.stop(); });
+  assert.equal(result(await f.command('agent.status', {})).paused, true, 'safe mode survives a restart');
+  result(await f.command('agent.resume', {}));
+  assert.equal(existsSync(pauseFile), false);
+  mkdirSync(pauseFile); // a directory where the flag file belongs makes the durability write fail
+  error(await f.command('agent.pause', {}), 'AGENT_LEDGER_IO');
+  assert.equal(result(await f.command('agent.status', {})).paused, false, 'a pause that cannot be made durable never claims to be active');
 });
