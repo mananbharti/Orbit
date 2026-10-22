@@ -84,6 +84,21 @@ test('duplicate request IDs cannot repeat execution within a session', async () 
   assert.equal(calls, 1);
 });
 
+test('a session cannot accumulate request IDs without bound', async () => {
+  const fixture = core();
+  let calls = 0;
+  fixture.registry.register('test.echo', { validate: () => true, execute: async () => { calls++; return null; } });
+  const token = fixture.auth.issue(fixture.credential)!.sessionToken;
+  for (let batch = 0; batch < 16; batch++) {
+    const results = await Promise.all(Array.from({ length: 256 }, () => fixture.router.dispatch(command(), token)));
+    for (const result of results) assert.equal(result.payload.ok, true);
+  }
+  assert.equal(calls, 4_096);
+  const over = await fixture.router.dispatch(command(), token);
+  assert.deepEqual(over.payload, { ok: false, error: { code: 'BUSY' } });
+  assert.equal(calls, 4_096, 'the command past the cap never executes');
+});
+
 test('malformed, unversioned, extra-field and unsupported envelopes are rejected', () => {
   for (const value of ['{', 'null', '[]', '{}', JSON.stringify({ ...command(), version: 2 }),
     JSON.stringify({ ...command(), sessionToken: 'secret' }), JSON.stringify({ ...command(), requestId: 'free text' })]) {
