@@ -84,11 +84,12 @@ ${'MUTE'}`.replace('LEVEL', String(level)).replace('MUTE', typeof muted === 'boo
     return { theme, nightLight: null };
   }
   async setDisplayMode(mode: { theme?: 'dark' | 'light'; nightLight?: boolean }): Promise<void> {
+    // Refuse before changing anything so a rejected request never half-applies.
+    if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light cannot be toggled safely (undocumented registry state)');
     if (mode.theme) {
       // Computed from the enum, never interpolated user data. AppsUseLightTheme covers apps; SystemUsesLightTheme covers taskbar and shell.
       const dword = mode.theme === 'light' ? '1' : '0';
       await this.ps(`$p = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize'; Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value ${'DWORD'}; Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value ${'DWORD'}`.replace(/DWORD/g, dword));
     }
-    if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light cannot be toggled safely (undocumented registry state)');
   }
 }

@@ -73,3 +73,14 @@ test('a session that vanishes between validation and resolution never gets a com
   await assert.rejects(unknown.setSession('99', 50), AudioMixerUnavailable);
   assert.deepEqual(sent, []);
 });
+
+test('Windows refuses night light before changing the theme', async () => {
+  const { WindowsSystemControl } = await import('../src/os-integration/system-control.windows.js');
+  const scripts: string[] = [];
+  const windows = new WindowsSystemControl(async script => { scripts.push(script); return ''; });
+  await assert.rejects(windows.setDisplayMode({ theme: 'dark', nightLight: true }), /Night light/);
+  await assert.rejects(windows.setDisplayMode({ nightLight: false }), /Night light/);
+  assert.deepEqual(scripts, []);
+  await windows.setDisplayMode({ theme: 'dark' });
+  assert.equal(scripts.length, 1);
+});
