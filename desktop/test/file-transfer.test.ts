@@ -322,3 +322,35 @@ test('finish refuses incomplete transfers, tolerates duplicates, and stays idemp
   const cancelled = protocol.statusSchema.parse(ok(await client.command('file.finish', { transferId: second.transferId, leaseId: randomUUID() })));
   assert.equal(cancelled.state, 'cancelled', 'finishing a cancelled transfer returns its settled state');
 });
+
+test('watchers learn about new offers for their device only until they unsubscribe or disconnect', async t => {
+  const { root, files, connect, deviceId, addDevice, revoke } = fixture(t);
+  const watcher = connect();
+  const sub = ok(await watcher.command('file.subscribe', {})) as { subscriptionId: string };
+  const again = ok(await watcher.command('file.subscribe', {})) as { subscriptionId: string };
+  assert.equal(again.subscriptionId, sub.subscriptionId, 're-subscribing on one connection keeps the same subscription');
+  const other = connect(addDevice().credential);
+  ok(await other.command('file.subscribe', {}));
+  const source = join(root, 'watched.bin'); writeFileSync(source, 'hello');
+  const offer = async () => { const made = await files.offerLocal(source, deviceId); await watcher.command('file.cancel', { transferId: made.transferId }); return made; }; // one active transfer per device
+  const first = await offer();
+  assert.equal(watcher.events.length, 1);
+  assert.deepEqual(watcher.events[0], { subscriptionId: sub.subscriptionId, manifest: first });
+  assert.equal(other.events.length, 0, 'another device is not told about offers it does not own');
+  ok(await watcher.command('file.unsubscribe', { subscriptionId: randomUUID() })); // a wrong id must not unsubscribe
+  await offer();
+  assert.equal(watcher.events.length, 2);
+  ok(await watcher.command('file.unsubscribe', { subscriptionId: sub.subscriptionId }));
+  await offer();
+  assert.equal(watcher.events.length, 2, 'an unsubscribed connection hears nothing more');
+  const dropped = connect();
+  ok(await dropped.command('file.subscribe', {}));
+  dropped.abort.abort();
+  await offer();
+  assert.equal(dropped.events.length, 0, 'a closed connection is never notified');
+  const deactivated = connect();
+  ok(await deactivated.command('file.subscribe', {}));
+  revoke(); // the device is deactivated: even a live connection must hear nothing
+  await files.offerLocal(source, deviceId);
+  assert.equal(deactivated.events.length, 0, 'a deactivated session is never notified');
+});
