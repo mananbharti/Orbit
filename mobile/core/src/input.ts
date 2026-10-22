@@ -16,26 +16,34 @@ export class InputApi {
   private queue: InputEvent[] = [];
   private flushing?: Promise<void>;
   private offStatus: () => void;
+  /** Bumped when a pending begin is abandoned, so its late reply is released instead of activating. */
+  private epoch = 0;
 
   constructor(private readonly session: OrbitSession) {
     this.offStatus = session.onStatus(() => { if (this.lease) this.finish('ended', 'Connection lost'); });
   }
   getState = (): InputState => this.state;
   subscribe = (l: () => void): (() => void) => { this.listeners.add(l); return () => this.listeners.delete(l); };
-  dispose(): void { this.offStatus(); this.stopTimer(); this.listeners.clear(); }
+  dispose(): void { this.epoch++; this.offStatus(); this.stopTimer(); this.listeners.clear(); }
 
   /** Asks the computer for control. Resolves once its owner confirmed; rejects with BIOMETRIC_REQUIRED if they did not. */
   async begin(): Promise<void> {
     if (this.lease || this.state.status === 'waiting') throw new NotSent('Already controlling');
     this.set({ status: 'waiting' });
+    const epoch = ++this.epoch;
     try {
       const parsed = inputBeginSchema.safeParse(await this.session.command('input.begin', {}, { timeoutMs: 60_000 }));
       if (!parsed.success) throw new InvalidDesktopReply();
+      if (epoch !== this.epoch) {
+        // The user left while waiting for the owner: release the session that was just approved.
+        void this.session.command('input.end', { controlSessionId: parsed.data.controlSessionId }).catch(() => {});
+        throw new NotSent('Control cancelled');
+      }
       this.lease = { id: parsed.data.controlSessionId, sequence: parsed.data.nextSequence, heartbeatMs: parsed.data.heartbeatTimeoutMs };
       this.timer = setInterval(() => { void this.beat(); }, Math.max(250, Math.floor(parsed.data.heartbeatTimeoutMs / 3)));
       this.set({ status: 'active' });
     } catch (error) {
-      this.set({ status: 'idle', error: error instanceof CommandError ? error.code : 'Could not start' });
+      if (epoch === this.epoch) this.set({ status: 'idle', error: error instanceof CommandError ? error.code : 'Could not start' });
       throw error;
     }
   }
@@ -95,7 +103,10 @@ export class InputApi {
   }
   async end(): Promise<void> {
     const lease = this.lease;
-    if (!lease) return;
+    if (!lease) {
+      if (this.state.status === 'waiting') { this.epoch++; this.set({ status: 'idle' }); }
+      return;
+    }
     this.queue = [];
     this.finish('ended');
     try { await this.session.command('input.end', { controlSessionId: lease.id }); } catch { /* the computer releases on disconnect or heartbeat timeout */ }
