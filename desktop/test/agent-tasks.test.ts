@@ -212,3 +212,20 @@ test('safe mode aborts running work, refuses new submissions, survives a restart
   error(await f.command('agent.pause', {}), 'AGENT_LEDGER_IO');
   assert.equal(result(await f.command('agent.status', {})).paused, false, 'a pause that cannot be made durable never claims to be active');
 });
+
+test('agent.events pages at 64, reports hasMore, and resumes after a sequence number', async t => {
+  const { command, runner, ledger, deviceId } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  const task = ledger.get(deviceId, taskId);
+  for (let i = 0; i < 100; i++) ledger.note(task, 'output', `line ${i}`);
+  const first = result(await command('agent.events', { taskId }));
+  assert.equal(first.events.length, 64);
+  assert.equal(first.hasMore, true);
+  const last = first.events.at(-1).seq;
+  const second = result(await command('agent.events', { taskId, afterSeq: last }));
+  assert.equal(second.events[0].seq, last + 1, 'the next page starts right after the cursor');
+  assert.equal(second.events.length, task.events.length - 64);
+  assert.equal(second.hasMore, false);
+  assert.equal(result(await command('agent.events', { taskId, afterSeq: task.events.at(-1)!.seq })).events.length, 0);
+  void runner;
+});
