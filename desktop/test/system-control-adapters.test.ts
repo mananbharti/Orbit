@@ -127,3 +127,34 @@ test('a missing tool surfaces as SystemControlUnavailable, never a raw spawn err
   await assert.rejects(new LinuxSystemControl(tool).getVolume(), SystemControlUnavailable);
   await assert.rejects(new WindowsSystemControl(tool).power('lock'), SystemControlUnavailable);
 });
+
+test('Windows volume read clamps over-range output, rejects 4-digit output and reads mute False', async () => {
+  const read = (out: string) => new WindowsSystemControl(fakeTool({ 'powershell.exe -NoProfile': out }).tool).getVolume();
+  assert.deepEqual(await read('150;False'), { level: 100, muted: false });
+  assert.deepEqual(await read('0;False'), { level: 0, muted: false });
+  await assert.rejects(read('1000;True'), SystemControlUnavailable);
+  await assert.rejects(read('-5;True'), SystemControlUnavailable);
+  await assert.rejects(read('50;maybe'), SystemControlUnavailable);
+});
+
+test('Windows volume and brightness writes refuse fractions, negatives and over-range without running a script', async () => {
+  const { tool, calls } = fakeTool({ 'powershell.exe -NoProfile': '' });
+  const control = new WindowsSystemControl(tool);
+  for (const bad of [1.5, -1, 101, Number.NaN]) {
+    await assert.rejects(control.setVolume(bad), SystemControlUnavailable);
+    await assert.rejects(control.setBrightness(bad), SystemControlUnavailable);
+  }
+  assert.equal(calls.length, 0);
+  await control.setVolume(0); await control.setVolume(100); await control.setBrightness(0); await control.setBrightness(100);
+  assert.equal(calls.length, 4, 'both edges are valid');
+  assert.deepEqual(calls[0]!.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command'], 'the worker can never wait on a prompt');
+});
+
+test('Windows brightness read rejects fractional, negative and over-range answers as null, and keeps both edges', async () => {
+  const read = (out: string) => new WindowsSystemControl(fakeTool({ 'powershell.exe -NoProfile': out }).tool).getBrightness();
+  assert.equal(await read('0'), 0);
+  assert.equal(await read('100'), 100);
+  assert.equal(await read('55.5'), null);
+  assert.equal(await read('-1'), null);
+  assert.equal(await read('101'), null);
+});
