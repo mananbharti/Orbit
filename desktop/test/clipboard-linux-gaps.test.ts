@@ -64,7 +64,7 @@ test('tool bridge keeps stderr bounded, stops collecting after overflow and kill
 
 test('a writer ignores tool output and resolves on exit even when a forked owner keeps stderr open', { skip: process.platform === 'win32' && 'needs a POSIX shell' }, async () => {
   const started = Date.now();
-  const written = await runClipboardTool('sh', ['-c', 'echo leaked; sleep 5 & exit 0'], 0, 'payload');
+  const written = await runClipboardTool('sh', ['-c', 'cat > /dev/null; echo leaked; sleep 5 & exit 0'], 0, 'payload');
   assert.equal(written.code, 0);
   assert.equal(written.output.length, 0);
   assert.ok(Date.now() - started < 3_000);
