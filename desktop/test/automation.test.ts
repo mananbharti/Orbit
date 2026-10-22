@@ -100,3 +100,32 @@ test('automation commands validate, authorize, and translate store errors', asyn
   assert.equal((await list.execute({}, context()) as { automations: unknown[] }).automations.length, 0);
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('one failing action never blocks another automation in the same minute, and both outcomes are logged', async () => {
+  const { registry, store, dir, fired } = setup();
+  const log = new ActivityLog();
+  const mixed: AutomationExecutor = { launchScene: async () => { throw new Error('gone'); }, launchApp: async id => { fired.push(['app', id]); },
+    power: async () => {} };
+  const service = new AutomationService(registry, store, mixed, log, () => at(7, 45));
+  store.save({ time: '07:45', days: [], action: { type: 'scene', sceneId: SCENE } }); // saved first: runs first, fails
+  store.save({ time: '07:45', days: [], action: { type: 'app', appId: 'com.example.keep' } });
+  await service.tick();
+  assert.deepEqual(fired, [['app', 'com.example.keep']], 'the healthy automation still fires after the broken one');
+  const outcomes = log.snapshot().filter(event => event.eventType === 'automation.fired').map(event => event.outcome);
+  assert.deepEqual(outcomes.sort(), ['failed', 'success']);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('the store caps the list at 32, dedupes and sorts days, and hands out copies', () => {
+  const { store, dir } = setup();
+  const [created] = store.save({ time: '06:00', days: [4, 1, 4], action: { type: 'power', action: 'lock' } });
+  assert.deepEqual(created!.days, [1, 4], 'duplicate days are folded and sorted');
+  const listed = store.list();
+  listed[0]!.days.push(6);
+  assert.deepEqual(store.get(created!.id)!.days, [1, 4], 'mutating a returned automation cannot corrupt the store');
+  for (let i = 0; i < 31; i++) store.save({ time: '06:00', days: [], action: { type: 'power', action: 'lock' } });
+  assert.throws(() => store.save({ time: '06:00', days: [], action: { type: 'power', action: 'lock' } }), /AUTOMATION_LIMIT/);
+  store.save({ id: created!.id, time: '06:30', days: [], action: { type: 'power', action: 'lock' } }); // replacing an existing entry stays under the cap
+  assert.equal(store.list().length, 32);
+  rmSync(dir, { recursive: true, force: true });
+});
