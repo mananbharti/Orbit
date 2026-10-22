@@ -190,6 +190,20 @@ test('a lost desktop is found through the locator once per cooldown, and the new
   assert.equal(s.status, 'connected');
   s.stop();
 });
+test('a session token authorizes a bounded run of commands, then renews itself', async () => {
+  const t = new FakeTransport();
+  const { s } = make(t, { renewAfterCommands: 2 });
+  await s.start();
+  echo(t);
+  await s.command('a.one', {});
+  await s.command('a.two', {});
+  await assert.rejects(s.command('a.three', {}), NotSent); // the next command on the same token is refused
+  await sleep(80); // the renewal runs: a fresh session post, a fresh channel
+  assert.ok(t.posts.filter(p => p.path === '/v1/session').length >= 2, 'a fresh session was requested');
+  echo(t);
+  assert.deepEqual(await s.command('a.four', {}), { echo: 'a.four' });
+  s.stop();
+});
 test('the session renews itself before expiry', async () => {
   const t = new FakeTransport(); t.sessionExpiresIn = 100;
   const { s } = make(t); await s.start();
