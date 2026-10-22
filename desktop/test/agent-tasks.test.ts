@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import { AgentTasks, MAX_CONCURRENT_TASKS } from '../src/agent/agent-tasks.js';
+import { AgentTasks, APPROVAL_TIMEOUT_MS, MAX_CONCURRENT_TASKS } from '../src/agent/agent-tasks.js';
 import type { AgentRunContext, AgentRunner } from '../src/agent/agent-runner.js';
 import { TaskLedger } from '../src/agent/task-ledger.js';
 import type { JsonValue, ResponseMessage } from '../src/protocol/messages.js';
@@ -228,4 +228,21 @@ test('agent.events pages at 64, reports hasMore, and resumes after a sequence nu
   assert.equal(second.hasMore, false);
   assert.equal(result(await command('agent.events', { taskId, afterSeq: task.events.at(-1)!.seq })).events.length, 0);
   void runner;
+});
+
+test('an approval nobody answers is denied after five minutes, and an answer just before that still counts', async t => {
+  const { command, runner } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const silent = runner.contexts[0]!.requestApproval('Delete 3 files');
+  await tick();
+  assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval');
+  t.mock.timers.tick(APPROVAL_TIMEOUT_MS - 1);
+  await tick();
+  assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval', 'still waiting one millisecond before the deadline');
+  t.mock.timers.tick(1);
+  assert.equal(await silent, false, 'silence is never approval');
+  assert.equal(result(await command('agent.get', { taskId })).state, 'running');
+  assert.equal(result(await command('agent.events', { taskId })).events.at(-1).text, 'Denied');
+  error(await command('agent.approve', { taskId, approve: true }), 'AGENT_INVALID_STATE');
 });
