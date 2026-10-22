@@ -192,3 +192,65 @@ test('stop() unregisters the commands and drops any open clip', async () => {
     assert.equal(registry.get(type), undefined, `${type} is gone`);
   void id;
 });
+
+test('a wrong dictation id from the owning connection is refused', async t => {
+  const { handle } = fixture(t);
+  const context = contextFor(connection().conn);
+  await begin(handle, context);
+  await assert.rejects(handle('dictation.chunk').execute({ dictationId: '11111111-1111-4111-8111-111111111111', offset: 0, dataBase64: pcmChunk(4) }, context), /INVALID_PAYLOAD/);
+  await assert.rejects(handle('dictation.cancel').execute({ dictationId: '11111111-1111-4111-8111-111111111111' }, context), /INVALID_PAYLOAD/);
+});
+
+test('pcm and m4a uploads stop at their hard caps', async t => {
+  const decoder: AudioDecoder = async () => new Int16Array(16_000);
+  const { handle } = fixture(t, { decoder });
+  const context = contextFor(connection().conn);
+  const pcmId = await begin(handle, context);
+  const pcmChunkSamples = 16_384;
+  const full = pcmChunk(pcmChunkSamples);
+  let offset = 0;
+  const max = 16_000 * 120;
+  while (offset + pcmChunkSamples <= max) { await handle('dictation.chunk').execute({ dictationId: pcmId, offset, dataBase64: full }, context); offset += pcmChunkSamples; }
+  const rest = max - offset;
+  await handle('dictation.chunk').execute({ dictationId: pcmId, offset, dataBase64: pcmChunk(rest) }, context);
+  await assert.rejects(handle('dictation.chunk').execute({ dictationId: pcmId, offset: max, dataBase64: pcmChunk(2) }, context), /INVALID_PAYLOAD/);
+  await handle('dictation.cancel').execute({ dictationId: pcmId }, context);
+
+  const m4aId = await begin(handle, context, { format: 'm4a' });
+  const cap = 3 * 1_024 * 1_024;
+  const block = Buffer.alloc(32 * 1_024, 1).toString('base64');
+  for (let at = 0; at < cap; at += 32 * 1_024) await handle('dictation.chunk').execute({ dictationId: m4aId, offset: at, dataBase64: block }, context);
+  await assert.rejects(handle('dictation.chunk').execute({ dictationId: m4aId, offset: cap, dataBase64: Buffer.alloc(4, 1).toString('base64') }, context), /INVALID_PAYLOAD/);
+});
+
+test('a clip that is transcribing refuses more chunks and a second finish with BUSY', async t => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let started = false;
+  const engine: Transcriber = { transcribe: async () => { started = true; await gate; return 'done'; } };
+  const { handle } = fixture(t, { engine });
+  const context = contextFor(connection().conn);
+  const id = await begin(handle, context);
+  await handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: loudPcm(16_000) }, context);
+  const finishing = handle('dictation.finish').execute({ dictationId: id }, context);
+  for (let i = 0; i < 100 && !started; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(started);
+  await assert.rejects(handle('dictation.chunk').execute({ dictationId: id, offset: 16_000, dataBase64: pcmChunk(4) }, context), /BUSY/);
+  await assert.rejects(handle('dictation.finish').execute({ dictationId: id }, context), /BUSY/);
+  release();
+  assert.deepEqual(await finishing, { status: 'text', text: 'Done' });
+});
+
+test('audio buffers are zeroed after finish, including the copies handed to the decoder and engine', async t => {
+  let decoderInput: Buffer | undefined;
+  let enginePcm: Int16Array | undefined;
+  const decoder: AudioDecoder = async bytes => { decoderInput = bytes as Buffer; return new Int16Array(16_000).fill(9_000); };
+  const engine: Transcriber = { transcribe: async pcm => { enginePcm = pcm; assert.ok(pcm.some(v => v !== 0)); return 'ok'; } };
+  const { handle } = fixture(t, { decoder, engine });
+  const context = contextFor(connection().conn);
+  const id = await begin(handle, context, { format: 'm4a' });
+  await handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: Buffer.from([1, 2, 3, 4]).toString('base64') }, context);
+  await handle('dictation.finish').execute({ dictationId: id }, context);
+  assert.ok(decoderInput && decoderInput.every(b => b === 0), 'decoder input copy wiped');
+  assert.ok(enginePcm && enginePcm.every(v => v === 0), 'trimmed engine copy wiped');
+});
