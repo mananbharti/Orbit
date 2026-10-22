@@ -292,6 +292,16 @@ test('revoked credentials cannot dispatch over an already-open socket', { timeou
   assert.equal(context.executions(), 0);
 });
 
+test('an idle socket is closed at once when its credential is revoked', { timeout: 10_000 }, async t => {
+  const context = await fixture(t, { heartbeatMs: 60_000 }); // the revoke sweep, not the heartbeat, must close it
+  const { body } = await context.exchange();
+  const socket = context.connect(String(body.sessionToken));
+  await once(socket, 'open');
+  context.revoke();
+  context.transport.closeUnauthenticated();
+  assert.equal((await once(socket, 'close'))[0], 4001); // no command sent: only the sweep can close it
+});
+
 test('missed heartbeat terminates a dead peer while the service remains available', { timeout: 10_000 }, async t => {
   const context = await fixture(t, { heartbeatMs: 50 });
   const { body } = await context.exchange();
