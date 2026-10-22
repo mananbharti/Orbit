@@ -1,6 +1,6 @@
 /** Tests native adapter boundaries with synthetic registrations and helper processes; depends on temporary files; never activates installed applications. */
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -79,4 +79,80 @@ test('native helper waits for authorization and redacts failures and excess outp
     authorize: () => { throw new ProtocolError('UNAUTHENTICATED'); } }), /UNAUTHENTICATED/);
   await assert.rejects(runLauncherTool(process.execPath, ['-e', "process.stderr.write('private diagnostics');process.exit(1)"], { signal }), /LAUNCHER_UNAVAILABLE/);
   await assert.rejects(runLauncherTool(process.execPath, ['-e', "process.stdout.write('x'.repeat(3*1024*1024))"], { signal }), /LAUNCHER_LIMIT/);
+});
+
+test('launcher helper exit codes and signals map to the right protocol errors', async () => {
+  const signal = new AbortController().signal;
+  const node = (code: string) => [process.execPath, ['-e', code]] as const;
+  const [file, args] = node("process.stdin.on('data',()=>{});process.stdin.once('data',()=>process.exit(3))");
+  await assert.rejects(runLauncherTool(file, [...args], { signal, input: '{}', activation: true, authorize: () => {} }), /LAUNCHER_STALE_CATALOG/);
+  const [f2, a2] = node("process.exit(0)");
+  await assert.rejects(runLauncherTool(f2, [...a2], { signal, input: '{}', activation: true, authorize: () => {} }), /LAUNCHER_UNKNOWN_OUTCOME/, 'exiting 0 without ever asking for authorization is not a success');
+  const [f3, a3] = node("process.exit(1)");
+  await assert.rejects(runLauncherTool(f3, [...a3], { signal, input: '{}', activation: true }), /LAUNCHER_UNKNOWN_OUTCOME/);
+  await assert.rejects(runLauncherTool(f3, [...a3], { signal }), /LAUNCHER_UNAVAILABLE/);
+  await assert.rejects(runLauncherTool('orbit-no-such-binary-xyz', [], { signal }), /LAUNCHER_UNAVAILABLE/);
+  const gone = new AbortController(); gone.abort();
+  await assert.rejects(runLauncherTool(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { signal: gone.signal }), /UNAUTHENTICATED/);
+});
+
+test('launcher helper returns stdout, receives its input, and stops when the signal aborts mid-run', async () => {
+  const signal = new AbortController().signal;
+  const echo = "let s='';process.stdin.on('data',d=>{s+=d});process.stdin.on('end',()=>{process.stdout.write(s.trim().toUpperCase())})";
+  assert.equal(await runLauncherTool(process.execPath, ['-e', echo], { signal, input: 'hello' }), 'HELLO');
+  const control = new AbortController();
+  const running = runLauncherTool(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { signal: control.signal });
+  setTimeout(() => control.abort(), 50);
+  await assert.rejects(running, /UNAUTHENTICATED/);
+});
+
+test('Windows icons are returned only when they look like bounded base64 PNG data', async () => {
+  const signal = new AbortController().signal;
+  const icon = async (out: string, target: string | null = 'C:\\app.exe') => new WindowsAppLauncher(async () => out).icon({ key: 'k', name: 'n', revision: 'r', ...(target ? { target } : {}) }, signal);
+  assert.equal(await icon('  iVBORw0KGgo=\n'), 'iVBORw0KGgo=', 'trimmed');
+  assert.equal(await icon('iVBORw0KGgo=', null), null, 'no target means no icon');
+  assert.equal(await icon('null'), null);
+  assert.equal(await icon(''), null);
+  assert.equal(await icon('<script>alert(1)</script>'), null);
+  assert.equal(await icon('A'.repeat(90_000)), 'A'.repeat(90_000), 'the limit itself is allowed');
+  assert.equal(await icon('A'.repeat(90_001)), null);
+  let ran = false;
+  await new WindowsAppLauncher(async () => { ran = true; return ''; }).icon({ key: 'k', name: 'n', revision: 'r' }, signal);
+  assert.equal(ran, false, 'no PowerShell without a discovered target');
+});
+
+test('Windows list rejects a catalog that breaks the entry schema', async () => {
+  const signal = new AbortController().signal;
+  const list = (value: unknown) => new WindowsAppLauncher(async () => JSON.stringify(value)).list(signal);
+  const good = { key: 'k', name: 'App', revision: 'a'.repeat(64) };
+  assert.deepEqual(await list([good]), [good]);
+  await assert.rejects(list([{ ...good, revision: 'short' }]));
+  await assert.rejects(list([{ ...good, key: '' }]));
+  await assert.rejects(list([{ ...good, extra: 'field' }]));
+  await assert.rejects(list(Array.from({ length: 2049 }, (_, i) => ({ ...good, key: `k${i}` }))));
+});
+
+test('an aborted helper is killed, not left running', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'orbit-launcher-kill-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const pidFile = join(dir, 'pid');
+  const control = new AbortController();
+  const running = runLauncherTool(process.execPath, ['-e', `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));setInterval(()=>{},1000)`], { signal: control.signal });
+  let pid = 0;
+  for (let i = 0; i < 200 && !pid; i++) { try { pid = Number(readFileSync(pidFile, 'utf8')); } catch { await new Promise(r => setTimeout(r, 25)); } }
+  assert.ok(pid > 0, 'helper started');
+  control.abort();
+  await assert.rejects(running, /UNAUTHENTICATED/);
+  let alive = true;
+  for (let i = 0; i < 100 && alive; i++) { try { process.kill(pid, 0); await new Promise(r => setTimeout(r, 25)); } catch { alive = false; } }
+  assert.equal(alive, false, 'the helper process is gone');
+});
+
+test('an activation finishes when the helper exits even if an app it started still holds the output pipe', async () => {
+  const signal = new AbortController().signal;
+  const script = `const {spawn}=require('child_process');process.stdin.once('data',()=>{process.stdout.write('READY\\n');process.stdin.once('data',()=>{
+    spawn(process.execPath,['-e','setTimeout(()=>{},3000)'],{detached:true,stdio:['ignore','inherit','ignore']}).unref();process.exit(0)})})`;
+  const started = Date.now();
+  await runLauncherTool(process.execPath, ['-e', script], { signal, input: '{}', activation: true, authorize: () => {} });
+  assert.ok(Date.now() - started < 2_500, `finished at helper exit, not when the launched app released the pipe (${Date.now() - started}ms)`);
 });
