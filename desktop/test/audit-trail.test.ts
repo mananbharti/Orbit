@@ -116,3 +116,23 @@ test('export lists every device oldest first as JSON and CSV with ISO times', as
   const json = JSON.parse(trail.exportAll('json')) as { kind: string; time: string }[];
   assert.deepEqual(json.map(e => e.kind), ['submitted', 'paused']);
 });
+
+test('compaction keeps the newest 2,000 entries, and a page limit caps what a device sees', t => {
+  const trail = new AuditTrail(dir(t)); const device = randomUUID();
+  for (let i = 0; i < MAX_AUDIT_ENTRIES + 300; i++) trail.record({ deviceId: device, kind: 'paused', outcome: String(i) });
+  const kept = (JSON.parse(trail.exportAll('json')) as { outcome: string }[]);
+  assert.ok(kept.length >= MAX_AUDIT_ENTRIES, 'compaction never trims below the retention size');
+  assert.ok(kept.length <= MAX_AUDIT_ENTRIES + 200);
+  assert.equal(kept[0]!.outcome, String(MAX_AUDIT_ENTRIES + 300 - kept.length), 'what survives is a contiguous newest suffix');
+  assert.equal(trail.forDevice(device, 7).length, 7);
+  assert.equal(trail.forDevice(device).length, 50, 'the default page is 50');
+});
+
+test('CSV export neutralises spreadsheet formulas and quotes separators', t => {
+  const trail = new AuditTrail(dir(t)); const device = randomUUID();
+  trail.record({ deviceId: device, kind: 'finished', outcome: '=SUM(A1)' });
+  trail.record({ deviceId: device, kind: 'finished', outcome: 'a,"b"' });
+  const rows = trail.exportAll('csv').trim().split('\n');
+  assert.ok(rows[1]!.endsWith(",'=SUM(A1)"), 'a leading = is defused with an apostrophe');
+  assert.ok(rows[2]!.endsWith(',"a,""b"""'), 'commas and quotes are escaped');
+});
