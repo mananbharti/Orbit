@@ -1,7 +1,7 @@
 /** Verifies file checkpoints, leases, integrity and retention with synthetic files; depends on the real module and core fixture; never reads user files. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, statSync, utimesSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync, existsSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -289,4 +289,36 @@ test('a fifth active transfer is refused, and re-offering an existing transfer i
     assert.throws(() => store.create(rows[0]!.manifest, randomUUID()), /FILE_NOT_FOUND/); // another owner cannot see it
     assert.throws(() => store.create({ ...rows[0]!.manifest, sizeBytes: 9 }, owners[0]!), /FILE_INTEGRITY/); // a conflicting re-offer is rejected
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('finish refuses incomplete transfers, tolerates duplicates, and stays idempotent once settled', async t => {
+  const { connect, store, deviceId } = fixture(t);
+  const client = connect();
+  const bytes = Buffer.alloc(4 * 1024 * 1024, 9); // large enough that final hashing takes a measurable moment
+  const offer = manifest(bytes);
+  ok(await client.command('file.offer', offer));
+  const status = protocol.statusSchema.parse(ok(await client.command('file.resume', { transferId: offer.transferId })));
+  const row = store.get(offer.transferId, deviceId);
+  const chunk = (offset: number, part: Buffer) => client.command('file.chunk', { transferId: offer.transferId, leaseId: status.leaseId!, offset, dataBase64: part.toString('base64'), sha256: sha256(part) });
+  ok(await chunk(0, bytes.subarray(0, protocol.CHUNK_BYTES)));
+  assert.deepEqual((await client.command('file.finish', { transferId: offer.transferId, leaseId: status.leaseId! })).payload,
+    { ok: false, error: { code: 'FILE_OFFSET' } }, 'finishing before every byte arrived is refused');
+  assert.equal(row.state, 'transferring');
+  for (let offset = protocol.CHUNK_BYTES; offset < bytes.length; offset += protocol.CHUNK_BYTES)
+    ok(await chunk(offset, bytes.subarray(offset, offset + protocol.CHUNK_BYTES)));
+  ok(await client.command('file.finish', { transferId: offer.transferId, leaseId: status.leaseId! }));
+  ok(await client.command('file.finish', { transferId: offer.transferId, leaseId: status.leaseId! })) // a duplicate finish while verifying is tolerated;
+  await waitFor(() => row.state === 'completed');
+  await new Promise(resolve => setTimeout(resolve, 300)); // let any stray second verification settle
+  assert.equal(row.state, 'completed');
+  const published = readdirSync(store.inbox, { recursive: true }).filter(name => !String(name).startsWith('.') && statSync(join(store.inbox, String(name))).isFile());
+  assert.equal(published.length, 1, 'exactly one file was published');
+  assert.deepEqual(readFileSync(store.paths(row).destination), bytes);
+  const settled = protocol.statusSchema.parse(ok(await client.command('file.finish', { transferId: offer.transferId, leaseId: status.leaseId! })));
+  assert.equal(settled.state, 'completed', 'finishing a completed transfer is idempotent');
+  const second = manifest(Buffer.from('cancel then finish'));
+  ok(await client.command('file.offer', second));
+  ok(await client.command('file.cancel', { transferId: second.transferId }));
+  const cancelled = protocol.statusSchema.parse(ok(await client.command('file.finish', { transferId: second.transferId, leaseId: randomUUID() })));
+  assert.equal(cancelled.state, 'cancelled', 'finishing a cancelled transfer returns its settled state');
 });
