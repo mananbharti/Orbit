@@ -51,6 +51,7 @@ export class FileApi {
     await this.refreshOffers();
   }
   async refreshOffers(): Promise<TransferManifest[]> {
+    const before = new Set(this.state.offers.map(o => o.transferId));
     const all: TransferManifest[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < 8; page++) {
@@ -60,8 +61,12 @@ export class FileApi {
       cursor = parsed.data.nextCursor;
       if (!cursor) break;
     }
-    this.set({ ...this.state, offers: all });
-    return all;
+    // Offers pushed while the list was loading are newer than the list; keep them.
+    const listed = new Set(all.map(o => o.transferId));
+    const pushed = this.state.offers.filter(o => !before.has(o.transferId) && !listed.has(o.transferId));
+    const merged = [...all, ...pushed];
+    this.set({ ...this.state, offers: merged });
+    return merged;
   }
 
   /** Sends a chosen file to the computer. Resolves when the computer has verified it. */
@@ -71,6 +76,7 @@ export class FileApi {
       this.set({ ...this.state, transfer: { transferId: '', name: source.name, direction: 'to-desktop', state: 'preparing', doneBytes: 0, sizeBytes: source.size } });
       const manifest = transferManifestSchema.parse({ transferId: this.env.uuid(), direction: 'to-desktop', name: source.name,
         sizeBytes: source.size, sha256: await source.sha256(), chunkBytes: FILE_CHUNK_BYTES });
+      if (this.cancelled) throw new NotSent('Transfer cancelled');
       this.retryJob = () => this.runUpload(manifest, source);
       await this.runUpload(manifest, source);
     } catch (error) { this.fail(error); throw error; } finally { this.busy = false; }
@@ -92,6 +98,12 @@ export class FileApi {
   async cancel(): Promise<void> {
     const t = this.state.transfer;
     this.cancelled = true;
+    if (t && !t.transferId && t.state === 'preparing') {
+      // Still hashing the file: nothing exists on the computer yet, so there is nothing to cancel there.
+      this.retryJob = undefined;
+      this.set({ ...this.state, transfer: { ...t, state: 'cancelled' } });
+      return;
+    }
     if (!t?.transferId) return;
     try { await this.session.command('file.cancel', { transferId: t.transferId }); } catch { /* connection gone; the computer expires it */ }
     this.retryJob = undefined;
