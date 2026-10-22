@@ -168,6 +168,16 @@ test('twenty failed credential guesses lock the address out, even for the real c
   assert.equal((await context.exchange()).status, 403, 'even the valid credential is refused until the window passes');
 });
 
+test('six hundred requests a minute from one address is enough; more is cut off', { timeout: 60_000 }, async t => {
+  const context = await fixture(t);
+  for (let batch = 0; batch < 12; batch++) {
+    const results = await Promise.all(Array.from({ length: 50 }, () => context.exchange()));
+    for (const result of results) assert.equal(result.status, 200);
+  }
+  const over = await context.exchange();
+  assert.equal(over.status, 403, 'request 601 in the same minute is rejected');
+});
+
 test('a wrong certificate pin rejects the connection', { timeout: 10_000 }, async t => {
   const context = await fixture(t);
   const { body } = await context.exchange();
