@@ -152,3 +152,18 @@ test('write failures remain safe and invalid payloads never reach the adapter', 
     baseRevision: 0, text: '' })).payload, { ok: false, error: { code: 'CLIPBOARD_UNAVAILABLE' } });
   assert.equal(adapter.writes.length, 0);
 });
+
+test('a flood of concurrent operations beyond the queue cap is rejected as busy, never stacked', async t => {
+  const { connection, adapter } = fixture(t);
+  const client = connection();
+  const sub = await client.subscribe();
+  const gate = deferred();
+  adapter.beforeRead = () => gate.promise; // every OS read waits at the gate, so the queue fills
+  const write = () => client.command('clipboard.write', { subscriptionId: sub.subscriptionId, baseRevision: sub.revision, text: 'flood' });
+  const pending = Array.from({ length: 40 }, write);
+  await delay(50); // let every dispatch reach the queue before the gate opens
+  gate.resolve();
+  const results = await Promise.all(pending);
+  const busy = results.filter(response => response.payload.ok === false && (response.payload as { error?: { code?: string } }).error?.code === 'BUSY');
+  assert.equal(busy.length, 8, 'the 32-operation queue admits exactly 32 and rejects the rest');
+});
