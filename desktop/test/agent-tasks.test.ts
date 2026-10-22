@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { AgentTasks, APPROVAL_TIMEOUT_MS, MAX_CONCURRENT_TASKS } from '../src/agent/agent-tasks.js';
 import type { AgentRunContext, AgentRunner } from '../src/agent/agent-runner.js';
-import { TaskLedger } from '../src/agent/task-ledger.js';
+import { MAX_LEDGER_TASKS, TaskLedger } from '../src/agent/task-ledger.js';
 import type { JsonValue, ResponseMessage } from '../src/protocol/messages.js';
 import { core } from './helpers.js';
 
@@ -245,4 +245,25 @@ test('an approval nobody answers is denied after five minutes, and an answer jus
   assert.equal(result(await command('agent.get', { taskId })).state, 'running');
   assert.equal(result(await command('agent.events', { taskId })).events.at(-1).text, 'Denied');
   error(await command('agent.approve', { taskId, approve: true }), 'AGENT_INVALID_STATE');
+});
+
+test('the ledger evicts the oldest finished task at 500, never an active one, lists newest 50, and freezes terminal tasks', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'orbit-agent-ledger-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let clock = 1_000;
+  const ledger = new TaskLedger(directory, () => clock++); const device = randomUUID();
+  const active = ledger.create(device, 'still running', randomUUID()).task; // the very oldest task, but unfinished
+  ledger.transition(active, 'running', 'Started');
+  const first = ledger.create(device, 'oldest finished', randomUUID()).task;
+  ledger.transition(first, 'cancelled', 'done');
+  for (let i = 0; i < MAX_LEDGER_TASKS - 2; i++) ledger.transition(ledger.create(device, `t${i}`, randomUUID()).task, 'cancelled', 'done');
+  ledger.create(device, 'the 501st', randomUUID()); // forces one eviction
+  assert.throws(() => ledger.get(device, first.taskId), /AGENT_NOT_FOUND/, 'the oldest finished task made room');
+  assert.equal(ledger.get(device, active.taskId).state, 'running', 'an active task is never evicted');
+  assert.equal(ledger.list(device).length, 50);
+  assert.equal(ledger.list(device)[0]!.headline, 'the 501st', 'newest first');
+  assert.throws(() => ledger.transition(ledger.list(device)[1]!, 'running', 'x'), /AGENT_INVALID_STATE/, 'a finished task cannot be revived');
+  const odd = ledger.create(device, '\u0007\n  line one\tline two  ', randomUUID()).task;
+  assert.equal(odd.headline, 'line one line two', 'control characters never reach the headline');
+  assert.equal(ledger.create(device, 'x'.repeat(200), randomUUID()).task.headline.length, 80);
 });
