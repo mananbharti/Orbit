@@ -52,7 +52,8 @@ export class LinuxSystemControl implements SystemControlAdapter {
     } catch { return { theme: null, nightLight: null }; }
   }
   async setDisplayMode(mode: { theme?: 'dark' | 'light'; nightLight?: boolean }): Promise<void> {
-    if (mode.theme) await this.run('gsettings', ['set', 'org.gnome.desktop.interface', 'color-scheme', mode.theme === 'dark' ? 'prefer-dark' : 'default']);
+    // Refuse before changing anything so a rejected request never half-applies.
     if (typeof mode.nightLight === 'boolean') throw new SystemControlUnavailable('Night light is not supported on this system');
+    if (mode.theme) await this.run('gsettings', ['set', 'org.gnome.desktop.interface', 'color-scheme', mode.theme === 'dark' ? 'prefer-dark' : 'default']);
   }
 }
