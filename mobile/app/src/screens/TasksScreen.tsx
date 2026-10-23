@@ -21,6 +21,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
   const offline = state.connection !== 'connected';
+  const agentOff = !offline && state.agentAvailable === false;
   const [paused, setPaused] = useState(false);
   const [waking, setWaking] = useState<'no' | 'sending' | 'sent'>('no');
   const wake = async (): Promise<void> => {
@@ -55,7 +56,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
             <Text style={{ color: t.sub, fontSize: 13 }}> ›</Text>
           </Pressable>
         ) : <Text numberOfLines={1} style={[styles.sub, { color: t.sub, flexShrink: 1 }]}>{name}</Text>}
-        {!paused && !offline ? <Pressable accessibilityRole="button" hitSlop={10} onPress={confirmPause}><Text style={{ color: t.bad, fontSize: 15 }}>Stop agent</Text></Pressable> : null}
+        {!paused && !offline && !agentOff ? <Pressable accessibilityRole="button" hitSlop={10} onPress={confirmPause}><Text style={{ color: t.bad, fontSize: 15 }}>Stop agent</Text></Pressable> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips} contentContainerStyle={{ gap: space.s, paddingRight: space.l }}>
         {([['Remote', 'remote', onRemote], ['Present', 'present', onPresent], ['Files', 'files', onFiles], ['Clipboard', 'clipboard', onClipboard], ['Memory', 'memory', onMemory], ['Apps', 'apps', onApps], ['Activity', 'activity', onActivity], ...(onAutomations ? [['Automations', 'automations', onAutomations] as [string, IconName, () => void]] : []),
@@ -81,7 +82,12 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
           <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>{waking === 'sent' ? `Wake signal sent. ${name} takes a moment to come online.` : `Wake ${name}`}</Text>
         </Pressable>
       ) : null}
-      {paused ? (
+      {agentOff ? (
+        <View style={[styles.banner, { backgroundColor: t.fill }]}>
+          <Text style={{ color: t.text, fontSize: 15 }}>The agent is not set up on {name}. Open Orbit there, go to Settings, Agent tasks, and paste the Hermes key - it takes a minute and your tasks stay on this computer.</Text>
+        </View>
+      ) : null}
+      {paused && !agentOff ? (
         <Pressable accessibilityRole="button" onPress={() => { void setSafeMode(false); }} style={[styles.banner, { backgroundColor: t.bad + '26' }]}>
           <Text style={{ color: t.bad, fontSize: 15, fontWeight: '600' }}>Agent stopped. Tap to resume.</Text>
         </Pressable>
@@ -92,7 +98,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
         </Pressable>
       ) : null}
       <FlatList data={state.tasks} keyExtractor={x => x.taskId} contentContainerStyle={{ gap: space.m, paddingBottom: space.xl }}
-        ListEmptyComponent={<Text style={[styles.empty, { color: t.sub }]}>Ask your agent to do something. You will see its progress here and approve anything sensitive.</Text>}
+        ListEmptyComponent={<Text style={[styles.empty, { color: t.sub }]}>{agentOff ? '' : 'Ask your agent to do something. You will see its progress here and approve anything sensitive.'}</Text>}
         renderItem={({ item }) => (
           <PressableScale accessibilityRole="button" onPress={() => onOpen(item)} style={[styles.card, { backgroundColor: t.card, shadowColor: t.shadow, shadowOpacity: t.isDark ? 0 : 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: t.isDark ? 0 : 1 }]}>
             <Text numberOfLines={2} style={[styles.headline, { color: t.text }]}>{item.headline || 'Task'}</Text>
@@ -100,6 +106,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
           </PressableScale>
         )} />
       {error ? <Text style={{ color: t.bad, marginBottom: space.s }}>{error}</Text> : null}
+      {agentOff ? null : (
       <Glass radius={24} style={styles.composer}>
         <TextInput value={prompt} onChangeText={setPrompt} placeholder="What should I do?" placeholderTextColor={t.sub} multiline
           style={[styles.input, { color: t.text }]} maxLength={4000} accessibilityLabel="Describe a task" />
@@ -109,6 +116,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
           <Icon name="send" size={20} color="#FFFFFF" />
         </Pressable>
       </Glass>
+      )}
     </KeyboardAvoidingView>
   );
 }

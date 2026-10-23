@@ -1,7 +1,7 @@
 /** Keeps the phone's view of agent tasks consistent with the desktop; depends on AgentApi and OrbitSession; does not render UI or persist data. */
 import type { AgentApi } from './agent.js';
 import { TERMINAL_TASK_STATES, taskSummarySchema, type TaskEvent, type TaskSummary } from './protocol.js';
-import type { DesktopEvent, OrbitSession, SessionStatus } from './session.js';
+import { CommandError, type DesktopEvent, type OrbitSession, type SessionStatus } from './session.js';
 
 export interface TaskStoreState {
   connection: SessionStatus;
@@ -9,6 +9,8 @@ export interface TaskStoreState {
   tasks: TaskSummary[];
   /** Tasks whose latest state needs the user right now. */
   needsAttention: TaskSummary[];
+  /** False once the desktop answered "no such command": the agent backend is not configured there. */
+  agentAvailable?: boolean;
   events: Record<string, TaskEvent[]>;
   lastError?: string;
 }
@@ -21,6 +23,7 @@ export class TaskStore {
   private snapshot: TaskStoreState;
   private disposers: (() => void)[] = [];
   private refreshing = false;
+  private agentAvailable?: boolean;
   /** Tasks changed by a push or update while a list request was in flight; the older list must not override them. */
   private touched = new Set<string>();
 
@@ -52,8 +55,13 @@ export class TaskStore {
       }
       this.tasks = next;
       this.lastError = undefined;
+      this.agentAvailable = true;
       for (const t of list) if (this.events.has(t.taskId) || !TERMINAL_TASK_STATES.has(t.state)) void this.loadEvents(t.taskId);
-    } catch (error) { this.lastError = describe(error); }
+    } catch (error) {
+      // UNKNOWN_COMMAND means the desktop runs without an agent backend: a setup state, not an error.
+      if (error instanceof CommandError && error.code === 'UNKNOWN_COMMAND') this.agentAvailable = false;
+      else this.lastError = describe(error);
+    }
     finally { this.refreshing = false; this.emit(); }
   }
 
@@ -107,7 +115,8 @@ export class TaskStore {
   private build(): TaskStoreState {
     const tasks = [...this.tasks.values()].sort((a, b) => b.createdAt - a.createdAt);
     return { connection: this.session.status, tasks, needsAttention: tasks.filter(t => t.state === 'awaiting-approval' || t.state === 'unknown'),
-      events: Object.fromEntries(this.events), ...(this.lastError ? { lastError: this.lastError } : {}) };
+      events: Object.fromEntries(this.events), ...(this.agentAvailable !== undefined ? { agentAvailable: this.agentAvailable } : {}),
+      ...(this.lastError ? { lastError: this.lastError } : {}) };
   }
   private emit(): void {
     this.snapshot = this.build();

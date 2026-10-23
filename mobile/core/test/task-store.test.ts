@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AgentApi } from '../src/agent.js';
-import { OrbitSession } from '../src/session.js';
+import { CommandError, OrbitSession } from '../src/session.js';
 import { TaskStore } from '../src/task-store.js';
 import { FakeTransport, paired, parseSent, sleep } from './fakes.js';
 
@@ -15,7 +15,8 @@ async function setup(handler: (type: string, payload: any) => unknown) {
   const t = new FakeTransport();
   const s = new OrbitSession(paired, t, { uuid, retryBaseMs: 5, random: () => 0 });
   await s.start();
-  const wire = (): void => { t.last.onSend = text => { const m = parseSent(text); t.last.reply(m.requestId, handler(m.type, m.payload)); }; };
+  const wire = (): void => { t.last.onSend = text => { const m = parseSent(text); const r = handler(m.type, m.payload);
+    if (r instanceof CommandError) return t.last.fail(m.requestId, r.code); t.last.reply(m.requestId, r); }; };
   wire();
   const store = new TaskStore(s, new AgentApi(s, uuid));
   return { t, s, store, wire };
@@ -121,5 +122,34 @@ test('a slow events reply that arrives after a newer one never rolls the event l
   push(t, sum(T1, 'completed', 1, 3));
   await sleep(120);
   assert.deepEqual(store.getState().events[T1]!.map(e => e.seq), [1, 2, 3]);
+  store.dispose(); s.stop();
+});
+test('a desktop without an agent backend reads as a setup state, not an error', async () => {
+  const { s, store } = await setup(() => new CommandError('UNKNOWN_COMMAND'));
+  await sleep(20);
+  const state = store.getState();
+  assert.equal(state.agentAvailable, false);
+  assert.equal(state.lastError, undefined); // not an error banner: the computer needs setup
+  store.dispose(); s.stop();
+});
+test('a later successful list clears the unavailable flag', async () => {
+  let down = true;
+  const { s, store } = await setup(type => {
+    if (down) return new CommandError('UNKNOWN_COMMAND');
+    return type === 'agent.list' ? { tasks: [] } : { events: [], hasMore: false };
+  });
+  await sleep(20);
+  assert.equal(store.getState().agentAvailable, false);
+  down = false;
+  await store.refresh();
+  assert.equal(store.getState().agentAvailable, true);
+  store.dispose(); s.stop();
+});
+test('a real failure still surfaces as an error and keeps the flag untouched', async () => {
+  const { s, store } = await setup(() => new CommandError('BUSY'));
+  await sleep(20);
+  const state = store.getState();
+  assert.equal(state.agentAvailable, undefined);
+  assert.equal(state.lastError, 'BUSY');
   store.dispose(); s.stop();
 });

@@ -28,8 +28,8 @@ const apps: AppEntry[] = ['Firefox', 'Files', 'Terminal', 'Visual Studio Code', 
 
 const store = <S,>(state: S) => ({ getState: () => state, subscribe: () => () => {} });
 
-export function mockStore(connection: TaskStoreState['connection'] = 'connected', list: TaskSummary[] = tasks): TaskStore {
-  const state: TaskStoreState = { connection, tasks: list, needsAttention: list.filter(t => t.state === 'awaiting-approval'), events: { [id(1)]: events } };
+export function mockStore(connection: TaskStoreState['connection'] = 'connected', list: TaskSummary[] = tasks, agentAvailable?: boolean): TaskStore {
+  const state: TaskStoreState = { connection, tasks: list, needsAttention: list.filter(t => t.state === 'awaiting-approval'), events: { [id(1)]: events }, ...(agentAvailable !== undefined ? { agentAvailable } : {}) };
   return { ...store(state), refresh: async () => {}, submit: async () => {}, approve: async () => {}, cancel: async () => {}, retry: async () => {}, loadEvents: async () => {} } as unknown as TaskStore;
 }
 export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
