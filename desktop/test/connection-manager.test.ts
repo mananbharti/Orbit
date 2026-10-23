@@ -130,9 +130,9 @@ test('publish reaches only the matching device, with a validated event envelope'
 });
 
 test('the heartbeat pings the client and the connection survives pongs', async t => {
-  const f = await fixture(t, async message => success(message.requestId, null), { heartbeatMs: 30 });
+  const f = await fixture(t, async message => success(message.requestId, null), { heartbeatMs: 150 });
   await once(f.client, 'ping');
-  await tick(80);
+  await tick(400);
   assert.equal(f.client.readyState, WebSocket.OPEN, 'client answered the ping and stayed connected');
   assert.equal(f.manager.size, 1);
 });
