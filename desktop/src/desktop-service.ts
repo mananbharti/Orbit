@@ -38,6 +38,7 @@ import { SystemControl } from './system-control/system-control.js';
 import { AudioMixer } from './system-control/audio-mixer.js';
 import { PanicLock } from './security-pairing/panic-lock.js';
 import { createSystemControl } from './os-integration/create-system-control.js';
+import { inputDeviceFactory } from './os-integration/create-input-device.js';
 import { createAudioMixer } from './os-integration/create-audio-mixer.js';
 import type { AudioMixerAdapter } from './os-integration/audio-mixer.js';
 import type { SystemControlAdapter } from './os-integration/system-control.js';
@@ -132,7 +133,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);
     if (options.memory !== false) memory = new MemoryService(registry, new GraphStore(join(directory, 'memory.json')), log);
     const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);
-    if (systemFactory) system = new SystemControl(registry, systemFactory, log);
+    if (systemFactory) system = new SystemControl(registry, systemFactory, log, options.input?.createDevice ?? inputDeviceFactory());
     panic = new PanicLock(registry, store, systemFactory, log, () => transport?.closeUnauthenticated());
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log);

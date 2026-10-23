@@ -108,3 +108,68 @@ test('audio mixer needs authorization, logs outcomes with the device id, and map
   assert.ok(failed.every(e => e.severity === 'warn' && e.deviceId === 'phone-9'));
   assert.equal(f.created(), 1);
 });
+
+function mediaFixture(opts: { withDevice?: boolean; applyError?: Error } = {}) {
+  const registry = new CommandRegistry();
+  const log = new ActivityLog();
+  const keys: string[] = [];
+  let created = 0;
+  const adapter: SystemControlAdapter = {
+    power: async () => {}, getVolume: async () => ({ level: 1, muted: false }), setVolume: async () => {},
+    getBrightness: async () => 5, setBrightness: async () => {},
+    getDisplayMode: async () => ({ theme: 'dark', nightLight: null }), setDisplayMode: async () => {},
+  };
+  const createInputDevice = opts.withDevice === false ? undefined : () => {
+    created++;
+    return { apply: async (event: { t: string; key?: string }) => { if (opts.applyError) throw opts.applyError; keys.push(String(event.key)); }, releaseAll: async () => {} } as never;
+  };
+  new SystemControl(registry, () => adapter, log, createInputDevice);
+  const run = (type: string, payload: object, ctx = context()) => registry.get(type)!.execute(payload as never, ctx);
+  return { log, keys, run, created: () => created };
+}
+
+test('media transport sends one media key per authorized command and logs it', async () => {
+  const f = mediaFixture();
+  await f.run('system.media.transport', { action: 'playpause' });
+  await f.run('system.media.transport', { action: 'next' });
+  assert.deepEqual(f.keys, ['playpause', 'next']);
+  assert.equal(f.created(), 1); // the device is created once and reused
+  assert.deepEqual(f.log.snapshot().map(e => [e.eventType, e.outcome, e.deviceId]),
+    [['system.media', 'success', 'phone-9'], ['system.media', 'success', 'phone-9']]);
+});
+
+test('media transport needs an authorized connection and never creates the input device without one', async () => {
+  const f = mediaFixture();
+  for (const ctx of [context(false), context('none')]) {
+    await assert.rejects(f.run('system.media.transport', { action: 'playpause' }, ctx), /UNAUTHENTICATED/);
+  }
+  assert.equal(f.created(), 0);
+  assert.deepEqual(f.keys, []);
+  assert.deepEqual(f.log.snapshot(), []);
+});
+
+test('media transport rejects bad payloads at validation', () => {
+  const registry = new CommandRegistry();
+  const log = new ActivityLog();
+  const adapter: SystemControlAdapter = {
+    power: async () => {}, getVolume: async () => ({ level: 1, muted: false }), setVolume: async () => {},
+    getBrightness: async () => 5, setBrightness: async () => {},
+    getDisplayMode: async () => ({ theme: 'dark', nightLight: null }), setDisplayMode: async () => {},
+  };
+  new SystemControl(registry, () => adapter, log, () => ({ apply: async () => {}, releaseAll: async () => {} } as never));
+  const handler = registry.get('system.media.transport')!;
+  assert.equal(handler.validate({ action: 'stop' } as never), false);
+  assert.equal(handler.validate({ action: 'playpause', extra: 1 } as never), false);
+  assert.equal(handler.validate({} as never), false);
+  assert.equal(handler.validate({ action: 'previous' } as never), true);
+});
+
+test('media transport without an input device, or with a failing one, is SYSTEM_UNAVAILABLE and logged as failed', async () => {
+  const none = mediaFixture({ withDevice: false });
+  await assert.rejects(none.run('system.media.transport', { action: 'playpause' }), /SYSTEM_UNAVAILABLE/);
+  const boom = mediaFixture({ applyError: new Error('no display') });
+  await assert.rejects(boom.run('system.media.transport', { action: 'next' }), /SYSTEM_UNAVAILABLE/);
+  for (const f of [none, boom]) {
+    assert.deepEqual(f.log.snapshot().map(e => [e.eventType, e.severity, e.outcome]), [['system.media', 'warn', 'failed']]);
+  }
+});

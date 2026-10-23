@@ -2,7 +2,7 @@ import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { AudioSession, DisplayMode, DisplayTheme, PowerAction, SystemApi } from '@orbit/core';
+import type { AudioSession, DisplayMode, DisplayTheme, MediaAction, PowerAction, SystemApi } from '@orbit/core';
 import { Icon, type IconName } from '../components/Icon';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -12,6 +12,12 @@ const POWER: { action: PowerAction; label: string; icon: IconName; danger?: bool
   { action: 'sleep', label: 'Sleep', icon: 'moon', confirm: 'Put your computer to sleep?' },
   { action: 'restart', label: 'Restart', icon: 'refresh', danger: true, confirm: 'Restart your computer? Unsaved work will be lost.' },
   { action: 'shutdown', label: 'Shut down', icon: 'power', danger: true, confirm: 'Shut down your computer? Unsaved work will be lost.' },
+];
+
+const MEDIA: { action: MediaAction; label: string; icon: IconName }[] = [
+  { action: 'previous', label: 'Previous track', icon: 'previous' },
+  { action: 'playpause', label: 'Play or pause', icon: 'play' },
+  { action: 'next', label: 'Next track', icon: 'next' },
 ];
 
 export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack: () => void; onPanic?: () => void }) {
@@ -90,6 +96,16 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
             style={({ pressed }) => [styles.tile, { backgroundColor: t.card, opacity: pressed ? 0.6 : 1 }]}>
             <Icon name={p.icon} size={26} color={p.danger ? t.bad : t.tint} />
             <Text style={{ color: p.danger ? t.bad : t.text, fontSize: 15, fontWeight: '600' }}>{p.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={[styles.section, { color: t.sub }]}>MEDIA</Text>
+      <View style={[styles.card, styles.mediaRow, { backgroundColor: t.card }]}>
+        {MEDIA.map(m => (
+          <Pressable key={m.action} accessibilityRole="button" accessibilityLabel={`${m.label} on your computer`}
+            onPress={() => run(() => api.mediaTransport(m.action), m.action === 'playpause' ? 'Play/pause sent to your computer' : `${m.label} on your computer`)}
+            style={[styles.step, { backgroundColor: t.fill }]}>
+            <Icon name={m.icon} size={20} color={t.text} />
           </Pressable>
         ))}
       </View>
@@ -207,6 +223,7 @@ const styles = StyleSheet.create({
   tile: { flexBasis: '46%', flexGrow: 1, borderRadius: radius, padding: space.l, alignItems: 'center', gap: space.s },
   card: { borderRadius: radius, padding: space.m, flexDirection: 'row', alignItems: 'center', gap: space.m },
   step: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  mediaRow: { justifyContent: 'space-evenly' },
   stepSmall: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontSize: 22, fontWeight: '700' },
   meterWrap: { flex: 1, gap: 4 },

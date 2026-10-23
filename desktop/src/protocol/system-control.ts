@@ -2,6 +2,10 @@
 import { z } from 'zod';
 
 export const powerActionSchema = z.enum(['lock', 'sleep', 'restart', 'shutdown']);
+export const MEDIA_ACTIONS = ['playpause', 'next', 'previous'] as const;
+export const mediaActionSchema = z.enum(MEDIA_ACTIONS);
+export type MediaAction = z.infer<typeof mediaActionSchema>;
+export const mediaTransportSchema = z.strictObject({ action: mediaActionSchema });
 export type PowerAction = z.infer<typeof powerActionSchema>;
 export const powerSchema = z.strictObject({ action: powerActionSchema });
 export const powerResultSchema = z.strictObject({ status: z.literal('requested') });

@@ -15,6 +15,7 @@ const audioSessionSchema = z.strictObject({ id: z.string().regex(/^[0-9]{1,10}$/
 const audioSessionsResultSchema = z.strictObject({ sessions: z.array(audioSessionSchema).max(64) });
 
 export type PowerAction = 'lock' | 'sleep' | 'restart' | 'shutdown';
+export type MediaAction = 'playpause' | 'next' | 'previous';
 export type DisplayTheme = 'dark' | 'light';
 export interface DisplayMode { theme: DisplayTheme | null; nightLight: boolean | null }
 export interface VolumeState { level: number; muted: boolean }
@@ -62,5 +63,9 @@ export class SystemApi {
   }
   setMode(mode: { theme?: DisplayTheme; nightLight?: boolean }): Promise<void> {
     return this.call('system.mode.set', { ...(mode.theme ? { theme: mode.theme } : {}), ...(typeof mode.nightLight === 'boolean' ? { nightLight: mode.nightLight } : {}) }, appliedSchema).then(() => {});
+  }
+  /** One media transport key on the computer (play/pause, next, previous) - no remote-control session needed. */
+  mediaTransport(action: MediaAction): Promise<void> {
+    return this.call('system.media.transport', { action }, appliedSchema).then(() => {});
   }
 }

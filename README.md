@@ -98,7 +98,7 @@
 Orbit 1.0 is being built phase by phase. What exists in this repo today:
 
 - **Desktop agent**: pairing, pinned TLS, scoped sessions, an activity log, kill switch, and commands for agent tasks, clipboard, files, launcher, dictation, memory and (opt-in) remote input.
-- **Phone side**: a typed client core and an Expo app with Tasks, Activity, Apps (launcher + scenes with time and place triggers), Clipboard (sync + history), Files (transfer + photo backup + share-in), Memory, Remote (trackpad, gyro, full keyboard, macros), Present, Control (volume, per-app mixer, power, panic lock), Automations, Terminal, Tabs (browser tab control via the companion extension), Computers (multi-PC), Devices (permissions + revocation) and Settings screens.
+- **Phone side**: a typed client core and an Expo app with Tasks, Activity, Apps (launcher + scenes with time and place triggers), Clipboard (sync + history), Files (transfer + photo backup + share-in), Memory, Remote (trackpad, gyro, full keyboard, macros), Present, Control (media transport, volume, per-app mixer, power, panic lock), Automations, Terminal, Tabs (browser tab control via the companion extension), Computers (multi-PC), Devices (permissions + revocation) and Settings screens.
 - **Memory**: a local graph memory store.
 - **Router**: sends a request to a fast local model (Laya) or the Hermes agent.
 - **Tests**: automated tests for desktop, phone core and end-to-end (phone core against the real desktop over real TLS). CI runs all of them on every push. The suites are adversarial: security and integrity guards are verified by mutating the product code and requiring a test to fail, and the fixtures include misbehaving peers, fake TLS servers holding real keys, flooded processes and stalled approvals - not just the happy path.
@@ -291,6 +291,7 @@ The planned experience includes:
 | Gyroscope mouse mode                              | Yes    | N/A     |
 | Full keyboard input + custom macros               | Yes    | N/A     |
 | System volume & per-app audio mixer               | Yes    | Yes     |
+| Media transport (play/pause/skip)                 | Yes    | Yes     |
 | Power control (shutdown/sleep/restart/lock)       | Yes    | Yes     |
 | Wake-on-LAN                                       | Yes    | N/A     |
 | Display brightness & mode control                 | Yes    | Yes     |

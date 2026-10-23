@@ -71,3 +71,12 @@ test('audio sessions list and per-app set commands carry pids and bounded levels
   assert.deepEqual(calls.at(-1)!.payload, { id: '4204', muted: false });
   s.stop();
 });
+
+test('media transport sends one media key command', async () => {
+  const { s, api, calls } = await setup(() => ({ applied: true }));
+  await api.mediaTransport('playpause');
+  assert.deepEqual(calls.at(-1), { type: 'system.media.transport', payload: { action: 'playpause' } });
+  await api.mediaTransport('next');
+  assert.deepEqual(calls.at(-1), { type: 'system.media.transport', payload: { action: 'next' } });
+  s.stop();
+});
