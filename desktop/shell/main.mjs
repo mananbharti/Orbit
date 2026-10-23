@@ -62,7 +62,7 @@ async function boot() {
   if (!host) { state = { phase: 'offline' }; return; }
   try {
     // Remote mouse/keyboard: Windows only, and every session needs a Yes on a dialog shown at this PC (below).
-    // Remote mouse/keyboard: Windows (SendInput) and Linux/X11 (xdotool). Every session still needs a Yes in this window.
+    // Remote mouse/keyboard: Windows (SendInput) and Linux (xdotool on X11, a uinput virtual device on Wayland). Every session still needs a Yes in this window.
     const inputFactory = inputDeviceFactory();
     const remoteInput = inputFactory ? { createDevice: inputFactory, confirmation: electronApproval } : undefined;
     // Remote terminal: every session needs a Yes on a dialog shown at this PC (below), same as remote control.

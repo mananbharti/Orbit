@@ -12,4 +12,10 @@ Status: protocol, session guard, phone API and screen are built and tested with 
 
 ## Still needed
 1. First run of the Windows driver and the approval prompt on a real PC and phone.
-2. Linux and macOS `InputDevice` adapters (uinput/xdotool, CGEvent) - future work; both entrypoints gate remote input to Windows today.
+2. macOS `InputDevice` adapter (CGEvent) - future work. Linux is implemented both ways: X11 via xdotool/XTEST (verified under Xvfb), and Wayland via a virtual uinput device (an embedded python3-standard-library helper; byte-encoding covered by tests). The CLI entrypoint still gates remote input to Windows; the Electron app enables it wherever the factory has an adapter, with the same in-app approval dialog.
+
+## Wayland setup (uinput)
+- Wayland has no XTEST, so Orbit creates a virtual input device through the kernel's `/dev/uinput`. Any compositor (GNOME, KDE, wlroots) accepts it, but the desktop user needs write access: a udev rule such as `KERNEL=="uinput", GROUP="input", MODE="0660"` plus the user in the `input` group, then re-login or `udevadm trigger`.
+- Requires python3 (standard library only) on the PATH; without device access or python3 the availability probe fails and the phone sees remote input as unavailable - nothing falls back silently to X11.
+- Pointer move, buttons, wheel and named keys (the protocol's fixed key list) go through the helper. Free-text typing additionally needs ydotool installed (it reuses the same uinput access); without it, typing reports unavailable while everything else keeps working.
+- Real Wayland-compositor verification is pending, same as the other native drivers.
