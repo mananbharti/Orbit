@@ -9,6 +9,9 @@ const responseSchema = z.object({ answers: z.record(z.string(), answerSchema) })
 export const decisionInput = z.strictObject({ state: z.string().min(1).max(6_000), instructions: z.string().min(1).max(400),
   criteria: z.record(z.string().min(1).max(40), z.string().min(1).max(200).nullable()).refine(c => { const n = Object.keys(c).length; return n >= 2 && n <= 20; }) });
 export interface Decision { choice: string; probability: number; probabilities: Record<string, number>; }
+export const decisionManyInput = z.strictObject({ state: z.string().min(1).max(6_000),
+  questions: z.record(z.string().min(1).max(12), z.strictObject({ instructions: z.string().min(1).max(400),
+    criteria: z.record(z.string().min(1).max(40), z.string().min(1).max(200).nullable()) })).refine(q => { const n = Object.keys(q).length; return n >= 1 && n <= 8; }) });
 export class LayaError extends Error { constructor(readonly code: 'BAD_URL' | 'HTTP' | 'BAD_RESPONSE' | 'UNKNOWN_CHOICE') { super(code); } }
 
 const isLoopback = (h: string): boolean => h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
@@ -37,6 +40,29 @@ export class LayaClient {
     const probability = a.answer_confidence ?? a.probabilities[a.choice] ?? 0;
     return { choice: a.choice, probability, probabilities: a.probabilities };
   }
+  /** Several named questions in one POST: the server's questions map, one Decision per name. */
+  async decideMany(input: z.input<typeof decisionManyInput>, signal?: AbortSignal): Promise<Record<string, Decision>> {
+    const q = decisionManyInput.parse(input);
+    const res = await (this.opts.fetchImpl ?? fetch)(new URL('/v1/systemone', this.url), { method: 'POST', redirect: 'error',
+      headers: { 'content-type': 'application/json', ...(this.opts.apiKey ? { authorization: `Bearer ${this.opts.apiKey}` } : {}) },
+      body: JSON.stringify({ state: q.state, model: this.opts.model ?? 'laya',
+        questions: Object.fromEntries(Object.entries(q.questions).map(([name, spec]) => [name, { type: 'choice', instructions: spec.instructions, criteria: spec.criteria }])) }), ...(signal ? { signal } : {}) });
+    if (!res.ok) throw new LayaError('HTTP');
+    const text = await res.text();
+    if (text.length > MAX_BODY) throw new LayaError('BAD_RESPONSE');
+    let parsed; try { parsed = responseSchema.safeParse(JSON.parse(text)); } catch { throw new LayaError('BAD_RESPONSE'); }
+    if (!parsed.success) throw new LayaError('BAD_RESPONSE');
+    const out: Record<string, Decision> = {};
+    for (const [name, spec] of Object.entries(q.questions)) {
+      const a = parsed.data.answers[name];
+      if (!a) throw new LayaError('BAD_RESPONSE');
+      if (!(a.choice in spec.criteria)) throw new LayaError('UNKNOWN_CHOICE');
+      const probability = a.answer_confidence ?? a.probabilities[a.choice] ?? 0;
+      out[name] = { choice: a.choice, probability, probabilities: a.probabilities };
+    }
+    return out;
+  }
+
   async healthy(signal?: AbortSignal): Promise<boolean> {
     // The Jev wire contract has no /health; the models list is the cheap readiness probe. The body must actually
     // name the model we will call, so an unrelated server on the port is never treated as a decision engine.

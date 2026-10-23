@@ -7,7 +7,8 @@ import { makeFastAnswer } from '../src/agent/fast-answer.js';
 
 const SIGNAL = new AbortController().signal;
 const MODEL = { kind: 'ollama' as const, baseUrl: 'http://127.0.0.1:11434', model: 'qwen3:4b' };
-const sysone = (choice: string, confidence: number) => ({ answers: { q: { type: 'choice', choice, probabilities: { yes: confidence, no: 1 - confidence }, answer_confidence: confidence } } });
+const verdict = (choice: string, confidence: number) => ({ type: 'choice', choice, probabilities: { yes: confidence, no: 1 - confidence }, answer_confidence: confidence });
+const sysone = (act: [string, number], cur: [string, number]) => ({ answers: { act: verdict(...act), cur: verdict(...cur) } });
 
 function fakeFetch(routes: Record<string, unknown>, seen: string[] = []) {
   return (async (url: unknown, init?: { body?: string }) => {
@@ -22,22 +23,33 @@ function fakeFetch(routes: Record<string, unknown>, seen: string[] = []) {
 test('a static research question passes both gates and is answered by the picked model', async () => {
   const seen: string[] = [];
   const answer = makeFastAnswer(MODEL, undefined, fakeFetch({
-    'http://127.0.0.1:8000/v1/systemone': sysone('yes', 0.93),
+    'http://127.0.0.1:8000/v1/systemone': sysone(['no', 0.95], ['no', 0.9]),
     'http://127.0.0.1:11434/api/chat': { message: { role: 'assistant', content: 'Paris.' } },
   }, seen))!;
   assert.equal(await answer('What is the capital of France?', 'research', SIGNAL), 'Paris.');
   assert.deepEqual(seen, ['http://127.0.0.1:8000/v1/systemone', 'http://127.0.0.1:11434/api/chat']);
 });
 
-test('mixed intent ("research X and book it") is refused by the gate: the model is never asked', async () => {
+test('mixed intent ("research X and book it") is refused by the current-data gate: the model is never asked', async () => {
   const seen: string[] = [];
-  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': sysone('no', 0.91) }, seen))!;
+  // The real laya-multilingual said act:no 0.956 (wrong) but cur:yes 0.989 (right) for this prompt - the compound gate holds.
+  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': sysone(['no', 0.956], ['yes', 0.989]) }, seen))!;
   assert.equal(await answer('Research current flight prices and book the cheapest', 'research', SIGNAL), undefined);
   assert.deepEqual(seen, ['http://127.0.0.1:8000/v1/systemone'], 'the answer model must never be called for a refused request');
 });
 
-test('an unsure decision model (below the strict threshold) keeps the task with the agent', async () => {
-  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': sysone('yes', 0.62) }))!;
+test('an action request is refused by the action gate even with no current-data need', async () => {
+  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': sysone(['yes', 0.97], ['no', 0.9]) }))!;
+  assert.equal(await answer('Add milk to my shopping list', 'other', SIGNAL), undefined);
+});
+
+test('a low-confidence verdict on either question keeps the task with the agent', async () => {
+  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': sysone(['no', 0.95], ['yes', 0.56]) }))!;
+  assert.equal(await answer('Check if my Downloads folder has any PDFs and list them', 'research', SIGNAL), undefined);
+});
+
+test('a missing or malformed verdict is fail-safe', async () => {
+  const answer = makeFastAnswer(MODEL, undefined, fakeFetch({ 'http://127.0.0.1:8000/v1/systemone': { answers: { act: verdict('no', 0.95) } } }))!;
   assert.equal(await answer('What is the capital of France?', 'research', SIGNAL), undefined);
 });
 

@@ -51,3 +51,30 @@ test('health probe is false when the server is down', async () => {
   const withLaya = (async () => new Response('{"models":[{"id":"laya"}]}')) as unknown as typeof fetch;
   assert.equal(await new LayaClient('http://127.0.0.1:8000', { fetchImpl: withLaya }).healthy(), true);
 });
+
+test('decideMany: one POST, one decision per named question; unknown choices and missing answers throw', async () => {
+  const seen: string[] = [];
+  const fetchImpl = (async (url: unknown, init?: { body?: string }) => {
+    seen.push(String(url));
+    const body = JSON.parse((init?.body ?? '{}') as string);
+    assert.deepEqual(Object.keys(body.questions).sort(), ['act', 'cur']);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ answers: {
+      act: { type: 'choice', choice: 'no', probabilities: { no: 0.97, yes: 0.03 } },
+      cur: { type: 'choice', choice: 'yes', probabilities: { yes: 0.88, no: 0.12 } } } }) };
+  }) as unknown as typeof fetch;
+  const client = new LayaClient('http://127.0.0.1:8000', { fetchImpl });
+  const out = await client.decideMany({ state: 's', questions: {
+    act: { instructions: 'i', criteria: { yes: 'y', no: 'n' } },
+    cur: { instructions: 'i', criteria: { yes: 'y', no: 'n' } } } });
+  assert.deepEqual(seen, ['http://127.0.0.1:8000/v1/systemone']);
+  assert.equal(out.act?.choice, 'no'); assert.equal(out.act?.probability, 0.97);
+  assert.equal(out.cur?.choice, 'yes'); assert.equal(out.cur?.probability, 0.88);
+
+  const badChoice = new LayaClient('http://127.0.0.1:8000', { fetchImpl: (async () => ({ ok: true, status: 200,
+    text: async () => JSON.stringify({ answers: { act: { type: 'choice', choice: 'maybe', probabilities: {} }, cur: { type: 'choice', choice: 'no', probabilities: { no: 1 } } } }) })) as unknown as typeof fetch });
+  await assert.rejects(badChoice.decideMany({ state: 's', questions: { act: { instructions: 'i', criteria: { yes: 'y', no: 'n' } }, cur: { instructions: 'i', criteria: { yes: 'y', no: 'n' } } } }), /UNKNOWN_CHOICE/);
+
+  const missing = new LayaClient('http://127.0.0.1:8000', { fetchImpl: (async () => ({ ok: true, status: 200,
+    text: async () => JSON.stringify({ answers: { act: { type: 'choice', choice: 'no', probabilities: { no: 1 } } } }) })) as unknown as typeof fetch });
+  await assert.rejects(missing.decideMany({ state: 's', questions: { act: { instructions: 'i', criteria: { yes: 'y', no: 'n' } }, cur: { instructions: 'i', criteria: { yes: 'y', no: 'n' } } } }), /BAD_RESPONSE/);
+});
