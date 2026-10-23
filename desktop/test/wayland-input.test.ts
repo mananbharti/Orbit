@@ -97,13 +97,16 @@ test('an unknown key or modifier is rejected, never silently dropped', () => {
 });
 
 test('the embedded helper matches the standalone script people read and run by hand', () => {
-  const standalone = readFileSync(join(process.cwd(), 'uinput', 'orbit-input-helper.py'), 'utf8');
+  // Windows CI checks out with CRLF; compare on normalized line endings so the guard catches drift, not git config.
+  const standalone = readFileSync(join(process.cwd(), 'uinput', 'orbit-input-helper.py'), 'utf8').replace(/\r\n/g, '\n');
   assert.equal(HELPER_SCRIPT.trim(), standalone.trim(), 'uinput/orbit-input-helper.py and the embedded HELPER_SCRIPT drifted');
 });
 
 const hasPython = spawnSync('python3', ['--version'], { stdio: 'ignore' }).status === 0;
 
-test('the real helper encodes evdev bytes for scroll, buttons and keys exactly', { skip: !hasPython }, async () => {
+// The byte layout is the 64-bit Linux kernel ABI (long = 8 bytes); Windows Python is LLP64 and packs differently,
+// and the helper only ever runs on Linux, so the end-to-end byte proof is gated to Linux runners.
+test('the real helper encodes evdev bytes for scroll, buttons and keys exactly', { skip: process.platform !== 'linux' || !hasPython }, async () => {
   const out = join(tmpdir(), `orbit-uinput-test-${randomUUID()}`);
   const child = spawnSync('python3', ['-c', HELPER_SCRIPT], {
     env: { ...process.env, ORBIT_INPUT_TEST_OUT: out },
