@@ -72,3 +72,18 @@ test('only one command is in flight at a time, and the online queue is bounded',
   assert.ok(results.some(r => r instanceof Error && /No live command slot/.test((r as Error).message)),
     'with one in flight and 16 queued, the 18th concurrent command must be refused a slot');
 });
+
+test('a stored paired credential with a malformed fingerprint is rejected on load', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-pd-schema-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { savePairedDesktop, loadPairedDesktop } = await import('../src/integration-client/paired-desktop.js');
+  const valid = { desktopServiceId: randomUUID(), deviceId: randomUUID(), endpoint: 'wss://127.0.0.1:4700/v1/channel',
+    certificate: 'x'.repeat(64), certificateFingerprint: 'ab'.repeat(32), credential: 'x'.repeat(43) };
+  savePairedDesktop(root, valid);
+  assert.equal(loadPairedDesktop(root).deviceId, valid.deviceId);
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(join(root, 'paired-desktop.json'), JSON.stringify({ ...valid, certificateFingerprint: 'Z'.repeat(64) }));
+  assert.throws(() => loadPairedDesktop(root));
+  writeFileSync(join(root, 'paired-desktop.json'), JSON.stringify({ ...valid, certificateFingerprint: 'ab'.repeat(31) }));
+  assert.throws(() => loadPairedDesktop(root));
+});
