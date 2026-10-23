@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('orbit', {
   cancelPair: () => ipcRenderer.invoke('orbit:cancel-pair'),
   revoke: id => ipcRenderer.invoke('orbit:revoke', id),
   retry: () => ipcRenderer.invoke('orbit:retry'),
-  agentSave: (key, baseUrl) => ipcRenderer.invoke('orbit:agent-save', key, baseUrl),
+  agentSave: (key, baseUrl, layaUrl) => ipcRenderer.invoke('orbit:agent-save', key, baseUrl, layaUrl),
   agentClear: () => ipcRenderer.invoke('orbit:agent-clear'),
   agentTest: (key, baseUrl) => ipcRenderer.invoke('orbit:agent-test', key, baseUrl),
   loginItem: enable => ipcRenderer.invoke('orbit:login-item', enable),

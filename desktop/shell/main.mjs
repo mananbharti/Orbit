@@ -15,6 +15,7 @@ const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist
 const { hostname } = await import('node:os');
 const { HermesRunner } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent', 'hermes-runner.js')).href);
 const { loadAgentConfig, saveAgentConfig, clearAgentConfig, validateAgentConfig } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent-config.js')).href);
+const { LayaClient } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'router', 'laya-engine.js')).href);
 
 // Chromium's disk caches are useless for a local UI and fail with "Access is denied" when a previous
 // instance still holds them (or the profile sits in a synced folder), so keep them off and in a private folder.
@@ -27,6 +28,13 @@ if (!gotLock) app.exit(0); // a second launch only focuses the first window (see
 let win; let tray; let service; let pairingTimer; let pairingUntil = 0; let state = { phase: 'starting' };
 let quitting = false; let restarting = false;
 let agentGateway = 'unknown'; // 'unknown' | 'ok' | 'unauthorized' | 'unreachable' | 'error'
+let agentLaya = 'unknown'; // 'unknown' | 'found' | 'missing' - is a Laya decision model answering on the configured loopback address?
+async function probeLaya(settings) {
+  if (!settings) { agentLaya = 'unknown'; return; }
+  try { agentLaya = await new LayaClient(process.env.ORBIT_LAYA_URL ?? settings.layaUrl ?? 'http://127.0.0.1:8000').healthy() ? 'found' : 'missing'; }
+  catch { agentLaya = 'missing'; }
+  push();
+}
 async function probeAgentGateway(settings) {
   if (!settings) { agentGateway = 'unknown'; return; }
   try {
@@ -63,13 +71,14 @@ async function boot() {
     const hermes = agentSettings();
     let agent;
     if (hermes) {
-      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(process.env.ORBIT_LAYA_URL ? { layaUrl: process.env.ORBIT_LAYA_URL } : {}) }; }
+      const layaUrl = process.env.ORBIT_LAYA_URL ?? hermes.layaUrl;
+      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(layaUrl ? { layaUrl } : {}) }; }
       catch (error) { console.error('AGENT: disabled -', String(error?.message ?? error)); }
     }
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), onExtensionConnection: () => push() });
     state = { phase: 'running', host, port: DEFAULT_PORT };
-    if (agent) void probeAgentGateway(hermes); else agentGateway = 'unknown';
+    if (agent) { void probeAgentGateway(hermes); void probeLaya(hermes); } else { agentGateway = 'unknown'; agentLaya = 'unknown'; }
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
   }
@@ -125,6 +134,7 @@ const snapshot = () => {
       active: Boolean(service && agentSettings()),
       secureStorage: safeStorage.isEncryptionAvailable(),
       gateway: agentGateway,
+      laya: agentLaya,
     },
   };
 };
@@ -159,10 +169,10 @@ ipcMain.handle('orbit:pair', async () => {
 ipcMain.handle('orbit:cancel-pair', () => { service?.pairing.close(); pairingUntil = 0; clearTimeout(pairingTimer); push(); });
 ipcMain.handle('orbit:revoke', (_e, id) => { const ok = typeof id === 'string' && service?.credentials.revoke(id); push(); return Boolean(ok); });
 ipcMain.handle('orbit:retry', async () => { await boot(); push(); });
-ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl) => {
+ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl, layaUrl) => {
   if (!safeStorage.isEncryptionAvailable()) return { error: 'Secure storage is not available on this system, so the key cannot be saved safely.' };
   let config;
-  try { config = validateAgentConfig({ apiKey: key, baseUrl }); } catch (error) { return { error: String(error?.message ?? error) }; }
+  try { config = validateAgentConfig({ apiKey: key, baseUrl, layaUrl }); } catch (error) { return { error: String(error?.message ?? error) }; }
   saveAgentConfig(agentConfigPath(), config, agentEncrypt);
   await restartService();
   return { ok: true };

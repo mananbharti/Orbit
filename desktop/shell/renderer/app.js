@@ -117,6 +117,9 @@ function render(s) {
       : s.agent.gateway === 'unauthorized' ? 'The gateway rejected the saved key. Check API_SERVER_KEY and save again.'
       : s.agent.gateway === 'unreachable' ? 'The gateway is not answering. Start it with: hermes gateway'
       : 'On. Your phone can hand tasks to the agent on this computer.';
+    if (s.agent.active && s.agent.laya !== 'unknown') $('agent-status').textContent += s.agent.laya === 'found'
+      ? ' Fast layer on: a local Laya decision model triages new tasks.'
+      : ' Fast layer idle: no Laya decision model answering, so new tasks are not triaged. Setup: docs/laya.md';
     $('agent-form').hidden = false;
     $('agent-clear').hidden = !s.agent.configured;
     $('agent-hint').textContent = s.agent.secureStorage ? 'The key is stored only in this computer\'s encrypted system storage.' : 'Secure storage is not available on this system, so a key cannot be saved safely here.';
@@ -160,7 +163,7 @@ $('agent-save').onclick = async () => {
   const key = $('agent-key').value.trim();
   if (!key) { toast('Paste the Hermes API key first'); return; }
   $('agent-save').disabled = true;
-  const r = await api.agentSave(key, $('agent-url').value.trim());
+  const r = await api.agentSave(key, $('agent-url').value.trim(), $('agent-laya').value.trim());
   $('agent-save').disabled = false;
   if (r.error) toast(r.error); else { $('agent-key').value = ''; toast('Agent settings saved'); }
   render(await api.state());

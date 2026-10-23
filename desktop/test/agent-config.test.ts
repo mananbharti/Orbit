@@ -25,6 +25,12 @@ test('validation: a pasted key survives trimming; junk is refused with a readabl
   assert.throws(() => validateAgentConfig({ apiKey: 'k', baseUrl: 'not a url' }), /not a valid URL/);
   assert.throws(() => validateAgentConfig({ apiKey: 'k', baseUrl: 'ftp://127.0.0.1' }), /http or https/);
   assert.deepEqual(validateAgentConfig({ apiKey: 'k', baseUrl: 'http://127.0.0.1:8642' }), { apiKey: 'k', baseUrl: 'http://127.0.0.1:8642' });
+  assert.deepEqual(validateAgentConfig({ apiKey: 'k', layaUrl: ' http://127.0.0.1:8000 ' }), { apiKey: 'k', layaUrl: 'http://127.0.0.1:8000' });
+  assert.deepEqual(validateAgentConfig({ apiKey: 'k', layaUrl: 'http://localhost:8000' }), { apiKey: 'k', layaUrl: 'http://localhost:8000' });
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'not a url' }), /not a valid URL/);
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'ftp://127.0.0.1' }), /http or https/);
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'http://192.168.1.5:8000' }), /point at this computer/);
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'https://laya.example.com' }), /point at this computer/);
 });
 
 test('roundtrip: the file holds only the encrypted blob, never the plaintext key', t => {
@@ -33,6 +39,8 @@ test('roundtrip: the file holds only the encrypted blob, never the plaintext key
   const onDisk = readFileSync(path, 'utf8');
   assert.ok(!onDisk.includes('super-secret-key')); // no plaintext at rest
   assert.deepEqual(loadAgentConfig(path, dec), { apiKey: 'super-secret-key', baseUrl: 'http://127.0.0.1:8642' });
+  saveAgentConfig(path, { apiKey: 'super-secret-key', layaUrl: 'http://127.0.0.1:8000' }, enc);
+  assert.deepEqual(loadAgentConfig(path, dec), { apiKey: 'super-secret-key', layaUrl: 'http://127.0.0.1:8000' }); // older files without a Laya address keep loading (tests above)
   if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600, 'file is owner-only');
 });
 
