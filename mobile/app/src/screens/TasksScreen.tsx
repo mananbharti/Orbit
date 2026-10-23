@@ -23,6 +23,8 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
   const offline = state.connection !== 'connected';
   const agentOff = !offline && state.agentAvailable === false;
   const [paused, setPaused] = useState(false);
+  const [answerOnlyReady, setAnswerOnlyReady] = useState(false);
+  const [answerOnly, setAnswerOnly] = useState(false);
   const [waking, setWaking] = useState<'no' | 'sending' | 'sent'>('no');
   const wake = async (): Promise<void> => {
     if (!macAddresses?.length || waking !== 'no') return;
@@ -30,7 +32,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
     try { await wakeDesktop(macAddresses); setWaking('sent'); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
     catch (e) { setWaking('no'); setError(friendlyError(e)); }
   };
-  useEffect(() => { if (state.connection === 'connected') api.safeMode().then(setPaused, () => {}); }, [api, state.connection]);
+  useEffect(() => { if (state.connection === 'connected') api.status().then(s => { setPaused(s.paused); setAnswerOnlyReady(s.answerOnly); }, () => {}); }, [api, state.connection]);
   const setSafeMode = async (pause: boolean): Promise<void> => {
     try { if (pause) await api.pause(); else await api.resume(); setPaused(pause); void store.refresh(); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }
     catch (e) { setError(friendlyError(e)); }
@@ -41,7 +43,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
   const send = async (): Promise<void> => {
     if (!prompt.trim() || sending || offline) return;
     setSending(true); setError(undefined);
-    try { await store.submit(prompt); setPrompt(''); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
+    try { await store.submit(prompt, { answerOnly }); setPrompt(''); setAnswerOnly(false); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
     catch (e) { setError(friendlyError(e)); }
     finally { setSending(false); }
   };
@@ -107,6 +109,13 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
         )} />
       {error ? <Text style={{ color: t.bad, marginBottom: space.s }}>{error}</Text> : null}
       {agentOff ? null : (
+      <>
+      {answerOnlyReady && !offline ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Answer only, no actions" hitSlop={8} onPress={() => setAnswerOnly(v => !v)} style={styles.answerRow}>
+          <View style={[styles.answerDot, { borderColor: answerOnly ? t.tint : t.sub, backgroundColor: answerOnly ? t.tint : 'transparent' }]} />
+          <Text style={{ color: answerOnly ? t.tint : t.sub, fontSize: 13, fontWeight: '600' }}>{answerOnly ? 'Answer only - a text reply from this computer, no actions' : 'Answer only'}</Text>
+        </Pressable>
+      ) : null}
       <Glass radius={24} style={styles.composer}>
         <TextInput value={prompt} onChangeText={setPrompt} placeholder="What should I do?" placeholderTextColor={t.sub} multiline
           style={[styles.input, { color: t.text }]} maxLength={4000} accessibilityLabel="Describe a task" />
@@ -116,12 +125,15 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
           <Icon name="send" size={20} color="#FFFFFF" />
         </Pressable>
       </Glass>
+      </>
       )}
     </KeyboardAvoidingView>
   );
 }
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: space.l, paddingTop: 70, paddingBottom: space.l },
+  answerRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6, marginLeft: 4, alignSelf: 'flex-start' },
+  answerDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   title: { fontSize: 34, fontWeight: '700' }, sub: { fontSize: 15 },
   chips: { flexGrow: 0, flexShrink: 0, marginBottom: space.m },
   chip: { minHeight: 40, paddingHorizontal: space.l, flexDirection: 'row', alignItems: 'center', gap: 6 },

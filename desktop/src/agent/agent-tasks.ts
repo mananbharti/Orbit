@@ -99,7 +99,7 @@ export class AgentTasks {
           return { status: approve ? 'approved' : 'denied' };
         } }),
       registry.register('agent.status', { validate: p => emptySchema.safeParse(p).success,
-        execute: async (_payload, context) => { owner(context); return { paused: this.paused }; } }),
+        execute: async (_payload, context) => { owner(context); return { paused: this.paused, answerOnly: Boolean(this.answer) }; } }),
       // Safe mode: stops everything that is running now and refuses new work until resumed. Survives restarts.
       registry.register('agent.pause', { validate: p => emptySchema.safeParse(p).success,
         execute: async (_payload, context) => {

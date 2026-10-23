@@ -24,6 +24,23 @@ test('submit trims, sends an idempotency key and parses the summary', async () =
   assert.equal(r.state, 'queued');
   s.stop();
 });
+test('answer-only is sent only when explicitly chosen, never by default', async () => {
+  let seen: any;
+  const { s, api } = await setup((_t, p) => { seen = p; return summary('queued'); });
+  await api.submit('what is the capital of France', undefined, { answerOnly: true });
+  assert.equal(seen.answerOnly, true);
+  await api.submit('book the cheapest flight');
+  assert.equal(seen.answerOnly, undefined, 'a normal task must not carry the flag at all (older desktops use a strict schema)');
+  s.stop();
+});
+test('status parses the answer-only capability, defaulting off with older desktops', async () => {
+  const { s, api } = await setup(() => ({ paused: false, answerOnly: true }));
+  assert.deepEqual(await api.status(), { paused: false, answerOnly: true });
+  s.stop();
+  const older = await setup(() => ({ paused: true }));
+  assert.deepEqual(await older.api.status(), { paused: true, answerOnly: false });
+  older.s.stop();
+});
 test('submit generates a key when none is given', async () => {
   let seen: any;
   const { s, api } = await setup((_t, p) => { seen = p; return summary(); });

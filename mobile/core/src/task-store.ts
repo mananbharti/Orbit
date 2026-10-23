@@ -76,8 +76,8 @@ export class TaskStore {
     this.emit();
   }
 
-  async submit(prompt: string): Promise<TaskSummary> {
-    const task = await this.api.submit(prompt);
+  async submit(prompt: string, options?: { answerOnly?: boolean }): Promise<TaskSummary> {
+    const task = await this.api.submit(prompt, undefined, options);
     this.tasks.set(task.taskId, task);
     this.emit();
     return task;

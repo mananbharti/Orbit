@@ -348,6 +348,12 @@ test('answer-only is an explicit per-request choice; normal tasks always run the
   assert.ok(page3.events.some((event: any) => event.kind === 'state' && String(event.text).includes('Answer-only needs a local model')), JSON.stringify(page3.events));
   assert.equal(result(await w3.command('agent.get', { taskId: created3.taskId })).state, 'failed');
 
+  // agent.status advertises answer-only readiness to the phone.
+  const st1 = result(await w1.command('agent.status', {}));
+  assert.equal(st1.answerOnly, true, 'a desktop with a picked model advertises answer-only');
+  const st3 = result(await w3.command('agent.status', {}));
+  assert.equal(st3.answerOnly, false, 'no picked model means the phone hides the choice');
+
   // 4. Answer-only when the model dies: the task fails honestly, the agent stays off.
   const d4 = mk(); const runner4 = new ScriptedRunner();
   const w4 = wire(d4, runner4, async () => { throw new Error('server died'); });

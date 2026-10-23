@@ -16,11 +16,11 @@ export class AgentApi {
   constructor(private readonly session: OrbitSession, private readonly uuid: () => string) {}
 
   /** Pass the same idempotencyKey when retrying after OutcomeUnknown so the desktop never starts the task twice. */
-  async submit(prompt: string, idempotencyKey: string = this.uuid()): Promise<TaskSummary> {
+  async submit(prompt: string, idempotencyKey: string = this.uuid(), options?: { answerOnly?: boolean }): Promise<TaskSummary> {
     const text = prompt.trim();
     if (!text) throw new NotSent('Write what you want the agent to do');
     if (new TextEncoder().encode(text).length > MAX_TASK_PROMPT_BYTES) throw new NotSent('That request is too long');
-    return check(taskSummarySchema, await this.session.command('agent.submit', { prompt: text, idempotencyKey }));
+    return check(taskSummarySchema, await this.session.command('agent.submit', { prompt: text, idempotencyKey, ...(options?.answerOnly === true ? { answerOnly: true } : {}) }));
   }
   /** Starts a new run of a failed, cancelled or interrupted task. The old task stays as it was; it may already have done part of its work. */
   async retry(taskId: string, idempotencyKey: string = this.uuid()): Promise<TaskSummary> {
@@ -56,6 +56,8 @@ export class AgentApi {
   }
   /** Safe mode: true when the desktop refuses new agent work. */
   async safeMode(): Promise<boolean> { return check(safeModeSchema, await this.session.command('agent.status', {})).paused; }
+  /** Capabilities: safe mode plus whether the desktop has a local model picked for answer-only tasks. */
+  async status(): Promise<{ paused: boolean; answerOnly: boolean }> { return check(safeModeSchema, await this.session.command('agent.status', {})); }
   /** Kill switch: stops everything running now and refuses new tasks until resume(). */
   async pause(): Promise<void> { check(safeModeSchema, await this.session.command('agent.pause', {})); }
   async resume(): Promise<void> { check(safeModeSchema, await this.session.command('agent.resume', {})); }

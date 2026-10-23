@@ -123,7 +123,7 @@ export const auditEntrySchema = z.strictObject({ at: z.number().int().min(0), ta
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export const auditPageSchema = z.strictObject({ entries: z.array(auditEntrySchema).max(50) });
 
-export const safeModeSchema = z.strictObject({ paused: z.boolean() });
+export const safeModeSchema = z.strictObject({ paused: z.boolean(), answerOnly: z.boolean().default(false) });
 
 // App launcher (mirrors desktop/src/protocol/app-launcher.ts).
 export const APP_PAGE_SIZE = 32;

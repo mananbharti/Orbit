@@ -45,7 +45,7 @@ test('pause stops running and waiting tasks and refuses new ones until resumed',
   assert.equal(ok(await f.command('agent.get', { taskId: a.taskId })).state, 'cancelled');
   assert.equal(ok(await f.command('agent.get', { taskId: b.taskId })).state, 'cancelled');
   assert.deepEqual((await f.command('agent.submit', submit())).payload, { ok: false, error: { code: 'AGENT_PAUSED' } });
-  assert.deepEqual(ok(await f.command('agent.status', {})), { paused: true });
+  assert.deepEqual(ok(await f.command('agent.status', {})), { paused: true, answerOnly: false });
   assert.deepEqual(ok(await f.command('agent.resume', {})), { paused: false });
   assert.equal(ok(await f.command('agent.submit', submit())).state, 'running');
 });
@@ -64,7 +64,7 @@ test('safe mode survives a desktop restart', async t => {
   assert.ok(existsSync(join(d, 'agent-paused')));
   await first.tasks.stop();
   const second = boot(t, d);
-  assert.deepEqual(ok(await second.command('agent.status', {})), { paused: true });
+  assert.deepEqual(ok(await second.command('agent.status', {})), { paused: true, answerOnly: false });
   assert.equal((await second.command('agent.submit', submit())).payload.ok, false);
   await second.command('agent.resume', {});
   assert.equal(existsSync(join(d, 'agent-paused')), false);

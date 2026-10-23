@@ -32,7 +32,7 @@ export function mockStore(connection: TaskStoreState['connection'] = 'connected'
   const state: TaskStoreState = { connection, tasks: list, needsAttention: list.filter(t => t.state === 'awaiting-approval'), events: { [id(1)]: events }, ...(agentAvailable !== undefined ? { agentAvailable } : {}) };
   return { ...store(state), refresh: async () => {}, submit: async () => {}, approve: async () => {}, cancel: async () => {}, retry: async () => {}, loadEvents: async () => {} } as unknown as TaskStore;
 }
-export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
+export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, status: async () => ({ paused, answerOnly: true }), pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
 export const mockDictation = {} as unknown as DictationApi;
 export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [], scenes: async () => [] }) as unknown as LauncherApi;
 /** Two saved scenes, one pinned favourite: the lived-in state. */
