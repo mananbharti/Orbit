@@ -51,6 +51,8 @@ export class LinuxClipboard implements ClipboardAdapter {
       throw new ClipboardUnavailable();
     }
     const types = formats.output.toString('utf8').trim().split(/\r?\n/).map(value => value.trim());
+    // Password managers tag private copies with the KDE hint (Klipper convention); Orbit never syncs or stores them.
+    if (types.some(type => /^x-kde-passwordManagerHint$/i.test(type))) return { kind: 'sensitive' };
     if (types.some(type => /^(image\/|text\/(html|rtf|uri-list)$|application\/(rtf|x-kde-cutselection)$|x-special\/gnome-copied-files$)/i.test(type))) {
       return { kind: 'unsupported' };
     }

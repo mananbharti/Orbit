@@ -135,6 +135,9 @@ export class ClipboardSync {
     const baseline = this.fingerprint === undefined;
     this.fingerprint = fingerprint;
     if (baseline) return;
+    // A sensitive copy must not advance the revision (a hidden bump would false-conflict the phone's next write)
+    // and must never be published or stored; only the fingerprint moves so polling does not re-fire.
+    if (snapshot.kind === 'sensitive') { this.record('clipboard.ignored', undefined, 'rejected'); return; }
     this.revision++;
     if (snapshot.kind === 'text') this.history?.add(snapshot.text, excludeConnection ? 'phone' : 'pc');
     for (const subscription of [...this.subscriptions.values()]) {

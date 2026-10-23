@@ -44,7 +44,7 @@ export function MemoryScreen({ api, onBack }: { api: MemoryApi; onBack: () => vo
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       <FlatList data={hits ?? []} keyExtractor={h => h.id} contentContainerStyle={{ gap: space.s }}
-        ListEmptyComponent={hits ? <Text style={{ color: t.sub, fontSize: 17, textAlign: 'center', marginTop: 20 }}>Nothing found.</Text> : null}
+        ListEmptyComponent={<Text style={{ color: t.sub, fontSize: 17, textAlign: 'center', marginTop: 20 }}>{hits ? 'Nothing found.' : 'Names and facts you save here stay on your computer. Search them anytime.'}</Text>}
         renderItem={({ item }) => (
           <View style={[styles.row, { backgroundColor: t.card }]}>
             <Text style={{ color: t.text, fontSize: 17, fontWeight: '600' }}>{item.name}</Text>

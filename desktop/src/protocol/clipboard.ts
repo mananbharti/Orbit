@@ -8,7 +8,8 @@ export const clipboardTextSchema = z.string().refine(text => !/[\uD800-\uDFFF]/u
   && Buffer.byteLength(text, 'utf8') <= MAX_CLIPBOARD_BYTES);
 export const clipboardSnapshotSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('text'), text: clipboardTextSchema }),
-  z.strictObject({ kind: z.enum(['unsupported', 'oversized']) }),
+  // 'sensitive': the owner app marked the copy as private (e.g. a password manager); it must never sync or enter history.
+  z.strictObject({ kind: z.enum(['unsupported', 'oversized', 'sensitive']) }),
 ]);
 export type ClipboardSnapshot = z.infer<typeof clipboardSnapshotSchema>;
 

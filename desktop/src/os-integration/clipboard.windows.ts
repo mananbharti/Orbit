@@ -18,12 +18,25 @@ while ($null -ne ($line = [Console]::ReadLine())) {
     if ($request.op -eq 'read') {
       $data = [System.Windows.Forms.Clipboard]::GetDataObject()
       $blocked = $false
+      $sensitive = $false
       if ($null -ne $data) {
         foreach ($format in @('FileDrop', 'Bitmap', 'Rich Text Format', 'HTML Format')) {
           if ($data.GetDataPresent($format, $false)) { $blocked = $true }
         }
+        # Password managers and other apps mark private copies with exclusion formats; Orbit never syncs or stores them.
+        if ($data.GetDataPresent('ExcludeClipboardContentFromMonitorProcessing', $false)) { $sensitive = $true }
+        foreach ($flag in @('CanIncludeInClipboardHistory', 'CanUploadToCloudClipboard')) {
+          if ($data.GetDataPresent($flag, $false)) {
+            $flagValue = $data.GetData($flag, $false)
+            if ($flagValue -is [System.IO.MemoryStream]) { $flagBytes = $flagValue.ToArray(); if ($flagBytes.Length -gt 0 -and $flagBytes[0] -eq 0) { $sensitive = $true } }
+            elseif ($null -eq $flagValue) { $sensitive = $true }
+            elseif ($flagValue -is [ValueType] -and $flagValue -eq 0) { $sensitive = $true }
+          }
+        }
       }
-      if ($null -eq $data -or $blocked -or !$data.GetDataPresent('UnicodeText', $false)) {
+      if ($sensitive) {
+        $result = @{ kind = 'sensitive' }
+      } elseif ($null -eq $data -or $blocked -or !$data.GetDataPresent('UnicodeText', $false)) {
         $result = @{ kind = 'unsupported' }
       } else {
         $text = [string]$data.GetData('UnicodeText', $false)

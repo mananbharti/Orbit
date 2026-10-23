@@ -137,6 +137,7 @@ export class ClipboardClient extends EventEmitter {
     if (!changedLocally) return;
     const previousFingerprint = subscription.fingerprint;
     subscription.fingerprint = fingerprint;
+    if (local.kind === 'sensitive') { this.status('active'); return; } // a private-marked copy is never sent
     if (local.kind !== 'text') { this.status(local.kind); return; }
     let response;
     this.commandPending = true;

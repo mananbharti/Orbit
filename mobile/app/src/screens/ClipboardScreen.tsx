@@ -64,7 +64,7 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
       <Text style={{ color: t.sub, fontSize: 15 }}>Clipboard syncs automatically while Orbit is open on both devices. Turn this off in Settings anytime.</Text>
       {state.incoming ? (
         <View style={[styles.card, { backgroundColor: t.card }]}>
-          <Text style={[styles.label, { color: t.sub }]}>Copied on your computer - already on this phone</Text>
+          <Text style={[styles.label, { color: t.sub }]}>Copied on your computer</Text>
           <Text numberOfLines={6} style={{ color: t.text, fontSize: 16, lineHeight: 21 }}>{state.incoming.text}</Text>
           <Pressable accessibilityRole="button" onPress={() => { void copyIncoming(); }} style={[styles.button, { backgroundColor: t.tint }]}>
             <Text style={styles.buttonText}>Copy to this phone</Text></Pressable>
