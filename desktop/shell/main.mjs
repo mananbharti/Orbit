@@ -4,6 +4,7 @@ import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClip
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
 import QRCode from 'qrcode';
+import { transferRows, freshTerminalTransfers, notificationFor, knownPath as knownTransferPath } from './logic.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { startDesktop } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'desktop-service.js')).href);
@@ -46,38 +47,19 @@ async function boot() {
 
 function fileRows() {
   if (!service) return [];
-  const rows = [];
-  for (const record of service.files.store.records.values()) {
-    const m = record.manifest;
-    const row = { id: m.transferId, name: m.name, size: m.sizeBytes, direction: m.direction, state: record.state,
-      progress: m.sizeBytes ? Math.min(1, record.nextOffset / m.sizeBytes) : (record.state === 'completed' ? 1 : 0),
-      updatedAt: record.updatedAt, device: record.owner, error: record.error };
-    if (record.state === 'completed' && m.direction === 'to-desktop') row.path = service.files.store.paths(record).destination;
-    rows.push(row);
-  }
-  rows.sort((a, b) => b.updatedAt - a.updatedAt);
-  return rows.slice(0, 100);
+  return transferRows(service.files.store.records.values(), (record) => service.files.store.paths(record).destination);
 }
 
 function notifyNewTransfers(rows) {
   if (!Notification.isSupported()) return;
-  const fresh = [];
-  for (const row of rows) {
-    const done = ['completed', 'cancelled', 'failed', 'expired'].includes(row.state);
-    if (!done) continue;
-    if (!seenTerminal.has(row.id)) { seenTerminal.add(row.id); if (seeded) fresh.push(row); }
-  }
-  seeded = true;
-  for (const row of fresh) {
-    if (row.state === 'completed' && row.direction === 'to-desktop') {
-      const n = new Notification({ title: 'File received', body: `${row.name} is on this computer.`, silent: false });
-      n.on('click', () => { if (row.path) shell.showItemInFolder(row.path); win?.show(); });
-      n.show();
-    } else if (row.state === 'completed' && row.direction === 'to-client') {
-      new Notification({ title: 'File delivered', body: `Your phone received ${row.name}.` }).show();
-    } else if (row.state === 'failed' && row.direction === 'to-desktop') {
-      new Notification({ title: 'File transfer failed', body: `${row.name} could not be received.` }).show();
-    }
+  const result = freshTerminalTransfers(rows, seenTerminal, seeded);
+  seeded = result.seeded;
+  for (const row of result.fresh) {
+    const note = notificationFor(row);
+    if (!note) continue;
+    const n = new Notification({ title: note.title, body: note.body, silent: false });
+    if (note.reveal) n.on('click', () => { if (row.path) shell.showItemInFolder(row.path); win?.show(); });
+    n.show();
   }
 }
 
@@ -114,13 +96,8 @@ const push = () => { if (win && !win.isDestroyed()) win.webContents.send('orbit:
 
 // The page only ever acts on paths that belong to a known transfer record, never on text it typed itself.
 function knownPath(candidate) {
-  if (typeof candidate !== 'string' || !service) return undefined;
-  for (const record of service.files.store.records.values()) {
-    if (record.state === 'completed' && record.manifest.direction === 'to-desktop'
-      && service.files.store.paths(record).destination === candidate) return candidate;
-    if (record.manifest.direction === 'to-client' && record.sourcePath === candidate) return candidate;
-  }
-  return undefined;
+  if (!service) return undefined;
+  return knownTransferPath(service.files.store.records.values(), (record) => service.files.store.paths(record).destination, candidate);
 }
 
 ipcMain.handle('orbit:state', () => snapshot());
