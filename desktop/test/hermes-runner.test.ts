@@ -8,9 +8,9 @@ import type { AgentRunContext } from '../src/agent/agent-runner.js';
 import { HermesRunner } from '../src/agent/hermes-runner.js';
 
 interface Fake { server: Server; url: string; requests: { method: string; path: string; headers: IncomingMessage['headers']; body: string }[];
-  events: string[]; status: Record<string, unknown>; holdEvents?: Promise<void>; approvals: unknown[] }
+  events: string[]; status: Record<string, unknown>; holdEvents?: Promise<void>; approvals: unknown[]; approvalStatus: number }
 async function fake(t: TestContext): Promise<Fake> {
-  const state: Fake = { server: undefined as never, url: '', requests: [], events: [], status: { status: 'completed', output: 'Final answer' }, approvals: [] };
+  const state: Fake = { server: undefined as never, url: '', requests: [], events: [], status: { status: 'completed', output: 'Final answer' }, approvals: [], approvalStatus: 200 };
   state.server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = ''; req.on('data', c => body += c);
     req.on('end', async () => {
@@ -22,7 +22,7 @@ async function fake(t: TestContext): Promise<Fake> {
         for (const frame of state.events) res.write(frame);
         await state.holdEvents; res.end(); return;
       }
-      if (req.url === '/v1/runs/run_abc123/approval') { state.approvals.push(JSON.parse(body)); res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}'); return; }
+      if (req.url === '/v1/runs/run_abc123/approval') { state.approvals.push(JSON.parse(body)); res.writeHead(state.approvalStatus, { 'Content-Type': 'application/json' }).end('{}'); return; }
       if (req.url === '/v1/runs/run_abc123/stop') { res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"status":"stopping"}'); return; }
       if (req.url === '/v1/runs/run_abc123') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(state.status)); return; }
       res.writeHead(404).end();
@@ -55,18 +55,48 @@ test('a run streams tool progress, then returns the authoritative final output',
   assert.deepEqual(JSON.parse(create.body), { input: 'list my files', session_id: ctx.taskId });
 });
 
-test('approval requests wait for the user and relay the decision, denying by default', async t => {
+test('approval requests wait for the user and relay the decision with the control identity', async t => {
+  // The documented contract: { request_id, execution_generation, choice } - identityless answers get HTTP 409.
   const f = await fake(t);
-  f.events = [frame('approval.request', { tool: 'write_file', preview: 'Write notes.txt' }), frame('run.completed', {})];
+  f.events = [frame('approval.request', { tool: 'write_file', preview: 'Write notes.txt', prompt_id: 'prompt-9', execution_generation: 3 }), frame('run.completed', {})];
   const asked: string[] = [];
   const { ctx } = context({ requestApproval: async d => { asked.push(d); return false; } });
   await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
   assert.deepEqual(asked, ['Write notes.txt']);
-  assert.deepEqual(f.approvals, [{ decision: 'deny' }]);
+  assert.deepEqual(f.approvals, [{ request_id: 'prompt-9', execution_generation: 3, choice: 'deny' }]);
   const approved = context({ requestApproval: async () => true });
   const g = await fake(t); g.events = f.events;
   await new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(approved.ctx);
-  assert.deepEqual(g.approvals, [{ decision: 'once' }]);
+  assert.deepEqual(g.approvals, [{ request_id: 'prompt-9', execution_generation: 3, choice: 'once' }]);
+});
+
+test('an approval event without identity falls back to the run pending_controls', async t => {
+  const f = await fake(t);
+  f.events = [frame('approval.request', { tool: 'write_file', preview: 'Write notes.txt' }), frame('run.completed', {})];
+  f.status = { status: 'completed', output: 'Final answer', pending_controls: { prompt_id: 'prompt-11', execution_generation: 7 } };
+  const { ctx } = context({ requestApproval: async () => true });
+  await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
+  assert.deepEqual(f.approvals, [{ request_id: 'prompt-11', execution_generation: 7, choice: 'once' }]);
+});
+
+test('an approval with no identity anywhere is not delivered, and the run goes on', async t => {
+  const f = await fake(t);
+  f.events = [frame('approval.request', { tool: 'write_file' }), frame('run.completed', {})];
+  const { ctx, steps } = context({ requestApproval: async () => true });
+  const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
+  assert.equal(result, 'Final answer');
+  assert.deepEqual(f.approvals, []); // an identityless POST would only earn a 409
+  assert.ok(steps.some(step => step.includes('no approval identity')));
+});
+
+test('a stale approval (HTTP 409) is tolerated: the control already settled', async t => {
+  const f = await fake(t);
+  f.approvalStatus = 409;
+  f.events = [frame('approval.request', { tool: 'write_file', prompt_id: 'prompt-9', execution_generation: 3 }), frame('run.completed', {})];
+  const { ctx } = context({ requestApproval: async () => false });
+  const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
+  assert.equal(result, 'Final answer');
+  assert.equal(f.approvals.length, 1); // the answer was attempted; Hermes had moved on
 });
 
 test('aborting asks Hermes to stop the run and surfaces a failure', async t => {

@@ -1,6 +1,6 @@
 // Orbit Desktop shell: a tray + window around the existing service. Depends on Electron and the compiled service in ../dist.
 // Runs the service in-process, shows a pairing QR only when the user asks, and never exposes the service to the page except through preload.
-import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
 import QRCode from 'qrcode';
@@ -13,6 +13,8 @@ const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'sr
 const { createClipboard } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-clipboard.js')).href);
 const { WindowsInputDevice } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'input-device.windows.js')).href);
 const { hostname } = await import('node:os');
+const { HermesRunner } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent', 'hermes-runner.js')).href);
+const { loadAgentConfig, saveAgentConfig, clearAgentConfig, validateAgentConfig } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent-config.js')).href);
 
 // Chromium's disk caches are useless for a local UI and fail with "Access is denied" when a previous
 // instance still holds them (or the profile sits in a synced folder), so keep them off and in a private folder.
@@ -23,7 +25,16 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.exit(0); // a second launch only focuses the first window (see 'second-instance')
 
 let win; let tray; let service; let pairingTimer; let pairingUntil = 0; let state = { phase: 'starting' };
-let quitting = false;
+let quitting = false; let restarting = false;
+// Agent tasks (Hermes gateway): the key lives only in OS-encrypted storage; ORBIT_HERMES_API_KEY still wins for the CLI.
+const agentConfigPath = () => join(app.getPath('userData'), 'orbit-agent.json');
+const agentEncrypt = plaintext => safeStorage.encryptString(plaintext).toString('base64');
+const agentDecrypt = blob => safeStorage.decryptString(Buffer.from(blob, 'base64'));
+function agentSettings() {
+  if (process.env.ORBIT_HERMES_API_KEY) return { apiKey: process.env.ORBIT_HERMES_API_KEY, baseUrl: process.env.ORBIT_HERMES_URL, source: 'env' };
+  const saved = loadAgentConfig(agentConfigPath(), agentDecrypt);
+  return saved ? { ...saved, source: 'saved' } : undefined;
+}
 let clip; try { clip = createClipboard(); } catch { clip = undefined; }
 // Transfers that were already finished when the app booted must not notify; only fresh ones do.
 const seenTerminal = new Set(); let seeded = false;
@@ -37,8 +48,15 @@ async function boot() {
       ? { createDevice: () => new WindowsInputDevice(), confirmation: electronApproval } : undefined;
     // Remote terminal: every session needs a Yes on a dialog shown at this PC (below), same as remote control.
     const terminal = process.platform === 'win32' ? { confirmation: electronApproval } : undefined;
+    // Agent tasks: on when a Hermes gateway key is configured (Settings > Agent, or the env var for the CLI).
+    const hermes = agentSettings();
+    let agent;
+    if (hermes) {
+      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }) }; }
+      catch (error) { console.error('AGENT: disabled -', String(error?.message ?? error)); }
+    }
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), onExtensionConnection: () => push() });
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), onExtensionConnection: () => push() });
     state = { phase: 'running', host, port: DEFAULT_PORT };
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
@@ -90,8 +108,23 @@ const snapshot = () => {
     devices: service ? service.credentials.list() : [],
     activity: service ? service.log.snapshot().slice(-60).reverse() : [],
     browserExtension: service ? { port: service.browserExtension.port, token: service.browserExtension.token, connected: service.browserExtension.connected() } : undefined,
+    agent: {
+      configured: Boolean(agentSettings()),
+      active: Boolean(service && agentSettings()),
+      secureStorage: safeStorage.isEncryptionAvailable(),
+    },
   };
 };
+
+// Restart the service in place (agent settings changed); mirrors the Wi-Fi switch path.
+async function restartService() {
+  if (restarting || quitting) return;
+  restarting = true;
+  try {
+    if (service) { const old = service; service = undefined; pairingUntil = 0; clearTimeout(pairingTimer); await old.stop(); }
+    await boot();
+  } finally { restarting = false; push(); }
+}
 const push = () => { if (win && !win.isDestroyed()) win.webContents.send('orbit:state', snapshot()); };
 
 // The page only ever acts on paths that belong to a known transfer record, never on text it typed itself.
@@ -113,6 +146,15 @@ ipcMain.handle('orbit:pair', async () => {
 ipcMain.handle('orbit:cancel-pair', () => { service?.pairing.close(); pairingUntil = 0; clearTimeout(pairingTimer); push(); });
 ipcMain.handle('orbit:revoke', (_e, id) => { const ok = typeof id === 'string' && service?.credentials.revoke(id); push(); return Boolean(ok); });
 ipcMain.handle('orbit:retry', async () => { await boot(); push(); });
+ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl) => {
+  if (!safeStorage.isEncryptionAvailable()) return { error: 'Secure storage is not available on this system, so the key cannot be saved safely.' };
+  let config;
+  try { config = validateAgentConfig({ apiKey: key, baseUrl }); } catch (error) { return { error: String(error?.message ?? error) }; }
+  saveAgentConfig(agentConfigPath(), config, agentEncrypt);
+  await restartService();
+  return { ok: true };
+});
+ipcMain.handle('orbit:agent-clear', async () => { clearAgentConfig(agentConfigPath()); await restartService(); return { ok: true }; });
 ipcMain.handle('orbit:login-item', (_e, enable) => {
   if (typeof enable === 'boolean') app.setLoginItemSettings({ openAtLogin: enable });
   return app.getLoginItemSettings().openAtLogin;

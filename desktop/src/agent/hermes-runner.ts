@@ -7,13 +7,19 @@ export interface HermesRunnerOptions {
   apiKey: string;
   allowRemote?: boolean;
   fetchImpl?: typeof fetch;
-  /** Body for POST /v1/runs/{id}/approval. The docs name the decisions `once` and `deny`; the key name is kept configurable. */
-  approvalBody?: (approved: boolean) => Record<string, unknown>;
+  /** Body for POST /v1/runs/{id}/approval. The documented contract carries the control identity:
+   *  { request_id, execution_generation, choice: 'once' | 'deny' } - identityless answers get HTTP 409. */
+  approvalBody?: (approved: boolean, identity: ApprovalIdentity) => Record<string, unknown>;
 }
 
 const MAX_LINE_BYTES = 256 * 1_024;
 const MAX_TEXT = 1_900;
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+
+export interface ApprovalIdentity { requestId: string; generation: number }
+
+/** Thrown for any non-2xx Hermes response; carries the status so callers can tolerate specific ones. */
+export class HermesHttpError extends Error { constructor(readonly status: number) { super(`Hermes HTTP ${status}`); } }
 
 export class HermesRunner implements AgentRunner {
   private readonly base: URL;
@@ -80,25 +86,55 @@ export class HermesRunner implements AgentRunner {
       case 'subagent.complete': context.step('Subagent finished'); break;
       case 'approval.request': {
         const approved = await context.requestApproval(text(event.data.preview ?? event.data.description ?? event.data.tool) || 'Approval needed');
-        const body = (this.options.approvalBody ?? defaultApprovalBody)(approved);
-        await this.request('POST', `/v1/runs/${runId}/approval`, undefined, body);
+        const identity = await this.approvalIdentity(runId, event, context);
+        if (!identity) { context.step('Hermes gave no approval identity; the decision could not be delivered'); break; }
+        const body = (this.options.approvalBody ?? defaultApprovalBody)(approved, identity);
+        try { await this.request('POST', `/v1/runs/${runId}/approval`, undefined, body); }
+        catch (error) {
+          // 409 = the control settled or moved to a new generation while the user decided; nothing to deliver.
+          if (error instanceof HermesHttpError && error.status === 409) break;
+          throw error;
+        }
         break;
       }
       default: break; // deltas and lifecycle frames carry no user-facing step
     }
   }
 
+  /** The control identity for an approval: from the event itself, else the run's pending_controls. */
+  private async approvalIdentity(runId: string, event: { data: Record<string, unknown> }, context: AgentRunContext): Promise<ApprovalIdentity | undefined> {
+    const fromEvent = readIdentity(event.data);
+    if (fromEvent) return fromEvent;
+    try {
+      const status = await (await this.request('GET', `/v1/runs/${runId}`, context.signal)).json() as { pending_controls?: unknown };
+      if (status.pending_controls && typeof status.pending_controls === 'object' && !Array.isArray(status.pending_controls)) {
+        return readIdentity(status.pending_controls as Record<string, unknown>);
+      }
+    } catch { /* a gateway without pending_controls simply cannot be answered */ }
+    return undefined;
+  }
+
   private request(method: string, path: string, signal: AbortSignal | undefined, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
     return this.fetchImpl(new URL(path, this.base), { method, signal, redirect: 'error',
       headers: { Authorization: `Bearer ${this.options.apiKey}`, 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body) }).then(response => {
-      if (!response.ok) throw new Error(`Hermes HTTP ${response.status}`);
+      if (!response.ok) throw new HermesHttpError(response.status);
       return response;
     });
   }
 }
 
-function defaultApprovalBody(approved: boolean): Record<string, unknown> { return { decision: approved ? 'once' : 'deny' }; }
+function readIdentity(record: Record<string, unknown>): ApprovalIdentity | undefined {
+  const requestId = typeof record.prompt_id === 'string' ? record.prompt_id
+    : typeof record.request_id === 'string' ? record.request_id : undefined;
+  const generation = typeof record.execution_generation === 'number' && Number.isInteger(record.execution_generation)
+    ? record.execution_generation : undefined;
+  return requestId && generation !== undefined ? { requestId, generation } : undefined;
+}
+
+function defaultApprovalBody(approved: boolean, identity: ApprovalIdentity): Record<string, unknown> {
+  return { request_id: identity.requestId, execution_generation: identity.generation, choice: approved ? 'once' : 'deny' };
+}
 function clean(value: string): string { return value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, MAX_TEXT); }
 function parseEvent(name: string, data: string): { type: string; data: Record<string, unknown> } | undefined {
   let parsed: unknown;

@@ -71,6 +71,12 @@
       <label class="row"><span><b>Start Orbit at login</b><small>So your phone can always reach this computer.</small></span><input type="checkbox" id="login" class="switch"></label>
       <div class="row"><span><b>Received files folder</b><small>Where files from your phone are saved.</small></span><button class="ghost small" id="open-inbox">Open folder</button></div>
     </div>
+    <div class="card list" id="agent-card">
+      <div class="row"><span><b>Agent tasks</b><small id="agent-status">Lets your phone ask an AI agent on this computer to do things, with your approval for anything sensitive. Needs a local Hermes gateway.</small></span><span class="dot" id="agent-dot"></span></div>
+      <div class="row" id="agent-form"><span class="grow"><input type="password" id="agent-key" class="field" placeholder="Hermes API key" autocomplete="off"><input type="text" id="agent-url" class="field" placeholder="Gateway address (optional, default http://127.0.0.1:8642)" autocomplete="off"></span></div>
+      <div class="row"><span><small id="agent-hint">The key is stored only in this computer's encrypted system storage.</small></span>
+        <span><button class="ghost small" id="agent-clear" hidden>Remove</button> <button class="ghost small" id="agent-save">Save</button></span></div>
+    </div>
     <div class="card list" id="ext-card" hidden>
       <div class="row"><span><b>Browser extension</b><small id="ext-status">Lets your phone see and control this computer's browser tabs.</small></span><span class="dot" id="ext-dot"></span></div>
       <div class="row"><span><b>Port</b><small id="ext-port"></small></span><button class="ghost small" id="ext-copy-port">Copy</button></div>

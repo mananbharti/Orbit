@@ -9,7 +9,7 @@ const api = window.orbit ?? (() => {
       { id: '3', name: 'orbit-logo.png', size: 184320, direction: 'to-client', state: 'completed', progress: 1, updatedAt: Date.now() - 3600000, device: 'iphone-17-pro' }],
     activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
-  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false,
+  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }),
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name };
 })();
@@ -107,6 +107,18 @@ function render(s) {
   $('hero-msg').textContent = open ? 'Scan with Orbit on your phone. This code works once.' : (s.devices.length ? s.pcName + ' is reachable by your phone.' : 'Codes work once and expire after two minutes.');
   $('meta').textContent = s.devices.length + (s.devices.length === 1 ? ' device paired' : ' devices paired');
 
+  // Agent tasks (Hermes gateway)
+  if (s.agent) {
+    $('agent-dot').className = 'dot ' + (s.agent.active ? 'ok' : '');
+    $('agent-status').textContent = s.agent.active ? 'On. Your phone can hand tasks to the agent on this computer.'
+      : s.agent.configured ? 'Saved, starting with the service...'
+      : 'Off. Connect a local Hermes gateway to let your phone hand tasks to an AI agent here.';
+    $('agent-form').hidden = false;
+    $('agent-clear').hidden = !s.agent.configured;
+    $('agent-hint').textContent = s.agent.secureStorage ? 'The key is stored only in this computer\'s encrypted system storage.' : 'Secure storage is not available on this system, so a key cannot be saved safely here.';
+    $('agent-save').disabled = !s.agent.secureStorage;
+  }
+
   // Browser extension
   if (s.browserExtension) {
     $('ext-card').hidden = false;
@@ -140,4 +152,14 @@ function render(s) {
   // Activity
   $('activity-list').innerHTML = s.activity.length ? s.activity.map(e => '<div class="row"><span><b>' + esc(evtLabel(e)) + '</b><small>' + new Date(e.timestamp).toLocaleTimeString() + (e.deviceId ? ' · ' + esc(e.deviceId) : '') + '</small></span><span class="badge ' + (e.outcome === 'failed' ? 'fail' : e.severity === 'warn' ? 'warn' : 'ok') + '">' + esc(e.outcome ?? e.severity) + '</span></div>').join('') : '<div class="empty">Nothing yet.</div>';
 }
+$('agent-save').onclick = async () => {
+  const key = $('agent-key').value.trim();
+  if (!key) { toast('Paste the Hermes API key first'); return; }
+  $('agent-save').disabled = true;
+  const r = await api.agentSave(key, $('agent-url').value.trim());
+  $('agent-save').disabled = false;
+  if (r.error) toast(r.error); else { $('agent-key').value = ''; toast('Agent settings saved'); }
+  render(await api.state());
+};
+$('agent-clear').onclick = async () => { await api.agentClear(); toast('Agent disconnected'); render(await api.state()); };
 api.state().then(render); api.onState(render);

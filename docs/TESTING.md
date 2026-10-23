@@ -61,4 +61,5 @@ Remote:
 
 29. Forget a device: Settings -> Devices -> tap another device -> "Forget this device" -> Forget. It disappears from the list and from the computer's Orbit window; that device can no longer connect without a fresh pairing code. "Unpair this iPhone" on the top card unpairs this phone and returns Orbit to the pair screen.
 
+30. Agent tasks (needs a Hermes gateway on the PC): set up Hermes per docs/hermes.md, then Orbit Settings -> Agent tasks -> paste the API key -> Save; the dot goes green. On the phone, Home -> Tasks: ask "what is in my Downloads folder". Watch the task run with live steps; when it asks approval for something, Approve on the phone and it continues. Stop agent from the Tasks screen stops everything and new submits are refused while stopped. Settings -> Agent tasks -> Remove disconnects it again.
 Report anything that fails with the exact step number.

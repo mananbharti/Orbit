@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('orbit', {
   cancelPair: () => ipcRenderer.invoke('orbit:cancel-pair'),
   revoke: id => ipcRenderer.invoke('orbit:revoke', id),
   retry: () => ipcRenderer.invoke('orbit:retry'),
+  agentSave: (key, baseUrl) => ipcRenderer.invoke('orbit:agent-save', key, baseUrl),
+  agentClear: () => ipcRenderer.invoke('orbit:agent-clear'),
   loginItem: enable => ipcRenderer.invoke('orbit:login-item', enable),
   clipboardRead: () => ipcRenderer.invoke('orbit:clipboard-read'),
   clipboardWrite: text => ipcRenderer.invoke('orbit:clipboard-write', text),
