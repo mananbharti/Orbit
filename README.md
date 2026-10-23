@@ -279,7 +279,7 @@ The planned experience includes:
 | :------------------------------------------------ | :----- | :------ |
 | Bidirectional clipboard sync                      | Yes    | Yes     |
 | Clipboard history across devices                  | Yes    | Yes     |
-| Password-manager copies never synced or stored    | Yes    | Yes     |
+| App-marked private copies never synced or stored  | Yes    | Yes     |
 | Direct file transfer (no cloud)                   | Yes    | Yes     |
 | Native share-sheet integration                    | Yes    | N/A     |
 | Drag-and-drop file drop zone                      | N/A    | Yes     |
