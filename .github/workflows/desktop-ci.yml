@@ -29,6 +29,15 @@ jobs:
       - name: Enable uinput for the kernel input smoke
         if: runner.os == 'Linux'
         run: sudo modprobe uinput || true; [ -e /dev/uinput ] && sudo chmod 0666 /dev/uinput || true
+      # The real-X11 input test is opt-in (ORBIT_TEST_X11=1) and needs a live X server; give CI one
+      # so the Linux X11 input path is exercised for real, not only mocked.
+      - name: Start Xvfb for the real X11 input test
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xdotool >/dev/null
+          (Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &)
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "ORBIT_TEST_X11=1" >> "$GITHUB_ENV"
       - run: npm test
       - name: Windows failure details (only runs when tests failed)
         if: failure() && runner.os == 'Windows'
@@ -56,6 +65,15 @@ jobs:
       - name: Enable uinput for the kernel input smoke
         if: runner.os == 'Linux'
         run: sudo modprobe uinput || true; [ -e /dev/uinput ] && sudo chmod 0666 /dev/uinput || true
+      # The real-X11 input test is opt-in (ORBIT_TEST_X11=1) and needs a live X server; give CI one
+      # so the Linux X11 input path is exercised for real, not only mocked.
+      - name: Start Xvfb for the real X11 input test
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xdotool >/dev/null
+          (Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &)
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "ORBIT_TEST_X11=1" >> "$GITHUB_ENV"
       - run: npm test
   e2e:
     runs-on: ubuntu-latest
