@@ -75,7 +75,9 @@ class VirtualInput:
             fcntl.ioctl(self.fd, UI_SET_EVBIT, bit)
         for code in (REL_X, REL_Y, REL_HWHEEL, REL_WHEEL):
             fcntl.ioctl(self.fd, UI_SET_RELBIT, code)
-        for code in (BTN_LEFT, BTN_RIGHT, BTN_MIDDLE):
+        # The kernel silently drops events whose code was never enabled, so advertise the full key range:
+        # the phone's fixed key list, every modifier, and the mouse buttons all live below 0x2ff.
+        for code in range(1, 0x2FF):
             fcntl.ioctl(self.fd, UI_SET_KEYBIT, code)
         os.write(self.fd, user_dev_struct(b"Orbit Virtual Input"))
         fcntl.ioctl(self.fd, UI_DEV_CREATE)
@@ -171,7 +173,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 `;
 
 // evdev key codes (linux/input-event-codes.h) for every key the phone UI and macros can send

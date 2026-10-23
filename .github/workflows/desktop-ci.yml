@@ -23,6 +23,12 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      # Kernel-level Wayland input smoke needs a writable /dev/uinput. Ephemeral CI VM only - the user-facing
+      # guidance in docs/remote-input.md stays least-privilege (uaccess tag or a dedicated group). If the runner
+      # kernel cannot offer uinput, the smoke skips instead of failing the suite.
+      - name: Enable uinput for the kernel input smoke
+        if: runner.os == 'Linux'
+        run: sudo modprobe uinput || true; [ -e /dev/uinput ] && sudo chmod 0666 /dev/uinput || true
       - run: npm test
       - name: Windows failure details (only runs when tests failed)
         if: failure() && runner.os == 'Windows'
@@ -44,6 +50,12 @@ jobs:
           cache-dependency-path: mobile/core/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      # Kernel-level Wayland input smoke needs a writable /dev/uinput. Ephemeral CI VM only - the user-facing
+      # guidance in docs/remote-input.md stays least-privilege (uaccess tag or a dedicated group). If the runner
+      # kernel cannot offer uinput, the smoke skips instead of failing the suite.
+      - name: Enable uinput for the kernel input smoke
+        if: runner.os == 'Linux'
+        run: sudo modprobe uinput || true; [ -e /dev/uinput ] && sudo chmod 0666 /dev/uinput || true
       - run: npm test
   e2e:
     runs-on: ubuntu-latest
