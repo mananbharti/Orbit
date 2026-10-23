@@ -56,7 +56,7 @@ const device = (dieImmediately = false) => {
   return { device: new TestDevice(spawnFn), workers };
 };
 
-test('a helper that cannot create the device fails open honestly', async () => {
+test('a helper that cannot create the device fails closed: no session, no native access', async () => {
   const { device: d } = device(true);
   await assert.rejects(() => d.open(new AbortController().signal), /INPUT_UNAVAILABLE/);
 });

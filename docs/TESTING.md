@@ -64,3 +64,14 @@ Remote:
 
 31. Agent tasks (needs a Hermes gateway on the PC): set up Hermes per docs/hermes.md, then Orbit Settings -> Agent tasks -> paste the API key -> Save; the dot goes green. On the phone, Home -> Tasks: ask "what is in my Downloads folder". Watch the task run with live steps; when it asks approval for something, Approve on the phone and it continues. Stop agent from the Tasks screen stops everything and new submits are refused while stopped. Settings -> Agent tasks -> Remove disconnects it again.
 Report anything that fails with the exact step number.
+## Batch 2 - features added since v1.1
+
+Agent answer-only (needs the agent set up, step 31):
+32. Home -> Tasks: tap "Answer only" above the composer (the chip expands to say what it means: a text reply from this computer, no actions). Ask a plain question. A text answer comes back and nothing runs - no steps, no approvals, nothing changes on the PC. Send: the chip turns itself off after the reply. Ask for an actual task with the chip off: it runs normally with steps as before. If the model is unreachable, the answer fails with a visible error - it must not silently fall back to running a task.
+
+Private clipboard copies (Windows):
+33. In your password manager, enable its clipboard-exclusion/privacy option if it has one (KeePass: clipboard exclusion; recent Bitwarden desktop versions mark copies automatically). Copy a password from it. The password must NOT appear on the phone clipboard, in Orbit's Clipboard History, or anywhere on the phone. Now copy ordinary text in any app: it still syncs as usual. Then send text phone -> PC: it applies immediately, no "conflict" message. If your password manager has no marking option, its copies are not marked and WILL sync - that is the documented boundary (only copies an app marks private are excluded), not a failure. Tell me which manager you used and whether it offers the option.
+
+Wayland remote input (needs a Linux PC running a Wayland session - NOT the Omen):
+34. One-time setup on that PC: pick one rule from docs/remote-input.md ("Wayland setup") - the uaccess tag rule is recommended; do not use the distro "input" group. Re-login, then run Orbit. Phone -> Remote -> "Enable control": the in-app approval dialog shows on the Linux PC. Approve: move the trackpad, click, two-finger scroll a long page (wheel must work, both directions). Tap letters on the full keyboard: they type. Free-text typing ("Type to send keystrokes") needs ydotool installed - without it, that one action reports unavailable while the rest keeps working. Stop control: held keys release (nothing stays stuck).
+Report anything that fails with the exact step number.
