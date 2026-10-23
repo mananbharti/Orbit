@@ -29,9 +29,10 @@ export class AgentTasks {
     private readonly audit?: AuditTrail, private readonly pauseFile?: string,
     /** Fast-layer triage: labels a new task using the local decision model; best-effort, never blocks or fails a submission. */
     private readonly triage?: (prompt: string) => Promise<string | undefined>,
-    /** Fast answers: the user's picked local model answers answer-only kinds (research, other) with text and never
-     *  takes actions; returns undefined for every other kind. Any failure falls back to the agent, never to a guess. */
-    private readonly answer?: (prompt: string, kind: string, signal: AbortSignal) => Promise<string | undefined>) {
+    /** Answer-only tasks: the user's picked local model gives a text answer and never takes actions. Only used when
+     *  the person explicitly chose answer-only for THIS task on their phone - intent never depends on a classifier.
+     *  Undefined when no model is picked; failures fail the task honestly, they never start the agent. */
+    private readonly answer?: (prompt: string, signal: AbortSignal) => Promise<string | undefined>) {
     this.paused = !!pauseFile && existsSync(pauseFile);
     const owner = (context: CommandContext): string => {
       if (this.stopping.signal.aborted || !context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
@@ -40,13 +41,13 @@ export class AgentTasks {
     this.unregister = [
       registry.register('agent.submit', { validate: p => submitTaskSchema.safeParse(p).success,
         execute: async (payload, context) => {
-          const device = owner(context); const { prompt, idempotencyKey } = submitTaskSchema.parse(payload);
+          const device = owner(context); const { prompt, idempotencyKey, answerOnly } = submitTaskSchema.parse(payload);
           if (this.paused) throw new ProtocolError('AGENT_PAUSED');
-          const { task, created } = this.ledger.create(device, prompt, idempotencyKey);
+          const { task, created } = this.ledger.create(device, prompt, idempotencyKey, answerOnly);
           if (created) {
-            this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted' });
+            this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted', ...(answerOnly ? { outcome: 'answer-only' } : {}) });
             this.start(task, context);
-            if (!this.answer) this.triageNow(task);
+            if (!task.answerOnly) this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -58,11 +59,11 @@ export class AgentTasks {
           const original = this.ledger.get(device, taskId);
           if (!['failed', 'cancelled', 'unknown'].includes(original.state)) throw new ProtocolError('AGENT_INVALID_STATE');
           if (this.paused) throw new ProtocolError('AGENT_PAUSED');
-          const { task, created } = this.ledger.create(device, original.prompt, idempotencyKey);
+          const { task, created } = this.ledger.create(device, original.prompt, idempotencyKey, original.answerOnly);
           if (created) {
             this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted', outcome: 'retry' });
             this.start(task, context);
-            if (!this.answer) this.triageNow(task);
+            if (!task.answerOnly) this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -154,19 +155,21 @@ export class AgentTasks {
     const signal = AbortSignal.any([abort.signal, this.stopping.signal]);
     const publish = (): void => { try { context.connection?.publish('agent.task', summary(task)); } catch { /* socket gone; ledger remains the record */ } };
     const job = (async (): Promise<void> => {
-      if (this.answer) {
-        let kind: string | undefined;
-        try { kind = await this.triage?.(task.prompt); } catch { kind = undefined; }
-        if (kind) { this.noteSafely(task, 'step', `Triaged as "${kind}" by the local decision model`); publish(); }
-        if (kind && !signal.aborted) {
-          let text: string | undefined;
-          try { text = await this.answer(task.prompt, kind, signal); } catch { text = undefined; }
-          if (text && !signal.aborted) {
-            this.noteSafely(task, 'output', `Answered on this computer by the local model you picked. It took no actions.\n\n${text}`);
-            this.finish(task, 'completed', 'Answered locally - no actions taken');
-            return;
-          }
+      if (task.answerOnly) {
+        // The person explicitly asked for a text-only answer. No classifier decides anything here; a failure
+        // fails the task honestly instead of silently starting the agent they opted out of.
+        if (!this.answer) { this.finish(task, 'failed', 'Answer-only needs a local model: pick one in Settings on this computer'); return; }
+        try {
+          const text = await this.answer(task.prompt, signal);
+          if (signal.aborted) return this.finish(task, 'cancelled', 'Cancelled');
+          if (!text) throw new Error('empty answer');
+          this.noteSafely(task, 'output', `Answered on this computer by the local model you picked. It took no actions.\n\n${text}`);
+          this.finish(task, 'completed', 'Answered locally - no actions taken');
+        } catch (error) {
+          if (signal.aborted) return this.finish(task, 'cancelled', 'Cancelled');
+          this.finish(task, 'failed', `The local model did not answer: ${error instanceof Error ? error.message.slice(0, 120) : 'unknown error'}`);
         }
+        return;
       }
       await this.runAgent(task, signal, publish);
     })().finally(() => { this.aborts.delete(task.taskId); this.jobs.delete(job); publish(); });

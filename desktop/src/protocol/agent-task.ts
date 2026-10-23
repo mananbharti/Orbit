@@ -11,7 +11,9 @@ export type TaskState = z.infer<typeof taskStateSchema>;
 export const TERMINAL_TASK_STATES: ReadonlySet<TaskState> = new Set(['completed', 'failed', 'cancelled']);
 
 export const retryTaskSchema = z.strictObject({ taskId: taskIdSchema, idempotencyKey: z.string().uuid() });
-export const submitTaskSchema = z.strictObject({ prompt: taskPromptSchema, idempotencyKey: z.string().uuid() });
+export const submitTaskSchema = z.strictObject({ prompt: taskPromptSchema, idempotencyKey: z.string().uuid(),
+  /** Explicit per-request choice: a text-only answer on the desktop's local model, never actions. Default: the agent runs. */
+  answerOnly: z.boolean().default(false) });
 export const taskRefSchema = z.strictObject({ taskId: taskIdSchema });
 export const taskSummarySchema = z.strictObject({ taskId: taskIdSchema, state: taskStateSchema,
   createdAt: z.number().int().min(0), updatedAt: z.number().int().min(0), headline: z.string().max(200) });

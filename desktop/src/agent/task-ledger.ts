@@ -10,7 +10,7 @@ export const MAX_LEDGER_TASKS = 500;
 export const MAX_EVENTS_PER_TASK = 1_000;
 const recordSchema = z.strictObject({ taskId: taskIdSchema, idempotencyKey: z.string().uuid(), ownerDeviceId: z.string().uuid(),
   prompt: taskPromptSchema, state: taskStateSchema, createdAt: z.number().int(), updatedAt: z.number().int(),
-  headline: z.string().max(200), events: z.array(taskEventSchema).max(MAX_EVENTS_PER_TASK) });
+  headline: z.string().max(200), answerOnly: z.boolean().default(false), events: z.array(taskEventSchema).max(MAX_EVENTS_PER_TASK) });
 const fileSchema = z.strictObject({ version: z.literal(1), tasks: z.array(recordSchema).max(MAX_LEDGER_TASKS) });
 export type TaskRecord = z.infer<typeof recordSchema>;
 
@@ -47,14 +47,14 @@ export class TaskLedger {
     }
     if (changed) this.save();
   }
-  create(ownerDeviceId: string, prompt: string, idempotencyKey: string): { task: TaskRecord; created: boolean } {
+  create(ownerDeviceId: string, prompt: string, idempotencyKey: string, answerOnly = false): { task: TaskRecord; created: boolean } {
     for (const task of this.tasks.values()) {
       if (task.ownerDeviceId === ownerDeviceId && task.idempotencyKey === idempotencyKey) return { task, created: false };
     }
     if (this.tasks.size >= MAX_LEDGER_TASKS) this.evictOldestTerminal();
     const at = this.now();
     const task: TaskRecord = { taskId: randomUUID(), idempotencyKey, ownerDeviceId, prompt, state: 'queued',
-      createdAt: at, updatedAt: at, headline: prompt.slice(0, 80).replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || 'Task', events: [] };
+      createdAt: at, updatedAt: at, headline: prompt.slice(0, 80).replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || 'Task', answerOnly, events: [] };
     this.tasks.set(task.taskId, task);
     this.append(task, 'state', 'Queued');
     this.save();

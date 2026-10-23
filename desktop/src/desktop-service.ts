@@ -126,7 +126,7 @@ export async function startDesktop(options: { directory: string; host: string; p
       new LauncherLayout(join(directory, 'launcher-pins.json')), join(directory, 'launcher-secret'),
       new LauncherScenes(join(directory, 'launcher-scenes.json')));
     if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'),
-      makeTriage(options.agent.layaUrl), makeFastAnswer(options.agent.fastModel, options.agent.layaUrl));
+      makeTriage(options.agent.layaUrl), makeFastAnswer(options.agent.fastModel));
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation,
       new KeyboardMacroStore(join(directory, 'keyboard-macros.json')));
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);

@@ -117,7 +117,7 @@ function render(s) {
       : s.agent.gateway === 'unauthorized' ? 'The gateway rejected the saved key. Check API_SERVER_KEY and save again.'
       : s.agent.gateway === 'unreachable' ? 'The gateway is not answering. Start it with: hermes gateway'
       : 'On. Your phone can hand tasks to the agent on this computer.';
-    if (s.agent.fastModel) $('agent-status').textContent += ` Fast answers on: ${s.agent.fastModel.model} answers simple questions on this computer.`;
+    if (s.agent.fastModel) $('agent-status').textContent += ` Answer-only ready: your phone can ask ${s.agent.fastModel.model} for text-only answers.`;
     if (s.agent.active && s.agent.laya !== 'unknown') $('agent-status').textContent += s.agent.laya === 'found'
       ? ' Fast layer on: a local Laya decision model triages new tasks.'
       : ' Fast layer idle: no Laya decision model answering, so new tasks are not triaged. Setup: docs/laya.md';
@@ -180,7 +180,7 @@ $('agent-detect').onclick = async () => {
   fastPicks = r.models.map(m => ({ kind: r.kind, baseUrl: r.baseUrl, model: m }));
   $('agent-fast').innerHTML = '<option value="">Fast answers off</option>' + fastPicks.map((p, i) => `<option value="${i}">${esc(p.model)} (${p.kind === 'ollama' ? 'Ollama' : 'LM Studio'})</option>`).join('');
   $('agent-fast').hidden = false;
-  toast(`${r.models.length} model${r.models.length === 1 ? '' : 's'} found. Pick one for fast answers, or leave off.`);
+  toast(`${r.models.length} model${r.models.length === 1 ? '' : 's'} found. Pick one for answer-only tasks, or leave off.`);
 };
 $('agent-test').onclick = async () => {
   const key = $('agent-key').value.trim();
