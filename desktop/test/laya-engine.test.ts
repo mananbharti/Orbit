@@ -14,7 +14,14 @@ test('sends the documented request and reads the choice', async () => {
   assert.equal(d.choice, 'billing'); assert.equal(d.probability, 0.95);
   assert.equal(seen!.url, 'http://127.0.0.1:8000/v1/systemone');
   assert.equal((seen!.init.headers as Record<string, string>).authorization, 'Bearer k');
-  assert.deepEqual(JSON.parse(String(seen!.init.body)).questions.q, { type: 'choice', instructions: 'Which team?', criteria: input.criteria });
+  const body = JSON.parse(String(seen!.init.body));
+  assert.equal(body.model, 'laya', 'the Jev wire contract requires a model field');
+  assert.deepEqual(body.questions.q, { type: 'choice', instructions: 'Which team?', criteria: input.criteria });
+});
+test('criteria descriptions may be null, matching the laya-server request shape', async () => {
+  const d = await new LayaClient('http://127.0.0.1:8000', { fetchImpl: reply(good) })
+    .decide({ state: 'x', instructions: 'Which?', criteria: { billing: 'refunds', other: null } });
+  assert.equal(d.choice, 'billing');
 });
 test('non-loopback servers are refused, bad responses and unknown choices fail closed', async () => {
   assert.throws(() => new LayaClient('http://192.168.1.5:8000'), (e: LayaError) => e.code === 'BAD_URL');
@@ -35,4 +42,12 @@ test('as a router engine it classifies, abstains below the confidence floor, and
 });
 test('health probe is false when the server is down', async () => {
   assert.equal(await new LayaClient('http://127.0.0.1:1', { fetchImpl: (async () => { throw new Error('x'); }) as typeof fetch }).healthy(), false);
+  let healthUrl = '';
+  const hf = (async (u: URL) => { healthUrl = String(u); return new Response('{"models":[{"id":"laya"}]}'); }) as unknown as typeof fetch;
+  assert.equal(await new LayaClient('http://127.0.0.1:8000', { fetchImpl: hf }).healthy(), true);
+  assert.equal(healthUrl, 'http://127.0.0.1:8000/v1/models', 'readiness probes the Jev models list, not a /health route the contract does not define');
+  const noLaya = (async () => new Response('{"models":[{"id":"some-other-model"}]}')) as unknown as typeof fetch;
+  assert.equal(await new LayaClient('http://127.0.0.1:8000', { fetchImpl: noLaya }).healthy(), false, 'an unrelated server on the port is not a decision engine');
+  const withLaya = (async () => new Response('{"models":[{"id":"laya"}]}')) as unknown as typeof fetch;
+  assert.equal(await new LayaClient('http://127.0.0.1:8000', { fetchImpl: withLaya }).healthy(), true);
 });

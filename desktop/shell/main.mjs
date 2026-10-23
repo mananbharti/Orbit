@@ -63,7 +63,7 @@ async function boot() {
     const hermes = agentSettings();
     let agent;
     if (hermes) {
-      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }) }; }
+      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(process.env.ORBIT_LAYA_URL ? { layaUrl: process.env.ORBIT_LAYA_URL } : {}) }; }
       catch (error) { console.error('AGENT: disabled -', String(error?.message ?? error)); }
     }
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,

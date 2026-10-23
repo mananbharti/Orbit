@@ -267,3 +267,36 @@ test('the ledger evicts the oldest finished task at 500, never an active one, li
   assert.equal(odd.headline, 'line one line two', 'control characters never reach the headline');
   assert.equal(ledger.create(device, 'x'.repeat(200), randomUUID()).task.headline.length, 80);
 });
+
+test('a configured triage labels new tasks, and a failing triage never affects the task', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'orbit-agent-triage-'));
+  const setup = core(); const runner = new ScriptedRunner(); const ledger = new TaskLedger(directory);
+  const labels: string[] = [];
+  const tasks = new AgentTasks(setup.registry, ledger, runner, undefined, undefined, async prompt => { labels.push(prompt); return 'coding'; });
+  t.after(() => { void tasks.stop(); rmSync(directory, { recursive: true, force: true }); });
+  const issued = setup.auth.issue(setup.credential)!;
+  const conn = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => true, publish: () => {} };
+  const command = (type: string, payload: JsonValue) =>
+    setup.router.dispatch({ version: 1, type, payload, requestId: randomUUID() }, issued.sessionToken, conn);
+  const created = result(await command('agent.submit', submit('refactor the parser')));
+  await tick(); await tick();
+  assert.deepEqual(labels, ['refactor the parser']);
+  const page = result(await command('agent.events', { taskId: created.taskId }));
+  assert.ok(page.events.some((event: any) => event.kind === 'step' && event.text === 'Triaged as "coding" by the local decision model'),
+    JSON.stringify(page.events));
+  runner.releases[0]!('done'); await tick(); await tick();
+  assert.equal(result(await command('agent.get', { taskId: created.taskId })).state, 'completed');
+
+  // A triage that throws changes nothing: submission, run and completion proceed untriaged.
+  const directory2 = mkdtempSync(join(tmpdir(), 'orbit-agent-triage2-'));
+  const setup2 = core(); const runner2 = new ScriptedRunner(); const ledger2 = new TaskLedger(directory2);
+  const tasks2 = new AgentTasks(setup2.registry, ledger2, runner2, undefined, undefined, async () => { throw new Error('no server'); });
+  t.after(() => { void tasks2.stop(); rmSync(directory2, { recursive: true, force: true }); });
+  const issued2 = setup2.auth.issue(setup2.credential)!;
+  const conn2 = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => true, publish: () => {} };
+  const created2 = result(await setup2.router.dispatch({ version: 1, type: 'agent.submit', payload: submit('anything'), requestId: randomUUID() }, issued2.sessionToken, conn2));
+  assert.equal(created2.state, 'running');
+  runner2.releases[0]!('done'); await tick(); await tick();
+  const page2 = result(await setup2.router.dispatch({ version: 1, type: 'agent.events', payload: { taskId: created2.taskId }, requestId: randomUUID() }, issued2.sessionToken, conn2));
+  assert.ok(!page2.events.some((event: any) => String(event.text).includes('Triaged')), 'no triage note when the engine fails');
+});

@@ -26,7 +26,9 @@ export class AgentTasks {
   private paused: boolean;
 
   constructor(registry: CommandRegistry, private readonly ledger: TaskLedger, private readonly runner: AgentRunner,
-    private readonly audit?: AuditTrail, private readonly pauseFile?: string) {
+    private readonly audit?: AuditTrail, private readonly pauseFile?: string,
+    /** Fast-layer triage: labels a new task using the local decision model; best-effort, never blocks or fails a submission. */
+    private readonly triage?: (prompt: string) => Promise<string | undefined>) {
     this.paused = !!pauseFile && existsSync(pauseFile);
     const owner = (context: CommandContext): string => {
       if (this.stopping.signal.aborted || !context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
@@ -41,6 +43,7 @@ export class AgentTasks {
           if (created) {
             this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted' });
             this.start(task, context);
+            this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -56,6 +59,7 @@ export class AgentTasks {
           if (created) {
             this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted', outcome: 'retry' });
             this.start(task, context);
+            this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -127,6 +131,13 @@ export class AgentTasks {
     for (const resolve of this.approvals.values()) resolve(false);
     for (const unregister of this.unregister) unregister();
     await Promise.allSettled(this.jobs);
+  }
+
+  private triageNow(task: TaskRecord): void {
+    if (!this.triage) return;
+    void this.triage(task.prompt)
+      .then(label => { if (label) this.ledger.note(task, 'step', `Triaged as "${label}" by the local decision model`); })
+      .catch(() => undefined); // triage is a hint; the task runs regardless
   }
 
   private start(task: TaskRecord, context: CommandContext): void {

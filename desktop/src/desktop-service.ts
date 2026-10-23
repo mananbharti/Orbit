@@ -48,13 +48,37 @@ import type { Transcriber } from './dictation/pipeline.js';
 import type { CleanupOptions } from './dictation/cleanup.js';
 import { AuditTrail } from './agent/audit-trail.js';
 import { AgentTasks } from './agent/agent-tasks.js';
+import { LayaClient, layaEngine } from './router/laya-engine.js';
+import { Router } from './router/router.js';
 import type { AgentRunner } from './agent/agent-runner.js';
 import { TaskLedger } from './agent/task-ledger.js';
+
+/** Fast-layer triage per the Orbit vision (README: "Router: sends a request to a fast local model (Laya) or the Hermes agent"):
+ *  when a local Laya decision server answers on loopback, new agent tasks get a kind-of-work label; Hermes stays the deep layer. */
+const TRIAGE_CRITERIA: Record<string, string> = {
+  coding: 'Writing, changing, debugging or explaining code',
+  research: 'Finding, comparing or summarizing information',
+  files: 'Creating, moving or organizing files or folders',
+  communication: 'Writing or sending messages, emails or posts',
+  system: 'Controlling this computer: apps, settings, volume, power',
+  other: 'Anything else',
+};
+function makeTriage(layaUrl?: string): (prompt: string) => Promise<string | undefined> {
+  const client = new LayaClient(layaUrl ?? 'http://127.0.0.1:8000');
+  const router = new Router([layaEngine(client, 0.5)]);
+  return async (prompt: string) => {
+    try {
+      if (!(await client.healthy())) return undefined;
+      const input = { state: prompt.slice(0, 6_000), instructions: 'Which kind of work is this request?', criteria: TRIAGE_CRITERIA };
+      return (await router.route({ task: 'classify', prompt: JSON.stringify(input), private: true })).text;
+    } catch { return undefined; } // no server, low confidence, anything: the task runs untriaged
+  };
+}
 
 export async function startDesktop(options: { directory: string; host: string; port: number; displayName: string;
   discovery?: boolean; sessionTtlMs?: number; registry?: CommandRegistry;
   clipboard?: { createAdapter: () => ClipboardAdapter; pollMs?: number }; inbox?: string;
-  launcher?: { createAdapter: () => AppLauncherAdapter }; agent?: { runner: AgentRunner };
+  launcher?: { createAdapter: () => AppLauncherAdapter }; agent?: { runner: AgentRunner; layaUrl?: string };
   /** Remote pointer/keyboard. Off unless a native device is supplied; every session still needs the desktop owner's confirmation. */
   /** Local speech-to-text for phone dictation. Off unless an engine is supplied. */
   /** Local graph memory. On by default; stored in the private data directory. */
@@ -99,7 +123,8 @@ export async function startDesktop(options: { directory: string; host: string; p
     launcher = new AppLauncher(registry, options.launcher?.createAdapter ?? createAppLauncher,
       new LauncherLayout(join(directory, 'launcher-pins.json')), join(directory, 'launcher-secret'),
       new LauncherScenes(join(directory, 'launcher-scenes.json')));
-    if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'));
+    if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'),
+      makeTriage(options.agent.layaUrl));
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation,
       new KeyboardMacroStore(join(directory, 'keyboard-macros.json')));
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);

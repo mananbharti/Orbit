@@ -7,7 +7,7 @@ const answerSchema = z.object({ type: z.literal('choice'), choice: z.string().mi
   answer_confidence: z.number().min(0).max(1).optional(), confidence: z.number().optional() });
 const responseSchema = z.object({ answers: z.record(z.string(), answerSchema) });
 export const decisionInput = z.strictObject({ state: z.string().min(1).max(6_000), instructions: z.string().min(1).max(400),
-  criteria: z.record(z.string().min(1).max(40), z.string().min(1).max(200)).refine(c => { const n = Object.keys(c).length; return n >= 2 && n <= 20; }) });
+  criteria: z.record(z.string().min(1).max(40), z.string().min(1).max(200).nullable()).refine(c => { const n = Object.keys(c).length; return n >= 2 && n <= 20; }) });
 export interface Decision { choice: string; probability: number; probabilities: Record<string, number>; }
 export class LayaError extends Error { constructor(readonly code: 'BAD_URL' | 'HTTP' | 'BAD_RESPONSE' | 'UNKNOWN_CHOICE') { super(code); } }
 
@@ -15,7 +15,7 @@ const isLoopback = (h: string): boolean => h === 'localhost' || h === '127.0.0.1
 
 export class LayaClient {
   private readonly url: URL;
-  constructor(baseUrl: string, private readonly opts: { apiKey?: string; fetchImpl?: typeof fetch; minProbability?: number } = {}) {
+  constructor(baseUrl: string, private readonly opts: { apiKey?: string; model?: string; fetchImpl?: typeof fetch; minProbability?: number } = {}) {
     const u = new URL(baseUrl);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new LayaError('BAD_URL');
     if (!isLoopback(u.hostname)) throw new LayaError('BAD_URL'); // an unauthenticated LAN decision server is not allowed
@@ -25,7 +25,8 @@ export class LayaClient {
     const q = decisionInput.parse(input);
     const res = await (this.opts.fetchImpl ?? fetch)(new URL('/v1/systemone', this.url), { method: 'POST', redirect: 'error',
       headers: { 'content-type': 'application/json', ...(this.opts.apiKey ? { authorization: `Bearer ${this.opts.apiKey}` } : {}) },
-      body: JSON.stringify({ state: q.state, questions: { q: { type: 'choice', instructions: q.instructions, criteria: q.criteria } } }), ...(signal ? { signal } : {}) });
+      // Wire contract per nvkudva/laya-server and api.typesafe.ai v0.2.0: model is required.
+      body: JSON.stringify({ state: q.state, model: this.opts.model ?? 'laya', questions: { q: { type: 'choice', instructions: q.instructions, criteria: q.criteria } } }), ...(signal ? { signal } : {}) });
     if (!res.ok) throw new LayaError('HTTP');
     const text = await res.text();
     if (text.length > MAX_BODY) throw new LayaError('BAD_RESPONSE');
@@ -37,7 +38,15 @@ export class LayaClient {
     return { choice: a.choice, probability, probabilities: a.probabilities };
   }
   async healthy(signal?: AbortSignal): Promise<boolean> {
-    try { return (await (this.opts.fetchImpl ?? fetch)(new URL('/health', this.url), { redirect: 'error', ...(signal ? { signal } : {}) })).ok; } catch { return false; }
+    // The Jev wire contract has no /health; the models list is the cheap readiness probe. The body must actually
+    // name the model we will call, so an unrelated server on the port is never treated as a decision engine.
+    try {
+      const res = await (this.opts.fetchImpl ?? fetch)(new URL('/v1/models', this.url), { redirect: 'error', ...(signal ? { signal } : {}) });
+      if (!res.ok) return false;
+      const text = await res.text();
+      if (text.length > MAX_BODY) return false;
+      return text.toLowerCase().includes((this.opts.model ?? 'laya').toLowerCase());
+    } catch { return false; }
   }
 }
 
