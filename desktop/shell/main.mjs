@@ -11,7 +11,7 @@ const { startDesktop } = await import(pathToFileURL(join(here, '..', 'dist', 'sr
 const { pickLanAddress, defaultRouteAddress } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'lan-address.js')).href);
 const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { createClipboard } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-clipboard.js')).href);
-const { WindowsInputDevice } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'input-device.windows.js')).href);
+const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-input-device.js')).href);
 const { hostname } = await import('node:os');
 const { HermesRunner } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent', 'hermes-runner.js')).href);
 const { loadAgentConfig, saveAgentConfig, clearAgentConfig, validateAgentConfig } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent-config.js')).href);
@@ -53,10 +53,12 @@ async function boot() {
   if (!host) { state = { phase: 'offline' }; return; }
   try {
     // Remote mouse/keyboard: Windows only, and every session needs a Yes on a dialog shown at this PC (below).
-    const remoteInput = process.platform === 'win32'
-      ? { createDevice: () => new WindowsInputDevice(), confirmation: electronApproval } : undefined;
+    // Remote mouse/keyboard: Windows (SendInput) and Linux/X11 (xdotool). Every session still needs a Yes in this window.
+    const inputFactory = inputDeviceFactory();
+    const remoteInput = inputFactory ? { createDevice: inputFactory, confirmation: electronApproval } : undefined;
     // Remote terminal: every session needs a Yes on a dialog shown at this PC (below), same as remote control.
-    const terminal = process.platform === 'win32' ? { confirmation: electronApproval } : undefined;
+    // Remote terminal: the service runs cmd.exe on Windows and POSIX sh on Linux; every session needs a Yes in this window.
+    const terminal = (process.platform === 'win32' || process.platform === 'linux') ? { confirmation: electronApproval } : undefined;
     // Agent tasks: on when a Hermes gateway key is configured (Settings > Agent, or the env var for the CLI).
     const hermes = agentSettings();
     let agent;

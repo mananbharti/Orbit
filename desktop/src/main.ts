@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   // Agent tasks stay disabled unless a local Hermes gateway key is provided; the key is never logged.
   const hermesKey = process.env.ORBIT_HERMES_API_KEY;
   const agent = hermesKey ? { runner: new HermesRunner({ apiKey: hermesKey, baseUrl: process.env.ORBIT_HERMES_URL }) } : undefined;
-  // Remote mouse/keyboard is opt-in, Windows only, and every session needs a Yes on a dialog at the PC. Untested on a real PC.
+  // Remote mouse/keyboard is opt-in and every session needs a Yes at the PC. The CLI approval dialog is PowerShell, so the CLI stays Windows-only; the Electron app also supports Linux/X11.
   const remoteInput = process.platform === 'win32' && process.env.ORBIT_ENABLE_REMOTE_INPUT === '1'
     ? { createDevice: () => new WindowsInputDevice(), confirmation: windowsApproval() } : undefined;
   // Remote terminal: opt-in, Windows only, every session needs a Yes at the PC. Untested on a real PC.
