@@ -18,6 +18,7 @@ import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { PhotoBackup, photoBackupAvailable, photoBackupEnabled, photoBackupPermitted, setPhotoBackupEnabled, type BackupProgress } from './photo-backup';
 import { ShareIntake } from './share-intake';
+import { onAndroidShare } from './native-share';
 import { ScenePlaceWatcher } from './scene-places';
 import { ScreenTransition } from './components/ScreenTransition';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -119,10 +120,14 @@ function Shell() {
     const intake = new ShareIntake(() => connectedRef.current?.files, {
       onQueued: count => showBanner(count === 1 ? 'Sending the shared file to your computer' : `Sending ${count} shared files to your computer`),
       onError: message => showBanner(message),
-    });
+    }, () => connectedRef.current?.clipboard);
     intakeRef.current = intake;
     intake.start();
-    return () => { intake.stop(); intakeRef.current = undefined; };
+    const stopNativeShare = onAndroidShare(share => {
+      for (const file of share.files) intake.accept(file);
+      if (share.text?.trim()) { intake.acceptText(share.text); showBanner('Sent the shared text to your computer'); }
+    });
+    return () => { stopNativeShare(); intake.stop(); intakeRef.current = undefined; };
   }, []);
   const onAutoSync = useCallback((on: boolean) => { setAutoSync(on); void saveClipboardAuto(on); }, []);
   useEffect(() => () => { connected?.store.dispose(); connected?.clipboard.dispose(); connected?.files.dispose(); connected?.input.dispose(); connected?.session.stop(); }, [connected]);

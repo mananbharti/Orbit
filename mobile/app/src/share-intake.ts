@@ -21,10 +21,12 @@ export type ShareIntakeEvents = {
  */
 export class ShareIntake {
   private pending: string[] = [];
+  private pendingText: string[] = [];
   private uploading = false;
   private subscription?: { remove(): void };
 
-  constructor(private readonly files: () => FileApi | undefined, private readonly events: ShareIntakeEvents) {}
+  constructor(private readonly files: () => FileApi | undefined, private readonly events: ShareIntakeEvents,
+    private readonly clipboard?: () => { send(text: string): Promise<unknown> } | undefined) {}
 
   start(): void {
     if (!linking || this.subscription) return;
@@ -44,11 +46,26 @@ export class ShareIntake {
     void this.drain();
   }
 
+  /** Shared text goes to the computer's clipboard; queued while disconnected like files. */
+  acceptText(text: string): void {
+    if (!text.trim()) return;
+    this.pendingText.push(text);
+    void this.drain();
+  }
+
   private async drain(): Promise<void> {
     if (this.uploading) return;
     this.uploading = true;
     try {
       for (;;) {
+        const text = this.pendingText[0];
+        if (text !== undefined) {
+          const clipboard = this.clipboard?.();
+          if (!clipboard) break;
+          try { await clipboard.send(text); this.pendingText.shift(); }
+          catch (e) { this.pendingText.shift(); this.events.onError(e instanceof Error ? e.message : String(e)); }
+          continue;
+        }
         const api = this.files();
         const url = this.pending[0];
         if (!api || !url) break;

@@ -1,0 +1,1 @@
+{ "name": "orbit-share-intake", "version": "0.1.0", "private": true, "description": "Receives files and text other Android apps share into Orbit", "main": "index.js" }

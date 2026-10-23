@@ -3,7 +3,7 @@
 Manan ordered the merge on Oct 19 ("Merge kar do") ahead of the real-device pass so the contribution graph counts the v1.1 work. v1.1 was merged into main at 2:12 AM as a fast-forward to `41bff9d`; all 11 CI checks on the merge commit are green, including the iOS/Android native builds. The real-device pass below is still outstanding and remains the gate for calling v1.1 device-verified.
 
 ## Still outstanding
-- [ ] Complete the 29-step pass in [TESTING.md](TESTING.md) on the Omen + iPhone and flip each Real-device column in [ACCEPTANCE.md](ACCEPTANCE.md) from Pending to Verified (or note the issue found).
+- [ ] Complete the 30-step pass in [TESTING.md](TESTING.md) on the Omen + iPhone and flip each Real-device column in [ACCEPTANCE.md](ACCEPTANCE.md) from Pending to Verified (or note the issue found).
 - [ ] Tag the release if wanted (e.g. `v1.1.0`). The phone app still reports version 0.1.0 in `mobile/app/app.json`; bump it before any store submission (Manan's call what the public version should be).
 
 ## Merge - DONE (Oct 19)
