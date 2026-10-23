@@ -72,6 +72,7 @@ async function readClipboard() {
   const r = await api.clipboardRead();
   if (r.kind === 'text') { body.textContent = r.text; body.classList.remove('muted'); }
   else { body.textContent = r.kind === 'unavailable' ? 'Clipboard is not available on this computer.' : 'Nothing to show - the clipboard holds no text right now.'; body.classList.add('muted'); }
+  $('clip-copy').hidden = r.kind !== 'text';
 }
 $('clip-refresh').onclick = readClipboard;
 $('clip-copy').onclick = async () => {
@@ -80,8 +81,8 @@ $('clip-copy').onclick = async () => {
 };
 setInterval(() => { if ($('clipboard').classList.contains('on')) readClipboard(); }, 2000);
 
-const EVT_LABELS = { 'session.opened': 'Phone connected', 'session.closed': 'Phone disconnected', 'clipboard.sync': 'Clipboard synced', 'clipboard.changed': 'Clipboard synced', 'clipboard.ignored': 'Clipboard skipped', 'clipboard.conflict': 'Clipboard conflict avoided', 'file.state': 'File transfer updated', 'file.offered': 'File offered', 'pairing.opened': 'Pairing opened', 'pairing.completed': 'Phone paired', 'pairing.failed': 'Pairing failed', 'system.mode': 'Display mode changed', 'input.session': 'Remote control session', 'app.launch': 'App launched', 'agent.task': 'Agent task', 'discovery.error': 'Discovery issue' };
-const evtLabel = e => EVT_LABELS[e.eventType] || e.eventType.replace(/\./g, ' ');
+const EVT_LABELS = { 'session.opened': 'Phone connected', 'session.closed': 'Phone disconnected', 'clipboard.sync': 'Clipboard synced', 'clipboard.changed': 'Clipboard synced', 'clipboard.ignored': 'Clipboard skipped', 'clipboard.conflict': 'Clipboard conflict avoided', 'file.state': 'File transfer updated', 'file.offered': 'File offered', 'pairing.opened': 'Pairing opened', 'pairing.completed': 'Phone paired', 'pairing.failed': 'Pairing failed', 'system.mode': 'Display mode changed', 'input.session': 'Remote control session', 'app.launch': 'App launched', 'agent.task': 'Agent task', 'discovery.error': 'Discovery issue', 'service.started': 'Service started', 'service.stopped': 'Service stopped', 'service.error': 'Service problem', 'message.rejected': 'Request blocked', 'command.completed': 'Command finished' };
+const evtLabel = e => { const raw = EVT_LABELS[e.eventType] || e.eventType.replace(/\./g, ' '); return raw.charAt(0).toUpperCase() + raw.slice(1); };
 const TRANSFER_LABEL = { offered: 'Waiting for phone', transferring: 'Transferring', paused: 'Paused', verifying: 'Verifying', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', expired: 'Expired' };
 
 function transferRow(f, actions) {
