@@ -49,6 +49,8 @@ import type { CleanupOptions } from './dictation/cleanup.js';
 import { AuditTrail } from './agent/audit-trail.js';
 import { AgentTasks } from './agent/agent-tasks.js';
 import { LayaClient, layaEngine } from './router/laya-engine.js';
+import { LocalLlmClient } from './router/local-llm.js';
+import type { FastModel } from './agent-config.js';
 import { Router } from './router/router.js';
 import type { AgentRunner } from './agent/agent-runner.js';
 import { TaskLedger } from './agent/task-ledger.js';
@@ -63,6 +65,17 @@ const TRIAGE_CRITERIA: Record<string, string> = {
   system: 'Controlling this computer: apps, settings, volume, power',
   other: 'Anything else',
 };
+/** Only answer-generation kinds may be answered by the local model; anything that could need tools,
+ *  side effects or approvals (coding, files, communication, system) always runs the agent. */
+const ANSWERABLE_KINDS = new Set(['research', 'other']);
+function makeAnswer(fastModel?: FastModel): ((prompt: string, kind: string, signal: AbortSignal) => Promise<string | undefined>) | undefined {
+  if (!fastModel) return undefined;
+  const client = new LocalLlmClient();
+  const server = { kind: fastModel.kind, baseUrl: fastModel.baseUrl, models: [fastModel.model] };
+  return (prompt: string, kind: string, signal: AbortSignal) =>
+    ANSWERABLE_KINDS.has(kind) ? client.answer(server, fastModel.model, prompt, signal) : Promise.resolve(undefined);
+}
+
 function makeTriage(layaUrl?: string): (prompt: string) => Promise<string | undefined> {
   const client = new LayaClient(layaUrl ?? 'http://127.0.0.1:8000');
   const router = new Router([layaEngine(client, 0.5)]);
@@ -78,7 +91,7 @@ function makeTriage(layaUrl?: string): (prompt: string) => Promise<string | unde
 export async function startDesktop(options: { directory: string; host: string; port: number; displayName: string;
   discovery?: boolean; sessionTtlMs?: number; registry?: CommandRegistry;
   clipboard?: { createAdapter: () => ClipboardAdapter; pollMs?: number }; inbox?: string;
-  launcher?: { createAdapter: () => AppLauncherAdapter }; agent?: { runner: AgentRunner; layaUrl?: string };
+  launcher?: { createAdapter: () => AppLauncherAdapter }; agent?: { runner: AgentRunner; layaUrl?: string; fastModel?: FastModel };
   /** Remote pointer/keyboard. Off unless a native device is supplied; every session still needs the desktop owner's confirmation. */
   /** Local speech-to-text for phone dictation. Off unless an engine is supplied. */
   /** Local graph memory. On by default; stored in the private data directory. */
@@ -124,7 +137,7 @@ export async function startDesktop(options: { directory: string; host: string; p
       new LauncherLayout(join(directory, 'launcher-pins.json')), join(directory, 'launcher-secret'),
       new LauncherScenes(join(directory, 'launcher-scenes.json')));
     if (options.agent) agent = new AgentTasks(registry, new TaskLedger(directory), options.agent.runner, new AuditTrail(directory), join(directory, 'agent-paused'),
-      makeTriage(options.agent.layaUrl));
+      makeTriage(options.agent.layaUrl), makeAnswer(options.agent.fastModel));
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation,
       new KeyboardMacroStore(join(directory, 'keyboard-macros.json')));
     if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);

@@ -31,6 +31,11 @@ test('validation: a pasted key survives trimming; junk is refused with a readabl
   assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'ftp://127.0.0.1' }), /http or https/);
   assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'http://192.168.1.5:8000' }), /point at this computer/);
   assert.throws(() => validateAgentConfig({ apiKey: 'k', layaUrl: 'https://laya.example.com' }), /point at this computer/);
+  assert.deepEqual(validateAgentConfig({ apiKey: 'k', fastModel: { kind: 'ollama', baseUrl: 'http://127.0.0.1:11434', model: 'qwen3:4b' } }),
+    { apiKey: 'k', fastModel: { kind: 'ollama', baseUrl: 'http://127.0.0.1:11434', model: 'qwen3:4b' } });
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', fastModel: { kind: 'chatgpt', baseUrl: 'http://127.0.0.1:1', model: 'm' } }), /Ollama or LM Studio/);
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', fastModel: { kind: 'ollama', baseUrl: 'http://10.0.0.9:11434', model: 'm' } }), /on this computer/);
+  assert.throws(() => validateAgentConfig({ apiKey: 'k', fastModel: { kind: 'ollama', baseUrl: 'http://127.0.0.1:11434', model: ' ' } }), /Pick a model/);
 });
 
 test('roundtrip: the file holds only the encrypted blob, never the plaintext key', t => {
@@ -41,6 +46,8 @@ test('roundtrip: the file holds only the encrypted blob, never the plaintext key
   assert.deepEqual(loadAgentConfig(path, dec), { apiKey: 'super-secret-key', baseUrl: 'http://127.0.0.1:8642' });
   saveAgentConfig(path, { apiKey: 'super-secret-key', layaUrl: 'http://127.0.0.1:8000' }, enc);
   assert.deepEqual(loadAgentConfig(path, dec), { apiKey: 'super-secret-key', layaUrl: 'http://127.0.0.1:8000' }); // older files without a Laya address keep loading (tests above)
+  saveAgentConfig(path, { apiKey: 'super-secret-key', fastModel: { kind: 'lmstudio', baseUrl: 'http://127.0.0.1:1234', model: 'nemotron-3-nano' } }, enc);
+  assert.deepEqual(loadAgentConfig(path, dec), { apiKey: 'super-secret-key', fastModel: { kind: 'lmstudio', baseUrl: 'http://127.0.0.1:1234', model: 'nemotron-3-nano' } });
   if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600, 'file is owner-only');
 });
 

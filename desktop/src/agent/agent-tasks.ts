@@ -28,7 +28,10 @@ export class AgentTasks {
   constructor(registry: CommandRegistry, private readonly ledger: TaskLedger, private readonly runner: AgentRunner,
     private readonly audit?: AuditTrail, private readonly pauseFile?: string,
     /** Fast-layer triage: labels a new task using the local decision model; best-effort, never blocks or fails a submission. */
-    private readonly triage?: (prompt: string) => Promise<string | undefined>) {
+    private readonly triage?: (prompt: string) => Promise<string | undefined>,
+    /** Fast answers: the user's picked local model answers answer-only kinds (research, other) with text and never
+     *  takes actions; returns undefined for every other kind. Any failure falls back to the agent, never to a guess. */
+    private readonly answer?: (prompt: string, kind: string, signal: AbortSignal) => Promise<string | undefined>) {
     this.paused = !!pauseFile && existsSync(pauseFile);
     const owner = (context: CommandContext): string => {
       if (this.stopping.signal.aborted || !context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
@@ -43,7 +46,7 @@ export class AgentTasks {
           if (created) {
             this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted' });
             this.start(task, context);
-            this.triageNow(task);
+            if (!this.answer) this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -59,7 +62,7 @@ export class AgentTasks {
           if (created) {
             this.audit?.record({ taskId: task.taskId, deviceId: device, kind: 'submitted', outcome: 'retry' });
             this.start(task, context);
-            this.triageNow(task);
+            if (!this.answer) this.triageNow(task);
           }
           return summary(task);
         } }),
@@ -150,7 +153,28 @@ export class AgentTasks {
     this.ledger.transition(task, 'running', 'Started');
     const signal = AbortSignal.any([abort.signal, this.stopping.signal]);
     const publish = (): void => { try { context.connection?.publish('agent.task', summary(task)); } catch { /* socket gone; ledger remains the record */ } };
-    const job = this.runner.run({ taskId: task.taskId, prompt: task.prompt, signal,
+    const job = (async (): Promise<void> => {
+      if (this.answer) {
+        let kind: string | undefined;
+        try { kind = await this.triage?.(task.prompt); } catch { kind = undefined; }
+        if (kind) { this.noteSafely(task, 'step', `Triaged as "${kind}" by the local decision model`); publish(); }
+        if (kind && !signal.aborted) {
+          let text: string | undefined;
+          try { text = await this.answer(task.prompt, kind, signal); } catch { text = undefined; }
+          if (text && !signal.aborted) {
+            this.noteSafely(task, 'output', `Answered on this computer by the local model you picked. It took no actions.\n\n${text}`);
+            this.finish(task, 'completed', 'Answered locally - no actions taken');
+            return;
+          }
+        }
+      }
+      await this.runAgent(task, signal, publish);
+    })().finally(() => { this.aborts.delete(task.taskId); this.jobs.delete(job); publish(); });
+    this.jobs.add(job);
+  }
+
+  private async runAgent(task: TaskRecord, signal: AbortSignal, publish: () => void): Promise<void> {
+    await this.runner.run({ taskId: task.taskId, prompt: task.prompt, signal,
       step: text => { this.noteSafely(task, 'step', text); publish(); },
       output: text => { this.noteSafely(task, 'output', text); publish(); },
       requestApproval: description => new Promise<boolean>(resolve => {
@@ -170,9 +194,7 @@ export class AgentTasks {
       .then(result => {
         if (signal.aborted) return this.finish(task, 'cancelled', 'Cancelled');
         this.finish(task, 'completed', result.slice(0, 500));
-      }, () => this.finish(task, signal.aborted ? 'cancelled' : 'failed', signal.aborted ? 'Cancelled' : 'Failed'))
-      .finally(() => { this.aborts.delete(task.taskId); this.jobs.delete(job); publish(); });
-    this.jobs.add(job);
+      }, () => this.finish(task, signal.aborted ? 'cancelled' : 'failed', signal.aborted ? 'Cancelled' : 'Failed'));
   }
 
   private finish(task: TaskRecord, state: 'completed' | 'failed' | 'cancelled', text: string): void {

@@ -117,6 +117,7 @@ function render(s) {
       : s.agent.gateway === 'unauthorized' ? 'The gateway rejected the saved key. Check API_SERVER_KEY and save again.'
       : s.agent.gateway === 'unreachable' ? 'The gateway is not answering. Start it with: hermes gateway'
       : 'On. Your phone can hand tasks to the agent on this computer.';
+    if (s.agent.fastModel) $('agent-status').textContent += ` Fast answers on: ${s.agent.fastModel.model} answers simple questions on this computer.`;
     if (s.agent.active && s.agent.laya !== 'unknown') $('agent-status').textContent += s.agent.laya === 'found'
       ? ' Fast layer on: a local Laya decision model triages new tasks.'
       : ' Fast layer idle: no Laya decision model answering, so new tasks are not triaged. Setup: docs/laya.md';
@@ -163,12 +164,24 @@ $('agent-save').onclick = async () => {
   const key = $('agent-key').value.trim();
   if (!key) { toast('Paste the Hermes API key first'); return; }
   $('agent-save').disabled = true;
-  const r = await api.agentSave(key, $('agent-url').value.trim(), $('agent-laya').value.trim());
+  const pick = $('agent-fast').hidden || !$('agent-fast').value ? undefined : fastPicks[Number($('agent-fast').value)];
+  const r = await api.agentSave(key, $('agent-url').value.trim(), $('agent-laya').value.trim(), pick);
   $('agent-save').disabled = false;
   if (r.error) toast(r.error); else { $('agent-key').value = ''; toast('Agent settings saved'); }
   render(await api.state());
 };
 $('agent-clear').onclick = async () => { await api.agentClear(); toast('Agent disconnected'); render(await api.state()); };
+let fastPicks = [];
+$('agent-detect').onclick = async () => {
+  $('agent-detect').disabled = true; $('agent-detect').textContent = 'Detecting...';
+  const r = await api.fastDetect();
+  $('agent-detect').disabled = false; $('agent-detect').textContent = 'Detect models';
+  if (r.error) { toast(r.error); return; }
+  fastPicks = r.models.map(m => ({ kind: r.kind, baseUrl: r.baseUrl, model: m }));
+  $('agent-fast').innerHTML = '<option value="">Fast answers off</option>' + fastPicks.map((p, i) => `<option value="${i}">${esc(p.model)} (${p.kind === 'ollama' ? 'Ollama' : 'LM Studio'})</option>`).join('');
+  $('agent-fast').hidden = false;
+  toast(`${r.models.length} model${r.models.length === 1 ? '' : 's'} found. Pick one for fast answers, or leave off.`);
+};
 $('agent-test').onclick = async () => {
   const key = $('agent-key').value.trim();
   if (!key) { toast('Paste the Hermes API key first'); return; }

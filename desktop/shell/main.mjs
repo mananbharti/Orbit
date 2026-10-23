@@ -16,6 +16,7 @@ const { hostname } = await import('node:os');
 const { HermesRunner } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent', 'hermes-runner.js')).href);
 const { loadAgentConfig, saveAgentConfig, clearAgentConfig, validateAgentConfig } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent-config.js')).href);
 const { LayaClient } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'router', 'laya-engine.js')).href);
+const { LocalLlmClient } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'router', 'local-llm.js')).href);
 
 // Chromium's disk caches are useless for a local UI and fail with "Access is denied" when a previous
 // instance still holds them (or the profile sits in a synced folder), so keep them off and in a private folder.
@@ -72,7 +73,7 @@ async function boot() {
     let agent;
     if (hermes) {
       const layaUrl = process.env.ORBIT_LAYA_URL ?? hermes.layaUrl;
-      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(layaUrl ? { layaUrl } : {}) }; }
+      try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(layaUrl ? { layaUrl } : {}), ...(hermes.fastModel ? { fastModel: hermes.fastModel } : {}) }; }
       catch (error) { console.error('AGENT: disabled -', String(error?.message ?? error)); }
     }
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
@@ -135,6 +136,7 @@ const snapshot = () => {
       secureStorage: safeStorage.isEncryptionAvailable(),
       gateway: agentGateway,
       laya: agentLaya,
+      fastModel: agentSettings()?.fastModel ? { kind: agentSettings().fastModel.kind, model: agentSettings().fastModel.model } : undefined,
     },
   };
 };
@@ -169,10 +171,18 @@ ipcMain.handle('orbit:pair', async () => {
 ipcMain.handle('orbit:cancel-pair', () => { service?.pairing.close(); pairingUntil = 0; clearTimeout(pairingTimer); push(); });
 ipcMain.handle('orbit:revoke', (_e, id) => { const ok = typeof id === 'string' && service?.credentials.revoke(id); push(); return Boolean(ok); });
 ipcMain.handle('orbit:retry', async () => { await boot(); push(); });
-ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl, layaUrl) => {
+ipcMain.handle('orbit:fast-detect', async () => {
+  try {
+    const server = await new LocalLlmClient().detect();
+    if (!server) return { error: 'No Ollama or LM Studio server answered on this computer. Start one, then detect again.' };
+    if (!server.models.length) return { error: `${server.kind === 'ollama' ? 'Ollama' : 'LM Studio'} is running but has no models downloaded yet.`, kind: server.kind, baseUrl: server.baseUrl, models: [] };
+    return server;
+  } catch (error) { return { error: String(error?.message ?? error) }; }
+});
+ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl, layaUrl, fastModel) => {
   if (!safeStorage.isEncryptionAvailable()) return { error: 'Secure storage is not available on this system, so the key cannot be saved safely.' };
   let config;
-  try { config = validateAgentConfig({ apiKey: key, baseUrl, layaUrl }); } catch (error) { return { error: String(error?.message ?? error) }; }
+  try { config = validateAgentConfig({ apiKey: key, baseUrl, layaUrl, ...(fastModel ? { fastModel } : {}) }); } catch (error) { return { error: String(error?.message ?? error) }; }
   saveAgentConfig(agentConfigPath(), config, agentEncrypt);
   await restartService();
   return { ok: true };

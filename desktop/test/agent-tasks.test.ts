@@ -300,3 +300,63 @@ test('a configured triage labels new tasks, and a failing triage never affects t
   const page2 = result(await setup2.router.dispatch({ version: 1, type: 'agent.events', payload: { taskId: created2.taskId }, requestId: randomUUID() }, issued2.sessionToken, conn2));
   assert.ok(!page2.events.some((event: any) => String(event.text).includes('Triaged')), 'no triage note when the engine fails');
 });
+
+test('fast answers: answer-only kinds are answered locally with no actions; everything else still runs the agent', async t => {
+  const mk = () => mkdtempSync(join(tmpdir(), 'orbit-agent-answer-'));
+  const wire = (directory: string, runner: ScriptedRunner, triage?: (prompt: string) => Promise<string | undefined>, answer?: (prompt: string, kind: string) => Promise<string | undefined>) => {
+    const setup = core(); const ledger = new TaskLedger(directory);
+    const tasks = new AgentTasks(setup.registry, ledger, runner, undefined, undefined, triage, answer);
+    const issued = setup.auth.issue(setup.credential)!;
+    const conn = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => true, publish: () => {} };
+    const command = (type: string, payload: JsonValue) =>
+      setup.router.dispatch({ version: 1, type, payload, requestId: randomUUID() }, issued.sessionToken, conn);
+    return { tasks, command, ledger };
+  };
+
+  // 1. A research question is answered by the local model: the agent never starts, and the record says no actions were taken.
+  const d1 = mk(); const runner1 = new ScriptedRunner();
+  const w1 = wire(d1, runner1, async () => 'research', async (prompt, kind) => kind === 'research' ? `About "${prompt}": the answer is 42.` : undefined);
+  t.after(() => { void w1.tasks.stop(); rmSync(d1, { recursive: true, force: true }); });
+  const created1 = result(await w1.command('agent.submit', submit('what is the capital of France')));
+  await tick(); await tick(); await tick();
+  assert.equal(runner1.releases.length, 0, 'the agent must not start for an answered question');
+  const got1 = result(await w1.command('agent.get', { taskId: created1.taskId }));
+  assert.equal(got1.state, 'completed');
+  const page1 = result(await w1.command('agent.events', { taskId: created1.taskId }));
+  assert.ok(page1.events.some((event: any) => event.kind === 'step' && event.text === 'Triaged as "research" by the local decision model'));
+  assert.ok(page1.events.some((event: any) => event.kind === 'state' && event.text === 'Answered locally - no actions taken'), JSON.stringify(page1.events));
+  const answerNote = page1.events.find((event: any) => event.kind === 'output' && String(event.text).includes('the answer is 42'));
+  assert.ok(answerNote && String(answerNote.text).includes('It took no actions'), JSON.stringify(page1.events));
+
+  // 2. A files request is NOT answer-only: the local model is never asked, the agent runs.
+  const d2 = mk(); const runner2 = new ScriptedRunner(); const asked2: string[] = [];
+  const w2 = wire(d2, runner2, async () => 'files', async (_p, kind) => { asked2.push(kind); return undefined; });
+  t.after(() => { void w2.tasks.stop(); rmSync(d2, { recursive: true, force: true }); });
+  const created2 = result(await w2.command('agent.submit', submit('sort my Downloads')));
+  await tick(); await tick(); await tick();
+  assert.deepEqual(asked2, ['files']); // asked and declined: the split decision is recorded, not silently skipped
+  assert.equal(runner2.releases.length, 1, 'a files task must reach the agent');
+  runner2.releases[0]!('done'); await tick(); await tick();
+  assert.equal(result(await w2.command('agent.get', { taskId: created2.taskId })).state, 'completed');
+
+  // 3. If the local model fails, the agent takes over exactly as before.
+  const d3 = mk(); const runner3 = new ScriptedRunner();
+  const w3 = wire(d3, runner3, async () => 'research', async () => { throw new Error('server died'); });
+  t.after(() => { void w3.tasks.stop(); rmSync(d3, { recursive: true, force: true }); });
+  const created3 = result(await w3.command('agent.submit', submit('question')));
+  await tick(); await tick(); await tick();
+  assert.equal(runner3.releases.length, 1, 'a failed local answer must fall back to the agent');
+  runner3.releases[0]!('done'); await tick(); await tick();
+  assert.equal(result(await w3.command('agent.get', { taskId: created3.taskId })).state, 'completed');
+
+  // 4. No triage label at all: the agent runs untriaged, like today.
+  const d4 = mk(); const runner4 = new ScriptedRunner();
+  const w4 = wire(d4, runner4, async () => undefined, async () => 'should never be used');
+  t.after(() => { void w4.tasks.stop(); rmSync(d4, { recursive: true, force: true }); });
+  const created4 = result(await w4.command('agent.submit', submit('question')));
+  await tick(); await tick(); await tick();
+  assert.equal(runner4.releases.length, 1, 'no label means the agent runs');
+  runner4.releases[0]!('done'); await tick(); await tick();
+  const page4 = result(await w4.command('agent.events', { taskId: created4.taskId }));
+  assert.ok(!page4.events.some((event: any) => String(event.text).includes('the local model you picked')));
+});
