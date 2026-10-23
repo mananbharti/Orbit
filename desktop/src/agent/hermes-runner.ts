@@ -33,6 +33,18 @@ export class HermesRunner implements AgentRunner {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
+  /** One reachability probe against the documented capability list: 'ok' when the gateway answers,
+   *  'unauthorized' when the key is rejected, 'unreachable' when nothing listens, 'error' otherwise. */
+  async check(): Promise<'ok' | 'unauthorized' | 'unreachable' | 'error'> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(new URL('/v1/capabilities', this.base), { redirect: 'error',
+        headers: { Authorization: `Bearer ${this.options.apiKey}` }, signal: AbortSignal.timeout(4_000) });
+    } catch { return 'unreachable'; }
+    if (response.status === 401 || response.status === 403) return 'unauthorized';
+    return response.ok ? 'ok' : 'error';
+  }
+
   async run(context: AgentRunContext): Promise<string> {
     const created = await this.request('POST', '/v1/runs', context.signal,
       { input: context.prompt, session_id: context.taskId }, { 'Idempotency-Key': context.taskId });

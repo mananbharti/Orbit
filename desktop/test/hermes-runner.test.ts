@@ -25,6 +25,7 @@ async function fake(t: TestContext): Promise<Fake> {
       if (req.url === '/v1/runs/run_abc123/approval') { state.approvals.push(JSON.parse(body)); res.writeHead(state.approvalStatus, { 'Content-Type': 'application/json' }).end('{}'); return; }
       if (req.url === '/v1/runs/run_abc123/stop') { res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"status":"stopping"}'); return; }
       if (req.url === '/v1/runs/run_abc123') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(state.status)); return; }
+      if (req.url === '/v1/capabilities') { res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"features":[]}'); return; }
       res.writeHead(404).end();
     });
   });
@@ -99,6 +100,19 @@ test('a stale approval (HTTP 409) is tolerated: the control already settled', as
   assert.equal(f.approvals.length, 1); // the answer was attempted; Hermes had moved on
 });
 
+test('check(): a reachable gateway with a good key answers ok', async t => {
+  const f = await fake(t);
+  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).check(), 'ok');
+  const seen = f.requests.at(-1)!;
+  assert.equal(seen.path, '/v1/capabilities');
+  assert.equal(seen.headers.authorization, 'Bearer test-key');
+});
+test('check(): a rejected key reads as unauthorized, nothing listening as unreachable', async t => {
+  const f = await fake(t);
+  assert.equal(await new HermesRunner({ apiKey: 'wrong-key', baseUrl: f.url }).check(), 'unauthorized');
+  const dead = new HermesRunner({ apiKey: 'k', baseUrl: 'http://127.0.0.1:1' }); // port 1: nothing listens
+  assert.equal(await dead.check(), 'unreachable');
+});
 test('aborting asks Hermes to stop the run and surfaces a failure', async t => {
   const f = await fake(t);
   let release!: () => void; f.holdEvents = new Promise<void>(resolve => { release = resolve; });

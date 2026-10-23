@@ -9,7 +9,7 @@ const api = window.orbit ?? (() => {
       { id: '3', name: 'orbit-logo.png', size: 184320, direction: 'to-client', state: 'completed', progress: 1, updatedAt: Date.now() - 3600000, device: 'iphone-17-pro' }],
     activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
-  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }),
+  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => ({ svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt: Date.now() + 120000 }), cancelPair: async () => {}, revoke: async () => true, retry: async () => {}, loginItem: async () => false, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }), agentTest: async () => ({ status: 'ok' }),
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name };
 })();
@@ -110,9 +110,12 @@ function render(s) {
   // Agent tasks (Hermes gateway)
   if (s.agent) {
     $('agent-dot').className = 'dot ' + (s.agent.active ? 'ok' : '');
-    $('agent-status').textContent = s.agent.active ? 'On. Your phone can hand tasks to the agent on this computer.'
-      : s.agent.configured ? 'Saved, starting with the service...'
-      : 'Off. Connect a local Hermes gateway to let your phone hand tasks to an AI agent here.';
+    $('agent-status').textContent = !s.agent.configured ? 'Off. Connect a local Hermes gateway to let your phone hand tasks to an AI agent here.'
+      : !s.agent.active ? 'Saved, starting with the service...'
+      : s.agent.gateway === 'ok' ? 'On. Your phone can hand tasks to the agent on this computer.'
+      : s.agent.gateway === 'unauthorized' ? 'The gateway rejected the saved key. Check API_SERVER_KEY and save again.'
+      : s.agent.gateway === 'unreachable' ? 'The gateway is not answering. Start it with: hermes gateway'
+      : 'On. Your phone can hand tasks to the agent on this computer.';
     $('agent-form').hidden = false;
     $('agent-clear').hidden = !s.agent.configured;
     $('agent-hint').textContent = s.agent.secureStorage ? 'The key is stored only in this computer\'s encrypted system storage.' : 'Secure storage is not available on this system, so a key cannot be saved safely here.';
@@ -162,4 +165,15 @@ $('agent-save').onclick = async () => {
   render(await api.state());
 };
 $('agent-clear').onclick = async () => { await api.agentClear(); toast('Agent disconnected'); render(await api.state()); };
+$('agent-test').onclick = async () => {
+  const key = $('agent-key').value.trim();
+  if (!key) { toast('Paste the Hermes API key first'); return; }
+  $('agent-test').disabled = true; $('agent-test').textContent = 'Testing...';
+  const r = await api.agentTest(key, $('agent-url').value.trim());
+  $('agent-test').disabled = false; $('agent-test').textContent = 'Test';
+  toast(r.status === 'ok' ? 'Connected to the gateway. Save to turn the agent on.'
+    : r.status === 'unauthorized' ? 'The gateway rejected that key.'
+    : r.status === 'unreachable' ? 'No answer. Start the gateway first: hermes gateway'
+    : (r.error || 'Could not test the connection.'));
+};
 api.state().then(render); api.onState(render);

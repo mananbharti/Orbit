@@ -26,6 +26,15 @@ if (!gotLock) app.exit(0); // a second launch only focuses the first window (see
 
 let win; let tray; let service; let pairingTimer; let pairingUntil = 0; let state = { phase: 'starting' };
 let quitting = false; let restarting = false;
+let agentGateway = 'unknown'; // 'unknown' | 'ok' | 'unauthorized' | 'unreachable' | 'error'
+async function probeAgentGateway(settings) {
+  if (!settings) { agentGateway = 'unknown'; return; }
+  try {
+    const runner = new HermesRunner({ apiKey: settings.apiKey, ...(settings.baseUrl ? { baseUrl: settings.baseUrl } : {}) });
+    agentGateway = await runner.check();
+  } catch { agentGateway = 'error'; }
+  push();
+}
 // Agent tasks (Hermes gateway): the key lives only in OS-encrypted storage; ORBIT_HERMES_API_KEY still wins for the CLI.
 const agentConfigPath = () => join(app.getPath('userData'), 'orbit-agent.json');
 const agentEncrypt = plaintext => safeStorage.encryptString(plaintext).toString('base64');
@@ -58,6 +67,7 @@ async function boot() {
     service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), onExtensionConnection: () => push() });
     state = { phase: 'running', host, port: DEFAULT_PORT };
+    if (agent) void probeAgentGateway(hermes); else agentGateway = 'unknown';
   } catch (error) {
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
   }
@@ -112,6 +122,7 @@ const snapshot = () => {
       configured: Boolean(agentSettings()),
       active: Boolean(service && agentSettings()),
       secureStorage: safeStorage.isEncryptionAvailable(),
+      gateway: agentGateway,
     },
   };
 };
@@ -155,6 +166,12 @@ ipcMain.handle('orbit:agent-save', async (_e, key, baseUrl) => {
   return { ok: true };
 });
 ipcMain.handle('orbit:agent-clear', async () => { clearAgentConfig(agentConfigPath()); await restartService(); return { ok: true }; });
+ipcMain.handle('orbit:agent-test', async (_e, key, baseUrl) => {
+  let config;
+  try { config = validateAgentConfig({ apiKey: key, baseUrl }); } catch (error) { return { status: 'invalid', error: String(error?.message ?? error) }; }
+  try { return { status: await new HermesRunner(config).check() }; }
+  catch (error) { return { status: 'error', error: String(error?.message ?? error) }; }
+});
 ipcMain.handle('orbit:login-item', (_e, enable) => {
   if (typeof enable === 'boolean') app.setLoginItemSettings({ openAtLogin: enable });
   return app.getLoginItemSettings().openAtLogin;
