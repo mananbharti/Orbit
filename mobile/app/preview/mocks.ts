@@ -17,6 +17,13 @@ const events: TaskEvent[] = [
   { seq: 3, at: NOW - 20_000, kind: 'output', text: 'Found 214 photos from 6 trips.' },
   { seq: 4, at: NOW - 5_000, kind: 'approval-request', text: 'Move 214 files into /Pictures/Trips?' },
 ];
+// Preview only: an answer-only task, answered by the picked local model with no actions taken.
+const answeredTask: TaskSummary = { taskId: id(6), state: 'completed', createdAt: NOW - 600_000, updatedAt: NOW - 590_000, headline: 'What is the capital of France?' };
+const answerEvents: TaskEvent[] = [
+  { seq: 1, at: NOW - 599_000, kind: 'state', text: 'Started' },
+  { seq: 2, at: NOW - 595_000, kind: 'output', text: 'Answered on this computer by the local model you picked. It took no actions.\n\nThe capital of France is Paris.' },
+  { seq: 3, at: NOW - 590_000, kind: 'state', text: 'Answered locally - no actions taken' },
+];
 const audit: AuditEntry[] = [
   { at: NOW - 5_000, deviceId: id(9), taskId: id(1), kind: 'approval-requested' },
   { at: NOW - 60_000, deviceId: id(9), taskId: id(1), kind: 'submitted' },
@@ -31,6 +38,11 @@ const store = <S,>(state: S) => ({ getState: () => state, subscribe: () => () =>
 export function mockStore(connection: TaskStoreState['connection'] = 'connected', list: TaskSummary[] = tasks, agentAvailable?: boolean): TaskStore {
   const state: TaskStoreState = { connection, tasks: list, needsAttention: list.filter(t => t.state === 'awaiting-approval'), events: { [id(1)]: events }, ...(agentAvailable !== undefined ? { agentAvailable } : {}) };
   return { ...store(state), refresh: async () => {}, submit: async () => {}, approve: async () => {}, cancel: async () => {}, retry: async () => {}, loadEvents: async () => {} } as unknown as TaskStore;
+}
+/** Preview only: store whose answered task carries the answer-only timeline. */
+export function mockStoreAnswered(): { store: TaskStore; taskId: string } {
+  const state: TaskStoreState = { connection: 'connected', tasks: [answeredTask], needsAttention: [], events: { [answeredTask.taskId]: answerEvents } };
+  return { store: { ...store(state), refresh: async () => {}, submit: async () => {}, approve: async () => {}, cancel: async () => {}, retry: async () => {}, loadEvents: async () => {} } as unknown as TaskStore, taskId: answeredTask.taskId };
 }
 export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, status: async () => ({ paused, answerOnly: true }), pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
 export const mockDictation = {} as unknown as DictationApi;

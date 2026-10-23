@@ -14,7 +14,9 @@ import { radius, space, useTheme } from '../theme';
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings, onComputers, onAutomations, onTerminal, onTabs }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; onComputers?: () => void; onAutomations?: () => void; onTerminal?: () => void; onTabs?: () => void; wakePreview?: boolean }) {
+export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, answerOnlyPreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings, onComputers, onAutomations, onTerminal, onTabs }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; onComputers?: () => void; onAutomations?: () => void; onTerminal?: () => void; onTabs?: () => void; wakePreview?: boolean;
+  /** Preview only: render the answer-only toggle already switched on. Real phones always start it off. */
+  answerOnlyPreview?: boolean }) {
   const t = useTheme();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState('');
@@ -24,7 +26,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
   const agentOff = !offline && state.agentAvailable === false;
   const [paused, setPaused] = useState(false);
   const [answerOnlyReady, setAnswerOnlyReady] = useState(false);
-  const [answerOnly, setAnswerOnly] = useState(false);
+  const [answerOnly, setAnswerOnly] = useState(answerOnlyPreview === true);
   const [waking, setWaking] = useState<'no' | 'sending' | 'sent'>('no');
   const wake = async (): Promise<void> => {
     if (!macAddresses?.length || waking !== 'no') return;
@@ -111,9 +113,11 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
       {agentOff ? null : (
       <>
       {answerOnlyReady && !offline ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Answer only, no actions" hitSlop={8} onPress={() => setAnswerOnly(v => !v)} style={styles.answerRow}>
-          <View style={[styles.answerDot, { borderColor: answerOnly ? t.tint : t.sub, backgroundColor: answerOnly ? t.tint : 'transparent' }]} />
-          <Text style={{ color: answerOnly ? t.tint : t.sub, fontSize: 13, fontWeight: '600' }}>{answerOnly ? 'Answer only - a text reply from this computer, no actions' : 'Answer only'}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Answer only, no actions" onPress={() => setAnswerOnly(v => !v)}>
+          <Glass radius={18} style={[styles.answerChip, { borderColor: answerOnly ? t.tint : 'transparent' }]}>
+            <View style={[styles.answerDot, { borderColor: answerOnly ? t.tint : t.sub, backgroundColor: answerOnly ? t.tint : 'transparent' }]} />
+            <Text style={{ color: answerOnly ? t.tint : t.sub, fontSize: 14, fontWeight: '600' }}>{answerOnly ? 'Answer only - a text reply from this computer, no actions' : 'Answer only'}</Text>
+          </Glass>
         </Pressable>
       ) : null}
       <Glass radius={24} style={styles.composer}>
@@ -132,7 +136,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
 }
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: space.l, paddingTop: 70, paddingBottom: space.l },
-  answerRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6, marginLeft: 4, alignSelf: 'flex-start' },
+  answerChip: { minHeight: 44, paddingHorizontal: space.m, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: space.s, alignSelf: 'stretch', borderWidth: 1 },
   answerDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   title: { fontSize: 34, fontWeight: '700' }, sub: { fontSize: 15 },
   chips: { flexGrow: 0, flexShrink: 0, marginBottom: space.m },
