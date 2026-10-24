@@ -83,6 +83,7 @@ async function boot() {
     dictationDataDir = dataDir;
     service = await startDesktop({ directory: dataDir, host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), registry, onExtensionConnection: () => push() });
+    service.log.onRecord = () => queueStatePush();
     // Dictation: one visible setup machine - status always answers, retry is user-triggered, cancel aborts the download; the engine registers when verified.
     const { DictationSetup } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
     const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
@@ -182,6 +183,9 @@ async function restartService() {
   } finally { restarting = false; push(); }
 }
 const push = () => { if (win && !win.isDestroyed()) win.webContents.send('orbit:state', snapshot()); };
+// Activity events arrive in bursts (connect, session, chunk states); coalesce them into one state push so the Activity view refreshes live without a redraw storm.
+let activityPushTimer;
+const queueStatePush = () => { if (activityPushTimer) return; activityPushTimer = setTimeout(() => { activityPushTimer = undefined; push(); }, 750); activityPushTimer.unref?.(); };
 
 // The page only ever acts on paths that belong to a known transfer record, never on text it typed itself.
 function knownPath(candidate) {

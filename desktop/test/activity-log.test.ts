@@ -34,3 +34,19 @@ test('timestamps come from the injected clock and an invalid capacity is refused
   assert.equal(log.snapshot()[0]!.timestamp, '2026-10-21T12:00:00.000Z');
   for (const bad of [0, -1, 1.5, Number.NaN]) assert.throws(() => new ActivityLog(bad), /Invalid log capacity/);
 });
+
+test('onRecord fires for each recorded event with a detached copy', () => {
+  const log = new ActivityLog();
+  const seen: string[] = [];
+  log.onRecord = event => { seen.push(event.eventType); event.eventType = 'tampered' as never; };
+  log.record({ severity: 'info', eventType: 'file.state', outcome: 'success' });
+  assert.deepEqual(seen, ['file.state']);
+  assert.deepEqual(log.snapshot().map(e => e.eventType), ['file.state']);
+});
+
+test('a throwing onRecord listener never breaks recording', () => {
+  const log = new ActivityLog();
+  log.onRecord = () => { throw new Error('listener exploded'); };
+  log.record({ severity: 'info', eventType: 'connection.opened', outcome: 'success' });
+  assert.equal(log.snapshot().length, 1);
+});
