@@ -16,9 +16,25 @@ export interface Asset { url: string; sha256: string; file: string }
 interface PlatformBuild extends Asset { binaryRel: string }
 export interface AssetTable { model: Asset; builds: Record<string, PlatformBuild> }
 
-/** Pinned at b5454 (2026-10) + ggml-tiny from the official whisper.cpp model bucket; whisper.cpp and the Whisper models are MIT licensed. Hashes verified out-of-band on 2026-10-24. */
+/** The three offered models, all from the official whisper.cpp model bucket, MIT licensed; hashes verified out-of-band by download on 2026-10-24. tiny is the default everywhere: 75 MB and fast on any hardware; base and small trade download size and CPU for accuracy. */
+export type ModelName = 'tiny' | 'base' | 'small';
+export const MODELS: Record<ModelName, Asset> = {
+  tiny: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21', file: 'ggml-tiny.bin' },
+  base: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe', file: 'ggml-base.bin' },
+  small: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin', sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b', file: 'ggml-small.bin' },
+};
+export const MODEL_SIZES_MB: Record<ModelName, number> = { tiny: 75, base: 142, small: 466 };
+
+/** Conservative hardware hint: tiny below 4 cores or 8 GB, base below 8 cores or 16 GB, small above. The user still chooses; this only labels the suggestion. */
+export function suggestModel(cores: number, totalMemGB: number): ModelName {
+  if (cores < 4 || totalMemGB < 8) return 'tiny';
+  if (cores < 8 || totalMemGB < 16) return 'base';
+  return 'small';
+}
+
+/** Pinned at b5454 (2026-10); whisper.cpp and the Whisper models are MIT licensed. Hashes verified out-of-band on 2026-10-24. */
 export const PINNED_ASSETS: AssetTable = {
-  model: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21', file: 'ggml-tiny.bin' },
+  model: MODELS.tiny,
   builds: {
     'win32-x64': { url: 'https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip', sha256: '6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb', file: 'engine.zip', binaryRel: join('Release', 'whisper-cli.exe') },
     'linux-x64': { url: 'https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz', sha256: 'a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c', file: 'engine.tar.gz', binaryRel: 'whisper-cli' },
@@ -48,13 +64,17 @@ async function defaultExtract(archive: string, destDir: string): Promise<void> {
 
 export interface ProvisionOptions {
   platform?: string; arch?: string; env?: NodeJS.ProcessEnv; dataDir: string;
+  model?: ModelName; // which ggml model to provision; default tiny; ignored when assets is given or env overrides win
   assets?: AssetTable; fetchImpl?: (url: string, dest: string, signal?: AbortSignal) => Promise<void>;
   extractImpl?: (archive: string, destDir: string) => Promise<void>;
   onStage?: (stage: 'engine' | 'model' | 'verify' | 'done') => void;
   signal?: AbortSignal;
 }
 
-/** Env pair first, then an already-provisioned pair, else null. Never throws. */
+/** Asset table for one model choice. */
+export function assetsFor(model: ModelName = 'tiny'): AssetTable { return { ...PINNED_ASSETS, model: MODELS[model] }; }
+
+/** Env pair first, then an already-provisioned pair for the chosen model, else null. Never throws. */
 export function resolveEnginePaths(env: NodeJS.ProcessEnv, dataDir: string, assets: AssetTable = PINNED_ASSETS, platform: string = process.platform, arch: string = process.arch): EnginePaths | undefined {
   const bin = env.ORBIT_WHISPER_BIN; const model = env.ORBIT_WHISPER_MODEL;
   if (bin && model && existsSync(bin) && existsSync(model)) return { binary: bin, model };
@@ -71,7 +91,7 @@ export function resolveEnginePaths(env: NodeJS.ProcessEnv, dataDir: string, asse
 export async function ensureEngine(options: ProvisionOptions): Promise<EnginePaths> {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform; const arch = options.arch ?? process.arch;
-  const assets = options.assets ?? PINNED_ASSETS;
+  const assets = options.assets ?? assetsFor(options.model);
   const existing = resolveEnginePaths(env, options.dataDir, assets, platform, arch);
   if (existing) return existing;
   const fetchImpl = options.fetchImpl ?? defaultFetch;
@@ -153,7 +173,7 @@ export class DictationSetup {
 
   constructor(registry: CommandRegistry, private readonly dataDir: string,
     private readonly onReady: (paths: EnginePaths) => void, private readonly log: ActivityLog,
-    private readonly options: { env?: NodeJS.ProcessEnv; provision?: (o: ProvisionOptions) => Promise<EnginePaths>; auto?: boolean } = {}) {
+    private readonly options: { env?: NodeJS.ProcessEnv; provision?: (o: ProvisionOptions) => Promise<EnginePaths>; auto?: boolean; model?: ModelName } = {}) {
     const ok = (context: CommandContext): void => { if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED'); };
     registry.register('dictation.status', { validate: p => p === undefined || (typeof p === 'object' && p !== null && Object.keys(p).length === 0),
       execute: async (_p, context) => { ok(context); return this.statusPayload(); } });
@@ -174,7 +194,7 @@ export class DictationSetup {
 
   /** Startup path: attach an existing engine immediately, or kick off one automatic attempt when backoff allows. */
   autoStart(): EnginePaths | undefined {
-    const existing = resolveEnginePaths(this.options.env ?? process.env, this.dataDir);
+    const existing = resolveEnginePaths(this.options.env ?? process.env, this.dataDir, assetsFor(this.options.model));
     if (existing) { this.current = { state: 'ready' }; return existing; }
     if ((this.options.auto ?? true) && autoProvisionAllowed(this.dataDir)) void this.start(false);
     return undefined;
@@ -190,7 +210,7 @@ export class DictationSetup {
     const provision = this.options.provision ?? (o => ensureEngine(o));
     this.running = (async () => {
       try {
-        const paths = await provision({ dataDir: this.dataDir, env: this.options.env, signal: this.abort!.signal });
+        const paths = await provision({ dataDir: this.dataDir, env: this.options.env, model: this.options.model, signal: this.abort!.signal });
         this.current = { state: 'ready' };
         this.onReady(paths);
         this.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
@@ -202,6 +222,9 @@ export class DictationSetup {
     })();
     return this.running;
   }
+
+  /** Switches the model for future provisioning; does not interrupt an in-flight download. */
+  setModel(model: ModelName): void { this.options.model = model; }
 
   /** Cancels an in-flight download; the partial tree is cleaned by ensureEngine. */
   cancel(): void {

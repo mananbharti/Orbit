@@ -17,7 +17,7 @@ export class DictationService {
   private clip?: Clip;
   private readonly unregister: (() => void)[];
 
-  constructor(registry: CommandRegistry, private readonly engine: Transcriber, private readonly log: ActivityLog,
+  constructor(registry: CommandRegistry, private engine: Transcriber, private readonly log: ActivityLog,
     private readonly cleanup: () => CleanupOptions = () => ({}), private readonly ttlMs = DICTATION_TTL_MS, private readonly decoder?: AudioDecoder) {
     const ok = (context: CommandContext): NonNullable<CommandContext['connection']> => {
       if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
@@ -85,6 +85,9 @@ export class DictationService {
       } }),
     ];
   }
+  /** Swaps the transcription engine (model switch); in-flight clips keep their engine. */
+  swapEngine(engine: Transcriber): void { this.engine = engine; }
+
   async stop(): Promise<void> { for (const remove of this.unregister) remove(); this.drop(); }
 
   private owned(context: CommandContext, id: string, connection: NonNullable<CommandContext['connection']>, allowBusy = false): Clip {

@@ -80,6 +80,7 @@
     <div class="card list" id="dictation-card">
       <div class="row"><span><b>Dictation hotkey</b><small>Press the shortcut to start talking, press it again to stop. Your words are transcribed on this computer (nothing leaves it) and shown here first - you then copy them or confirm the window to type them into. Off by default.</small></span><input type="checkbox" id="dictation-enable" class="switch"></div>
       <div class="row"><span class="grow"><input type="text" id="dictation-key" class="field" placeholder="Control+Shift+D" autocomplete="off"></span><button class="ghost small" id="dictation-save">Save</button></div>
+      <div class="row"><span class="grow"><small>Transcription model</small><select id="dictation-model" class="field"><option value="tiny">Tiny - 75 MB, fastest</option><option value="base">Base - 142 MB, more accurate</option><option value="small">Small - 466 MB, most accurate</option></select></span></div>
       <div class="row"><span><small id="dictation-status">Dictation engine: checking...</small></span></div>
     </div>
     <div class="card list" id="agent-card">

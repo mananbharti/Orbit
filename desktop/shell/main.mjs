@@ -80,13 +80,16 @@ async function boot() {
     const { CommandRegistry } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'command-router', 'command-registry.js')).href);
     const registry = new CommandRegistry();
     const dataDir = join(app.getPath('userData'), 'orbit-data');
+    dictationDataDir = dataDir;
     service = await startDesktop({ directory: dataDir, host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), registry, onExtensionConnection: () => push() });
     // Dictation: one visible setup machine - status always answers, retry is user-triggered, cancel aborts the download; the engine registers when verified.
     const { DictationSetup } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
     const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
     const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
-    const attachDictation = paths => { localDictationEngine = new WhisperCpp(paths); new DictationService(registry, localDictationEngine, service.log); };
+    let dictationServiceRef;
+    const attachDictation = paths => { localDictationEngine = new WhisperCpp(paths); if (dictationServiceRef) dictationServiceRef.swapEngine(localDictationEngine); else dictationServiceRef = new DictationService(registry, localDictationEngine, service.log); };
+    attachDictationRef = attachDictation;
     const { LocalDictation } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-dictation.js')).href);
     const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
     const { focusProbeFor, focusActivatorFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
@@ -96,7 +99,8 @@ async function boot() {
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
       onPreview: dictationPreview, onState: dictationStatePush });
     dictationHotkeyApply(dictationHotkeyGet());
-    const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log);
+    const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log, { model: dictationHotkeyGet().model });
+    dictationSetupRef = dictationSetup;
     if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
       try { attachDictation({ binary: process.env.ORBIT_WHISPER_BIN, model: process.env.ORBIT_WHISPER_MODEL }); dictationSetup.markReady(); }
       catch { service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }); }
@@ -185,7 +189,23 @@ function knownPath(candidate) {
 }
 
 ipcMain.handle('orbit:state', () => snapshot());
-ipcMain.handle('orbit:dictation-get', () => ({ ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine) }));
+ipcMain.handle('orbit:dictation-get', async () => {
+  const { suggestModel, MODEL_SIZES_MB } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
+  const { cpus, totalmem } = await import('node:os');
+  return { ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine), suggested: suggestModel(cpus().length, totalmem() / (1024 ** 3)), sizes: MODEL_SIZES_MB };
+});
+ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
+  if (!DICTATION_MODELS.includes(model)) return { ok: false };
+  const cfg = dictationHotkeyGet();
+  dictationHotkeySave(cfg.enabled, cfg.accelerator, model);
+  dictationSetupRef?.setModel(model);
+  const { assetsFor, resolveEnginePaths } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
+  if (!dictationDataDir) return { ok: false, reason: 'not ready yet' };
+  const existing = resolveEnginePaths(process.env, dictationDataDir, assetsFor(model));
+  if (existing) { try { attachDictationRef?.(existing); } catch { return { ok: false, reason: 'engine failed to load' }; } }
+  else void dictationSetupRef?.start(true); // visible, cancellable download of the newly picked model
+  return { ok: true, downloaded: Boolean(existing) };
+});
 ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => {
   const cfg = dictationHotkeySave(enabled, accelerator);
   if (!cfg.enabled && localDictation?.cancel()) dictationWin?.webContents.send('orbit:dictation-capture', 'abort'); // stopping the shortcut stops any recording immediately
@@ -304,12 +324,14 @@ function createWindow() {
 
 // --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
 const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
+const DICTATION_MODELS = ['tiny', 'base', 'small'];
 function dictationHotkeyGet() {
-  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D' }; }
-  catch { return { enabled: false, accelerator: 'Control+Shift+D' }; }
+  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', model: DICTATION_MODELS.includes(c.model) ? c.model : 'tiny' }; }
+  catch { return { enabled: false, accelerator: 'Control+Shift+D', model: 'tiny' }; }
 }
-function dictationHotkeySave(enabled, accelerator) {
-  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D' };
+function dictationHotkeySave(enabled, accelerator, model) {
+  const prev = dictationHotkeyGet();
+  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D', model: DICTATION_MODELS.includes(model) ? model : prev.model };
   writeFileSync(dictationHotkeyPath(), JSON.stringify(cfg), { mode: 0o600 });
   return cfg;
 }
@@ -318,7 +340,7 @@ function dictationStatePush(state) {
   tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
-let dictationDevice; let dictationProbe; let dictationActivator; let dictationPending; // { text, target } awaiting the user's per-use choice
+let dictationDevice; let dictationProbe; let dictationActivator; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; // { text, target } awaiting the user's per-use choice
 async function dictationTypeChunk(chunk) {
   if (!dictationDevice) { const factory = inputDeviceFactory(); if (!factory) throw new Error('no input adapter on this OS'); dictationDevice = factory(); }
   await dictationDevice.apply({ t: 'text', text: chunk }, new AbortController().signal);

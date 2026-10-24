@@ -278,7 +278,17 @@ if (api.dictationGet) void (async () => {
   if ($('dictation-enable')) $('dictation-enable').checked = cfg.enabled;
   if ($('dictation-key')) $('dictation-key').value = cfg.accelerator;
   dicKey = cfg.accelerator || 'the shortcut';
-  dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
+  const modelSel = $('dictation-model');
+  if (modelSel && cfg.model) {
+    modelSel.value = cfg.model;
+    if (cfg.suggested && cfg.suggested !== cfg.model) dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)') + ' - suggested for this computer: ' + cfg.suggested);
+    else dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
+    modelSel.onchange = async () => {
+      dictationStatus('Dictation engine: preparing ' + modelSel.value + ' model...');
+      const r = await api.dictationSetModel(modelSel.value);
+      dictationStatus('Dictation engine: ' + (r.ok ? (r.downloaded ? 'ready' : 'downloading ' + modelSel.value + ' (one-time)') : 'could not switch models'));
+    };
+  } else dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
     const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());

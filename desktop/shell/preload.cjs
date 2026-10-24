@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('orbit', {
   dictationGet: () => ipcRenderer.invoke('orbit:dictation-get'),
   dictationSet: (enabled, accelerator) => ipcRenderer.invoke('orbit:dictation-set', enabled, accelerator),
   dictationTypeNow: () => ipcRenderer.invoke('orbit:dictation-type-now'),
+  dictationSetModel: model => ipcRenderer.invoke('orbit:dictation-set-model', model),
   dictationFinish: buffer => ipcRenderer.invoke('orbit:dictation-finish', buffer),
   onDictationCapture: cb => { const f = (_e, action) => cb(action); ipcRenderer.on('orbit:dictation-capture', f); return () => ipcRenderer.removeListener('orbit:dictation-capture', f); },
   onDictationState: cb => { const f = (_e, s) => cb(s); ipcRenderer.on('orbit:dictation-state', f); return () => ipcRenderer.removeListener('orbit:dictation-state', f); },
