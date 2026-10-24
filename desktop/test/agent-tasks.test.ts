@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { AgentTasks, APPROVAL_TIMEOUT_MS, MAX_CONCURRENT_TASKS } from '../src/agent/agent-tasks.js';
+import { CommandRegistry } from '../src/command-router/command-registry.js';
+import { CommandRouter } from '../src/command-router/command-router.js';
 import type { AgentRunContext, AgentRunner } from '../src/agent/agent-runner.js';
 import { MAX_LEDGER_TASKS, TaskLedger } from '../src/agent/task-ledger.js';
 import type { JsonValue, ResponseMessage } from '../src/protocol/messages.js';
@@ -115,6 +117,54 @@ test('a decision names its control: a late tap on an earlier request never settl
   assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval', 'the newer control is still pending');
   assert.deepEqual(result(await command('agent.approve', { taskId, approve: false, controlId: secondAsk.controlId })), { status: 'denied' });
   assert.equal(await second, false);
+});
+
+test('an old phone answering without a control identity is told to update; the request stays pending', async t => {
+  const { command, runner } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  const pending = runner.contexts[0]!.requestApproval('Delete 3 files');
+  await tick();
+  error(await command('agent.approve', { taskId, approve: true }), 'AGENT_UPDATE_REQUIRED');
+  assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval', 'nothing was settled');
+  const ask = result(await command('agent.events', { taskId })).events.at(-1);
+  assert.deepEqual(result(await command('agent.approve', { taskId, approve: true, controlId: ask.controlId })), { status: 'approved' });
+  assert.equal(await pending, true);
+});
+
+test('a reconnected phone answers with the same control identity; the manager, not the connection, holds it', async t => {
+  const { command, runner, issued, connectionFor } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  const pending = runner.contexts[0]!.requestApproval('Delete 3 files');
+  await tick();
+  const ask = result(await command('agent.events', { taskId })).events.at(-1);
+  // Same session token, brand-new connection (the phone dropped and reconnected).
+  const fresh = connectionFor(issued.sessionToken);
+  assert.deepEqual(result(await command('agent.approve', { taskId, approve: true, controlId: ask.controlId }, issued, fresh)), { status: 'approved' });
+  assert.equal(await pending, true);
+});
+
+test('a restart retires a pending request as unknown; a tap on its old control cannot replay it', async t => {
+  const setup1 = fixture(t);
+  const { taskId } = result(await setup1.command('agent.submit', submit()));
+  void setup1.runner.contexts[0]!.requestApproval('Delete 3 files');
+  await tick();
+  const ask = result(await setup1.command('agent.events', { taskId })).events.at(-1);
+  assert.equal(result(await setup1.command('agent.get', { taskId })).state, 'awaiting-approval');
+  // The service dies abruptly (no graceful stop) and restarts over the same ledger:
+  // the interrupted request is honestly "unknown".
+
+  // Fresh registry and ledger over the same directory; the same auth service and the same phone.
+  const registry2 = new CommandRegistry();
+  const router2 = new CommandRouter(registry2, setup1.auth, setup1.log);
+  const tasks2 = new AgentTasks(registry2, new TaskLedger(setup1.directory), new ScriptedRunner(), undefined);
+  t.after(() => { void tasks2.stop(); });
+  const conn2 = { id: randomUUID(), closed: new AbortController().signal, isAuthorized: () => true, publish: () => {} };
+  const command2 = (type: string, payload: JsonValue) =>
+    router2.dispatch({ version: 1, type, payload, requestId: randomUUID() }, setup1.issued.sessionToken, conn2);
+  assert.equal(result(await command2('agent.get', { taskId })).state, 'unknown');
+  error(await command2('agent.approve', { taskId, approve: true, controlId: ask.controlId }), 'AGENT_INVALID_STATE');
+  assert.equal(result(await command2('agent.events', { taskId })).events.filter((e: any) => e.kind === 'approval-request').length, 1,
+    'no phantom second request appears after the restart');
 });
 
 test('cancel aborts the runner, resolves pending approvals as denied and is final', async t => {

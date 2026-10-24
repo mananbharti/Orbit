@@ -16,7 +16,7 @@ import type { TaskState } from '../protocol/agent-task.js';
 export const MAX_CONCURRENT_TASKS = 2;
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000;
 const emptySchema = z.strictObject({});
-const approvalSchema = z.strictObject({ taskId: z.string().uuid(), approve: z.boolean(), controlId: z.string().uuid() });
+const approvalSchema = z.strictObject({ taskId: z.string().uuid(), approve: z.boolean(), controlId: z.string().uuid().optional() });
 
 export class AgentTasks {
   private readonly unregister: (() => void)[];
@@ -92,6 +92,9 @@ export class AgentTasks {
       registry.register('agent.approve', { validate: p => approvalSchema.safeParse(p).success,
         execute: async (payload, context) => {
           const { taskId, approve, controlId } = approvalSchema.parse(payload);
+          // An older phone answers without a control identity; refuse with a code it can explain,
+          // never a bare validation failure and never a best-effort answer.
+          if (controlId === undefined) throw new ProtocolError('AGENT_UPDATE_REQUIRED');
           const task = this.ledger.get(owner(context), taskId);
           const pending = this.approvals.get(taskId);
           // The decision must name the exact control it answers: a late tap on an earlier prompt

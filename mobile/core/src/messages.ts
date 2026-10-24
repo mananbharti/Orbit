@@ -9,6 +9,7 @@ const BY_CODE: Partial<Record<string, string>> = {
   AGENT_LIMIT: 'Too many tasks are running. Wait for one to finish.',
   AGENT_NOT_FOUND: 'That task no longer exists.',
   AGENT_INVALID_STATE: 'That task has already moved on.',
+  AGENT_UPDATE_REQUIRED: 'Update Orbit on this phone to answer approvals safely.',
   AGENT_LEDGER_IO: 'The computer could not save the task. Check its disk.',
   UNAUTHENTICATED: 'This phone is not signed in to the computer. Pair again.',
   LAUNCHER_UNAVAILABLE: 'The computer cannot list its apps right now.',
