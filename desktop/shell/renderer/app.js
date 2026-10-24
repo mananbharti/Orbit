@@ -47,7 +47,7 @@ $('choose-files').onclick = async () => {
   const r = await api.sendFiles();
   const el = $('send-result');
   if (r.error) { el.textContent = r.error; el.className = 'send-result err'; }
-  else if (r.offered.length) { el.textContent = 'Sent: ' + r.offered.join(', '); el.className = 'send-result'; toast('Sending to your phone'); }
+  else if (r.offered.length) { el.textContent = 'Waiting for phone: ' + r.offered.join(', '); el.className = 'send-result'; toast('Waiting for your phone to accept'); }
   if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
 };
 $('open-inbox').onclick = () => api.openInbox();
@@ -64,7 +64,7 @@ dz.addEventListener('drop', async e => {
   const r = await api.sendPaths(paths);
   const el = $('send-result');
   if (r.error) { el.textContent = r.error; el.className = 'send-result err'; }
-  else if (r.offered.length) { el.textContent = 'Sent: ' + r.offered.join(', '); el.className = 'send-result'; toast('Sending to your phone'); }
+  else if (r.offered.length) { el.textContent = 'Waiting for phone: ' + r.offered.join(', '); el.className = 'send-result'; toast('Waiting for your phone to accept'); }
   if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
 });
 
