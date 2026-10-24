@@ -63,7 +63,7 @@ export class LinuxInputDevice implements InputDevice {
     w.stderr.resume();
     w.on('error', () => { this.dead = true; });
     w.on('exit', () => { this.dead = true; this.worker = undefined; });
-    signal.addEventListener('abort', () => { void this.releaseAll().finally(() => this.kill()); }, { once: true });
+    signal.addEventListener('abort', () => { void this.releaseAll().finally(() => this.drainKill()); }, { once: true });
   }
 
   async apply(event: InputEvent, signal: AbortSignal): Promise<void> {
@@ -96,7 +96,19 @@ export class LinuxInputDevice implements InputDevice {
     if (commands.length && this.worker && !this.dead) { try { this.write(commands); } catch { /* best effort; the worker is killed next */ } }
   }
 
-  async dispose(): Promise<void> { await this.releaseAll(); this.kill(); }
+  async dispose(): Promise<void> { await this.releaseAll(); await this.drainKill(); }
+
+  /** A bare kill can land while the worker is mid-keystroke (the atomic down/up pair of a 'key' command, or queued release lines), leaving a key logically held on the server - observed live as F5 autorepeating with no release when a quick send-then-end killed the worker. Close stdin and give the worker a bounded window to drain and exit before killing. */
+  private async drainKill(): Promise<void> {
+    const w = this.worker; this.worker = undefined;
+    if (!w) return;
+    try { w.stdin.end(); } catch { /* already closed */ }
+    const drained = await new Promise<boolean>(resolve => {
+      const t = setTimeout(() => resolve(false), 2000);
+      w.once('exit', () => { clearTimeout(t); resolve(true); });
+    });
+    if (!drained) w.kill();
+  }
 
   private track(argv: string[]): void {
     const [cmd, a] = argv;
@@ -122,5 +134,4 @@ export class LinuxInputDevice implements InputDevice {
     });
   }
 
-  private kill(): void { const w = this.worker; this.worker = undefined; w?.kill(); }
 }

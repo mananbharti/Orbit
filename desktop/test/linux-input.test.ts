@@ -10,7 +10,8 @@ import { LinuxInputDevice, toCommands } from '../src/os-integration/input-device
 function fake(exitCode = 0) {
   const children: EventEmitter[] = [];
   const written: string[] = [];
-  const stdin = { write: (line: string) => { written.push(line.replace(/\n$/, '')); return true; } };
+  let stdinEnded = false;
+  const stdin = { write: (line: string) => { written.push(line.replace(/\n$/, '')); return true; }, end: () => { stdinEnded = true; setImmediate(() => worker.emit('exit', 0)); } };
   const worker = Object.assign(new EventEmitter(), { stdin, stdout: new PassThrough(), stderr: new PassThrough(), killed: false, kill() { this.killed = true; return true; } });
   const spawnFn = (_cmd: string, args: string[]) => {
     if (args[0] === '-') { children.push(worker); return worker as unknown as ChildProcessWithoutNullStreams; }
@@ -19,8 +20,24 @@ function fake(exitCode = 0) {
     setImmediate(() => probe.emit('exit', exitCode));
     return probe as unknown as ChildProcessWithoutNullStreams;
   };
-  return { spawnFn, worker: worker as unknown as { killed: boolean }, written };
+  return { spawnFn, worker: worker as unknown as { killed: boolean }, written, stdinEnded: () => stdinEnded };
 }
+
+test('dispose closes stdin and lets the worker drain instead of killing it mid-keystroke (F5-stuck-down regression)', async () => {
+  const { spawnFn, worker, stdinEnded } = fake();
+  const d = new LinuxInputDevice(spawnFn as never);
+  const ac = new AbortController();
+  const savedDisplay = process.env.DISPLAY; process.env.DISPLAY = ':99';
+  try { await openApplyDispose(); } finally { process.env.DISPLAY = savedDisplay; }
+  return;
+  async function openApplyDispose() {
+  await d.open(ac.signal);
+  await d.apply({ t: 'key', key: 'f5' }, ac.signal);
+  await d.dispose(); // must not leave a half-applied atomic key behind
+  }
+  assert.equal(stdinEnded(), true, 'stdin closed so the worker drains queued commands');
+  assert.equal(worker.killed, false, 'worker exited cleanly within the drain window - no kill, no stuck key');
+});
 
 test('events translate to the right xdotool commands', () => {
   assert.deepEqual(toCommands({ t: 'move', dx: 5, dy: -3 }), [['mousemove_relative', '--', '5', '-3']]);
@@ -69,7 +86,7 @@ test('releaseAll lifts held buttons and keys in reverse order, and only those', 
     f.written.length = 0;
     await d.releaseAll();
     assert.deepEqual(f.written, [], 'idempotent: nothing held, nothing sent');
-    await d.dispose(); assert.equal(f.worker.killed, true);
+    await d.dispose(); assert.equal(f.stdinEnded(), true, 'stdin closed for a clean drain'); assert.equal(f.worker.killed, false, 'worker drained and exited - no kill');
     await assert.rejects(() => d.apply({ t: 'move', dx: 1, dy: 1 }, ac.signal), /INPUT_UNAVAILABLE/);
   } finally { process.env.DISPLAY = savedDisplay; }
 });

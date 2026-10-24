@@ -28,11 +28,13 @@ class FakeWorker extends EventEmitter {
   readonly stderr = { resume() {} } as never;
   readonly written: string[] = [];
   killed = false;
+  stdinEnded = false;
   constructor(dieImmediately = false, exitSoon = false) {
     super();
     this.stdout.resume = () => {};
     this.stdout.setEncoding = () => {};
     this.stdin.write = ((text: string) => { this.written.push(text); return true; }) as never;
+    (this.stdin as unknown as { end: () => void }).end = () => { this.stdinEnded = true; setImmediate(() => this.emit('exit', 0)); };
     if (dieImmediately) queueMicrotask(() => this.emit('exit', 1));
     else if (exitSoon) queueMicrotask(() => this.emit('exit', 0)); // one-shot tools such as ydotool finish
   }
@@ -87,7 +89,9 @@ test('events stream as JSON lines, text goes to ydotool, and abort releases ever
     { t: 'button', button: 'left', action: 'up' },
     { t: 'key', codes: [29, 47], action: 'up' },
   ], 'abort releases the held button and chord');
-  assert.ok(python.killed, 'the helper is stopped after release');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(python.stdinEnded, 'stdin closed so the helper drains the releases before exit');
+  assert.ok(!python.killed, 'the helper drained and exited cleanly - no mid-keystroke kill');
   await assert.rejects(() => d.apply({ t: 'move', dx: 1, dy: 1 }, new AbortController().signal), /INPUT_UNAVAILABLE/);
 });
 

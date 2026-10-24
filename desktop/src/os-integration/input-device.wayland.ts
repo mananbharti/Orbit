@@ -226,8 +226,8 @@ export class WaylandInputDevice implements InputDevice {
     // A helper that cannot create the device (no uinput access, no python3) exits at once; give it a moment.
     await new Promise<void>((resolve, reject) => setTimeout(() => (exitedEarly || this.dead
       ? reject(new Error('INPUT_UNAVAILABLE')) : resolve()), 200));
-    if (signal.aborted) { this.kill(); throw new Error('INPUT_UNAVAILABLE'); }
-    signal.addEventListener('abort', () => { void this.releaseAll().finally(() => this.kill()); }, { once: true });
+    if (signal.aborted) { const w = this.worker; this.worker = undefined; w?.kill(); throw new Error('INPUT_UNAVAILABLE'); } // nothing queued yet at open time - a hard kill is safe here
+    signal.addEventListener('abort', () => { void this.releaseAll().finally(() => this.drainKill()); }, { once: true });
   }
 
   async apply(event: InputEvent, signal: AbortSignal): Promise<void> {
@@ -261,7 +261,19 @@ export class WaylandInputDevice implements InputDevice {
     for (const message of releases) { try { this.write(message); } catch { /* best effort; the worker is killed next */ } }
   }
 
-  async dispose(): Promise<void> { await this.releaseAll(); this.kill(); }
+  async dispose(): Promise<void> { await this.releaseAll(); await this.drainKill(); }
+
+  /** Same drain-before-kill reason as the X11 adapter: a bare kill can cut a queued keystroke or release line, leaving keys held. */
+  private async drainKill(): Promise<void> {
+    const w = this.worker; this.worker = undefined;
+    if (!w) return;
+    try { w.stdin.end(); } catch { /* already closed */ }
+    const drained = await new Promise<boolean>(resolve => {
+      const t = setTimeout(() => resolve(false), 2000);
+      w.once('exit', () => { clearTimeout(t); resolve(true); });
+    });
+    if (!drained) w.kill();
+  }
 
   private track(message: WaylandInputEvent): void {
     if (message.t === 'button') {
@@ -287,5 +299,4 @@ export class WaylandInputDevice implements InputDevice {
     try { await access('/dev/uinput', constants.W_OK); } catch { throw new Error('INPUT_UNAVAILABLE'); }
   }
 
-  private kill(): void { const w = this.worker; this.worker = undefined; w?.kill(); }
 }
