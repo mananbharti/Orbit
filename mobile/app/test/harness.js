@@ -17,6 +17,7 @@ const stubComponent = () => {
 const CORE_DIST = path.join(__dirname, '..', 'dist-test', 'core', 'src', 'index.js');
 let cachedReactNative;
 let cachedClipboard;
+let cachedCamera;
 Module._load = function (request, parent, isMain) {
   if (request === 'react-native') {
     // react-native-web's VirtualizedList never lets a bare node process exit (solo FlatList mount leaves the
@@ -40,6 +41,18 @@ Module._load = function (request, parent, isMain) {
     return cachedReactNative;
   }
   if (request === '@orbit/core') return origLoad.call(this, CORE_DIST, parent, isMain);
+  if (request === 'expo-camera') {
+    // Cached so tests re-point the permission and fire real barcode events through the screen's own
+    // handler. CameraView is a host element: every prop (onBarcodeScanned, facing, barcode settings)
+    // stays observable; only the native preview is absent. The stub request() grants but cannot
+    // re-render the screen the way the real hook does - tests assert the request was made, not the re-render.
+    if (!cachedCamera) cachedCamera = {
+      permission: { granted: false }, requestCalls: 0,
+      CameraView: props => React.createElement('CameraView', props, props && props.children),
+      useCameraPermissions: () => [cachedCamera.permission, async () => { cachedCamera.requestCalls += 1; cachedCamera.permission = { granted: true }; return { granted: true }; }]
+    };
+    return cachedCamera;
+  }
   if (request === 'expo-haptics') return { selectionAsync: async () => {}, notificationAsync: async () => {}, impactAsync: async () => {},
     NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' }, ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' } };
   if (request === 'expo-audio') return audioStub;
