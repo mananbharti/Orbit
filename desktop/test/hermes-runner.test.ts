@@ -8,9 +8,10 @@ import type { AgentRunContext } from '../src/agent/agent-runner.js';
 import { HermesRunner } from '../src/agent/hermes-runner.js';
 
 interface Fake { server: Server; url: string; requests: { method: string; path: string; headers: IncomingMessage['headers']; body: string }[];
-  events: string[]; status: Record<string, unknown>; holdEvents?: Promise<void>; approvals: unknown[]; approvalStatus: number }
+  events: string[]; status: Record<string, unknown>; statusSequence?: Record<string, unknown>[]; caps: Record<string, unknown>; holdEvents?: Promise<void>; approvals: unknown[]; approvalStatus: number }
 async function fake(t: TestContext): Promise<Fake> {
-  const state: Fake = { server: undefined as never, url: '', requests: [], events: [], status: { status: 'completed', output: 'Final answer' }, approvals: [], approvalStatus: 200 };
+  const state: Fake = { server: undefined as never, url: '', requests: [], events: [], status: { status: 'completed', output: 'Final answer' },
+    caps: { object: 'hermes.api_server.capabilities', features: { run_submission: true, run_approval_response: true } }, approvals: [], approvalStatus: 200 };
   state.server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = ''; req.on('data', c => body += c);
     req.on('end', async () => {
@@ -24,8 +25,11 @@ async function fake(t: TestContext): Promise<Fake> {
       }
       if (req.url === '/v1/runs/run_abc123/approval') { state.approvals.push(JSON.parse(body)); res.writeHead(state.approvalStatus, { 'Content-Type': 'application/json' }).end('{}'); return; }
       if (req.url === '/v1/runs/run_abc123/stop') { res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"status":"stopping"}'); return; }
-      if (req.url === '/v1/runs/run_abc123') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(state.status)); return; }
-      if (req.url === '/v1/capabilities') { res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"features":[]}'); return; }
+      if (req.url === '/v1/runs/run_abc123') {
+        const body = state.statusSequence ? (state.statusSequence.length > 1 ? state.statusSequence.shift()! : state.statusSequence[0]!) : state.status;
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body)); return;
+      }
+      if (req.url === '/v1/capabilities') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(state.caps)); return; }
       res.writeHead(404).end();
     });
   });
@@ -88,6 +92,8 @@ test('an approval with no control identity answers with the plain choice contrac
   const f = await fake(t);
   f.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path',
     choices: ['once', 'session', 'always', 'deny'] }), frame('run.completed', {})];
+  // Status reads in order: pending_controls fallback, the pre-delivery pending check, the final status.
+  f.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
   const asked: string[] = [];
   const { ctx } = context({ requestApproval: async d => { asked.push(d); return true; } });
   const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
@@ -96,8 +102,52 @@ test('an approval with no control identity answers with the plain choice contrac
   assert.deepEqual(f.approvals, [{ choice: 'once' }]);
   const denied = context({ requestApproval: async () => false });
   const g = await fake(t); g.events = f.events;
+  g.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
   await new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(denied.ctx);
   assert.deepEqual(g.approvals, [{ choice: 'deny' }]);
+});
+
+test('an identity-less answer is refused when the control is no longer pending, the run ended, or the capability is unadvertised', async t => {
+  // Settled while the user decided: status says running, so the plain choice could settle a DIFFERENT control.
+  const f = await fake(t);
+  f.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.completed', {})];
+  f.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'running' }, { status: 'completed', output: 'Final answer' }];
+  const { ctx, steps } = context({ requestApproval: async () => true });
+  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx), 'Final answer');
+  assert.deepEqual(f.approvals, []);
+  assert.ok(steps.some(step => step.includes('no longer pending') && step.includes('not delivered')));
+
+  // The run already failed: nothing may be answered, and the failure reason still surfaces.
+  const g = await fake(t);
+  g.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.failed', {})];
+  g.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'failed', error: 'provider down' }];
+  const denied = context({ requestApproval: async () => true });
+  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(denied.ctx), /failed: provider down/);
+  assert.deepEqual(g.approvals, []);
+  assert.ok(denied.steps.some(step => step.includes('no longer pending')));
+
+  // The gateway does not advertise approval answers: refuse rather than POST into the unknown.
+  const h = await fake(t);
+  h.caps = { object: 'hermes.api_server.capabilities', features: { run_submission: true, run_approval_response: false } };
+  h.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.completed', {})];
+  h.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
+  const third = context({ requestApproval: async () => true });
+  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: h.url }).run(third.ctx), 'Final answer');
+  assert.deepEqual(h.approvals, []);
+  assert.ok(third.steps.some(step => step.includes('does not advertise approval answers')));
+});
+
+test('a malformed identity-bearing approval is never downgraded to a plain choice', async t => {
+  // prompt_id without a usable execution_generation: answering identity-less could settle a control
+  // the user never saw on a gateway that DOES bind identities, so the decision is refused outright.
+  const f = await fake(t);
+  f.events = [frame('approval.request', { tool: 'write_file', preview: 'Write notes.txt', prompt_id: 'prompt-9' }), frame('run.completed', {})];
+  const asked: string[] = [];
+  const { ctx, steps } = context({ requestApproval: async d => { asked.push(d); return true; } });
+  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx), 'Final answer');
+  assert.deepEqual(asked, []); // the user is not even asked: the request itself is untrustworthy
+  assert.deepEqual(f.approvals, []);
+  assert.ok(steps.some(step => step.includes('malformed approval identity')));
 });
 
 test('the real gateway stream format parses: data-only frames, keepalives, event type inside the JSON', async t => {
@@ -129,10 +179,11 @@ test('a stale approval (HTTP 409) is tolerated: the control already settled', as
   const f = await fake(t);
   f.approvalStatus = 409;
   f.events = [frame('approval.request', { tool: 'write_file', prompt_id: 'prompt-9', execution_generation: 3 }), frame('run.completed', {})];
-  const { ctx } = context({ requestApproval: async () => false });
+  const { ctx, steps } = context({ requestApproval: async () => false });
   const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
   assert.equal(result, 'Final answer');
   assert.equal(f.approvals.length, 1); // the answer was attempted; Hermes had moved on
+  assert.ok(steps.some(step => step.includes('already settled or superseded') && step.includes('not delivered')), '409 never reads as accepted');
 });
 
 test('check(): a reachable gateway with a good key answers ok', async t => {

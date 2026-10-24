@@ -65,6 +65,11 @@ export class HermesRunner implements AgentRunner {
   }
 
   private async consume(runId: string, context: AgentRunContext): Promise<void> {
+    const state = { active: true };
+    try { await this.consumeStream(runId, context, state); } finally { state.active = false; }
+  }
+
+  private async consumeStream(runId: string, context: AgentRunContext, state: { active: boolean }): Promise<void> {
     const response = await this.request('GET', `/v1/runs/${runId}/events`, context.signal, undefined, { Accept: 'text/event-stream' });
     if (!response.body) return;
     const decoder = new TextDecoder();
@@ -72,7 +77,7 @@ export class HermesRunner implements AgentRunner {
     const dispatch = async (): Promise<void> => {
       if (!data) { name = ''; return; }
       const event = parseEvent(name, data); name = ''; data = '';
-      if (event) await this.handle(runId, event, context);
+      if (event) await this.handle(runId, event, context, state);
     };
     for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
       buffer += decoder.decode(chunk, { stream: true });
@@ -90,7 +95,7 @@ export class HermesRunner implements AgentRunner {
     await dispatch();
   }
 
-  private async handle(runId: string, event: { type: string; data: Record<string, unknown> }, context: AgentRunContext): Promise<void> {
+  private async handle(runId: string, event: { type: string; data: Record<string, unknown> }, context: AgentRunContext, state: { active: boolean }): Promise<void> {
     const text = (value: unknown): string => typeof value === 'string' ? clean(value) : '';
     switch (event.type) {
       case 'tool.started': context.step(`Using ${text(event.data.tool) || 'tool'}${event.data.preview ? `: ${text(event.data.preview)}` : ''}`); break;
@@ -100,24 +105,59 @@ export class HermesRunner implements AgentRunner {
       case 'subagent.complete': context.step('Subagent finished'); break;
       case 'approval.request': {
         const detail = text(event.data.description) || text(event.data.command) || text(event.data.preview) || text(event.data.tool) || 'Approval needed';
-        const approved = await context.requestApproval(detail);
         const identity = await this.approvalIdentity(runId, event, context);
-        // Gateways up to at least v0.19.0 carry no control identity: their approval endpoint takes
-        // { choice } and resolves whatever is pending for the run (409 when nothing is). Newer
-        // gateways implementing the documented request_id/execution_generation contract receive the
-        // identity-bound body, so a late answer can never settle a newer control there.
-        const body = identity ? (this.options.approvalBody ?? defaultApprovalBody)(approved, identity)
-          : { choice: approved ? 'once' : 'deny' };
+        // Never downgrade: an event that carries identity fields but no usable identity is
+        // malformed, not identity-less - answering it with a plain choice could settle a control
+        // the user never saw.
+        const mentionsIdentity = 'prompt_id' in event.data || 'request_id' in event.data || 'execution_generation' in event.data;
+        if (mentionsIdentity && !identity) { context.step('Hermes sent a malformed approval identity; the decision was not delivered'); break; }
+        const approved = await context.requestApproval(detail);
+        // Deliver only while the same stream that showed the request is still live; a dead stream
+        // means Orbit can no longer observe what control is pending.
+        if (!state.active) { context.step('The run stream ended before the answer; it was not delivered'); break; }
+        let body: Record<string, unknown>;
+        if (identity) {
+          // Newer gateways implementing the documented request_id/execution_generation contract:
+          // the identity binds the answer to the exact control, so a late answer cannot settle a newer one.
+          body = (this.options.approvalBody ?? defaultApprovalBody)(approved, identity);
+        } else {
+          // Gateways up to at least v0.19.0 carry no control identity: their endpoint takes
+          // { choice } and resolves whatever is pending for the run. Because that could settle a
+          // different control than the one displayed, deliver only while the run still reports
+          // waiting_for_approval and the gateway advertises the approval endpoint; otherwise refuse.
+          // Residual race: a control settling and a new one appearing between this check and the
+          // POST cannot be excluded against v0.19.0; the window is the round-trip itself.
+          const current = await this.runStatus(runId);
+          if (current !== 'waiting_for_approval') { context.step(`The approval was no longer pending when the answer arrived (${current ?? 'status unknown'}); it was not delivered`); break; }
+          const features = (await this.capabilities())?.features as Record<string, unknown> | undefined;
+          if (features?.run_approval_response !== true) { context.step('This gateway does not advertise approval answers; the decision was not delivered'); break; }
+          body = { choice: approved ? 'once' : 'deny' };
+        }
         try { await this.request('POST', `/v1/runs/${runId}/approval`, undefined, body); }
         catch (error) {
-          // 409 = the control settled or moved to a new generation while the user decided; nothing to deliver.
-          if (error instanceof HermesHttpError && error.status === 409) break;
+          // 409 = the control settled or moved on while the user decided. It never means accepted.
+          if (error instanceof HermesHttpError && error.status === 409) { context.step('Hermes had already settled or superseded the approval; the answer was not delivered'); break; }
           throw error;
         }
         break;
       }
       default: break; // deltas and lifecycle frames carry no user-facing step
     }
+  }
+
+  /** Current run status, undefined when it cannot be read (callers fail closed). */
+  private async runStatus(runId: string): Promise<string | undefined> {
+    try {
+      const status = await (await this.request('GET', `/v1/runs/${runId}`, undefined)).json() as { status?: unknown };
+      return typeof status.status === 'string' ? status.status : undefined;
+    } catch { return undefined; }
+  }
+
+  private capsPromise?: Promise<Record<string, unknown> | undefined>;
+  /** The gateway's advertised capability list, fetched once; undefined when unreadable. */
+  private capabilities(): Promise<Record<string, unknown> | undefined> {
+    return (this.capsPromise ??= this.request('GET', '/v1/capabilities', undefined)
+      .then(response => response.json() as Promise<Record<string, unknown>>).catch(() => undefined));
   }
 
   /** The control identity for an approval: from the event itself, else the run's pending_controls. */
