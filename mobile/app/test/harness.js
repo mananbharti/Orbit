@@ -15,12 +15,30 @@ const stubComponent = () => {
   return C;
 };
 const CORE_DIST = path.join(__dirname, '..', 'dist-test', 'core', 'src', 'index.js');
+let cachedReactNative;
 Module._load = function (request, parent, isMain) {
-  if (request === 'react-native') return require('react-native-web');
+  if (request === 'react-native') {
+    // react-native-web's VirtualizedList never lets a bare node process exit (solo FlatList mount leaves the
+    // event loop alive with no introspectable handle, timer or request; production FileApi is exonerated -
+    // a fake api hangs identically). Tests get a faithful minimal list: same props contract, real rows and
+    // real press handlers, no DOM virtualization. Everything else stays the real react-native-web module.
+    if (!cachedReactNative) {
+      const real = require('react-native-web');
+      const TestFlatList = props => {
+        const header = props.ListHeaderComponent ? (React.isValidElement(props.ListHeaderComponent) ? props.ListHeaderComponent : React.createElement(props.ListHeaderComponent)) : null;
+        const rows = (props.data || []).map((item, index) => React.createElement('View', { key: props.keyExtractor ? props.keyExtractor(item, index) : String(index) }, props.renderItem({ item, index })));
+        const empty = (!props.data || props.data.length === 0) && props.ListEmptyComponent ? (React.isValidElement(props.ListEmptyComponent) ? props.ListEmptyComponent : React.createElement(props.ListEmptyComponent)) : null;
+        return React.createElement('View', { style: [props.style, props.contentContainerStyle] }, header, rows.length ? rows : empty);
+      };
+      cachedReactNative = Object.assign({}, real, { FlatList: TestFlatList });
+    }
+    return cachedReactNative;
+  }
   if (request === '@orbit/core') return origLoad.call(this, CORE_DIST, parent, isMain);
   if (request === 'expo-haptics') return { selectionAsync: async () => {}, notificationAsync: async () => {}, impactAsync: async () => {},
     NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' }, ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' } };
   if (request === 'expo-audio') return audioStub;
+  if (request === 'expo-document-picker') return { getDocumentAsync: async () => ({ canceled: true, assets: [] }) };
   if (request === 'expo-file-system') {
     // Minimal in-memory File serving one real 16 kHz mono 16-bit WAV (0.25s tone), so wavToPcm16k runs its real parse path.
     const wavBytes = () => {
