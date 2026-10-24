@@ -102,7 +102,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
         </Pressable>
       ) : null}
       <FlatList data={state.tasks} keyExtractor={x => x.taskId} contentContainerStyle={{ gap: space.m, paddingBottom: space.xl }}
-        ListEmptyComponent={<Text style={[styles.empty, { color: t.sub }]}>{agentOff ? '' : 'Ask your agent to do something. You will see its progress here and approve anything sensitive.'}</Text>}
+        ListEmptyComponent={<Text style={[styles.empty, { color: t.sub }]}>{agentOff ? '' : 'Ask your agent to do something. You will see its progress here and can stop it any time.'}</Text>}
         renderItem={({ item }) => (
           <PressableScale accessibilityRole="button" onPress={() => onOpen(item)} style={[styles.card, { backgroundColor: t.card, shadowColor: t.shadow, shadowOpacity: t.isDark ? 0 : 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: t.isDark ? 0 : 1 }]}>
             <Text numberOfLines={2} style={[styles.headline, { color: t.text }]}>{item.headline || 'Task'}</Text>
