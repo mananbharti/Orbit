@@ -208,6 +208,13 @@ api.state().then(render); api.onState(render);
 // --- Dictation hotkey: capture runs here (mic lives in the renderer); the main process owns the toggle, transcription and insertion. ---
 let dicStream, dicCtx, dicNode, dicChunks = [], dicCapTimer, dicKey = 'the shortcut';
 function dictationStatus(text) { const el = $('dictation-status'); if (el) el.textContent = text; }
+function dictationEngineLine(cfg) { // honest setup state: 'setting up' only while a download is actually running or about to
+  if (cfg.engine) return 'Dictation engine: ready';
+  const s = cfg.setup && cfg.setup.state;
+  if (s === 'downloading') return 'Dictation engine: downloading (one-time)';
+  if (s === 'failed') return 'Dictation engine: download failed - re-save the hotkey or switch models to retry';
+  return 'Dictation engine: setting up (one-time download)';
+}
 function dictationCleanupMic() { // every exit path releases the mic: tracks stopped, context closed, chunks zeroed
   clearTimeout(dicCapTimer);
   try { dicNode && dicNode.disconnect(); } catch { /* already stopped */ }
@@ -291,18 +298,19 @@ if (api.dictationGet) void (async () => {
   const modelSel = $('dictation-model');
   if (modelSel && cfg.model) {
     modelSel.value = cfg.model;
-    if (cfg.suggested && cfg.suggested !== cfg.model) dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)') + ' - suggested for this computer: ' + cfg.suggested);
-    else dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
+    if (cfg.suggested && cfg.suggested !== cfg.model) dictationStatus(dictationEngineLine(cfg) + ' - suggested for this computer: ' + cfg.suggested);
+    else dictationStatus(dictationEngineLine(cfg));
     modelSel.onchange = async () => {
       dictationStatus('Dictation engine: preparing ' + modelSel.value + ' model...');
       const r = await api.dictationSetModel(modelSel.value);
       dictationStatus('Dictation engine: ' + (r.ok ? (r.downloaded ? 'ready' : 'downloading ' + modelSel.value + ' (one-time)') : 'could not switch models'));
     };
-  } else dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
+  } else dictationStatus(dictationEngineLine(cfg));
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
     const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
     if (r.ok) dicKey = $('dictation-key').value.trim() || dicKey;
+    if (r.ok && $('dictation-enable').checked) { const cfg2 = await api.dictationGet(); dictationStatus(dictationEngineLine(cfg2)); }
     toast(r.ok ? 'Dictation hotkey saved' : 'Could not save the hotkey');
   };
 })();

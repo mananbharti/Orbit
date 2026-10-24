@@ -197,7 +197,7 @@ ipcMain.handle('orbit:state', () => snapshot());
 ipcMain.handle('orbit:dictation-get', async () => {
   const { suggestModel, MODEL_SIZES_MB } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
   const { cpus, totalmem } = await import('node:os');
-  return { ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine), suggested: suggestModel(cpus().length, totalmem() / (1024 ** 3)), sizes: MODEL_SIZES_MB };
+  return { ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine), setup: dictationSetupRef ? dictationSetupRef.statusPayload() : undefined, suggested: suggestModel(cpus().length, totalmem() / (1024 ** 3)), sizes: MODEL_SIZES_MB };
 });
 ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
   if (!DICTATION_MODELS.includes(model)) return { ok: false };
@@ -213,6 +213,7 @@ ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
 });
 ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => {
   const cfg = dictationHotkeySave(enabled, accelerator);
+  if (cfg.enabled && !localDictationEngine) void dictationSetupRef?.start(true); // enabling with no engine retries the one-time download right away
   if (!cfg.enabled && localDictation?.cancel()) dictationWin?.webContents.send('orbit:dictation-capture', 'abort'); // stopping the shortcut stops any recording immediately
   dictationHotkeyApply(cfg);
   return { ok: true, ...cfg };
