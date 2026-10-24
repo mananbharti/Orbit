@@ -59,7 +59,9 @@ export class HermesRunner implements AgentRunner {
     const status = await (await this.request('GET', `/v1/runs/${runId}`, context.signal)).json() as { status?: string; output?: unknown; error?: unknown };
     if (status.status === 'completed') return typeof status.output === 'string' && status.output ? status.output : 'Done';
     if (status.status && !TERMINAL.has(status.status)) throw new Error('Hermes run did not finish');
-    throw new Error(`Hermes run ${status.status ?? 'unknown'}`);
+    // Surface the gateway's own reason (for example a missing model provider) so the phone shows why.
+    const reason = typeof status.error === 'string' && status.error ? `: ${clean(status.error)}` : '';
+    throw new Error(`Hermes run ${status.status ?? 'unknown'}${reason}`);
   }
 
   private async consume(runId: string, context: AgentRunContext): Promise<void> {
@@ -97,10 +99,15 @@ export class HermesRunner implements AgentRunner {
       case 'subagent.start': context.step('Delegating to a subagent'); break;
       case 'subagent.complete': context.step('Subagent finished'); break;
       case 'approval.request': {
-        const approved = await context.requestApproval(text(event.data.preview ?? event.data.description ?? event.data.tool) || 'Approval needed');
+        const detail = text(event.data.description) || text(event.data.command) || text(event.data.preview) || text(event.data.tool) || 'Approval needed';
+        const approved = await context.requestApproval(detail);
         const identity = await this.approvalIdentity(runId, event, context);
-        if (!identity) { context.step('Hermes gave no approval identity; the decision could not be delivered'); break; }
-        const body = (this.options.approvalBody ?? defaultApprovalBody)(approved, identity);
+        // Gateways up to at least v0.19.0 carry no control identity: their approval endpoint takes
+        // { choice } and resolves whatever is pending for the run (409 when nothing is). Newer
+        // gateways implementing the documented request_id/execution_generation contract receive the
+        // identity-bound body, so a late answer can never settle a newer control there.
+        const body = identity ? (this.options.approvalBody ?? defaultApprovalBody)(approved, identity)
+          : { choice: approved ? 'once' : 'deny' };
         try { await this.request('POST', `/v1/runs/${runId}/approval`, undefined, body); }
         catch (error) {
           // 409 = the control settled or moved to a new generation while the user decided; nothing to deliver.

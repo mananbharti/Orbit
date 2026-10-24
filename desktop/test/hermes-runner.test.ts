@@ -80,14 +80,49 @@ test('an approval event without identity falls back to the run pending_controls'
   assert.deepEqual(f.approvals, [{ request_id: 'prompt-11', execution_generation: 7, choice: 'once' }]);
 });
 
-test('an approval with no identity anywhere is not delivered, and the run goes on', async t => {
+test('an approval with no control identity answers with the plain choice contract (the real v0.19.0 gateway)', async t => {
+  // Verified live against Hermes Agent v0.19.0 (2026-10-24): its approval.request carries
+  // command/description/choices and no prompt_id or execution_generation, its run status has no
+  // pending_controls, and POST /v1/runs/{id}/approval resolves the pending control from { choice }.
+  // Orbit must deliver the user's answer in that shape, or every approval hangs until timeout.
   const f = await fake(t);
-  f.events = [frame('approval.request', { tool: 'write_file' }), frame('run.completed', {})];
-  const { ctx, steps } = context({ requestApproval: async () => true });
+  f.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path',
+    choices: ['once', 'session', 'always', 'deny'] }), frame('run.completed', {})];
+  const asked: string[] = [];
+  const { ctx } = context({ requestApproval: async d => { asked.push(d); return true; } });
   const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
   assert.equal(result, 'Final answer');
-  assert.deepEqual(f.approvals, []); // an identityless POST would only earn a 409
-  assert.ok(steps.some(step => step.includes('no approval identity')));
+  assert.deepEqual(asked, ['delete in root path']);
+  assert.deepEqual(f.approvals, [{ choice: 'once' }]);
+  const denied = context({ requestApproval: async () => false });
+  const g = await fake(t); g.events = f.events;
+  await new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(denied.ctx);
+  assert.deepEqual(g.approvals, [{ choice: 'deny' }]);
+});
+
+test('the real gateway stream format parses: data-only frames, keepalives, event type inside the JSON', async t => {
+  // Recorded shape from a live v0.19.0 gateway: one data: line per event, no event: line,
+  // keepalive comments while idle, ": stream closed" at the end, type in the payload's "event" key.
+  const f = await fake(t);
+  f.events = [': keepalive\n\n',
+    'data: {"event":"tool.started","run_id":"run_abc123","timestamp":1792846435.1,"tool":"terminal","preview":"rm -rf /tmp/orbit-approval-probe"}\n\n',
+    'data: {"event":"tool.completed","run_id":"run_abc123","timestamp":1792846436.2,"tool":"terminal","duration":0.9,"error":false}\n\n',
+    ': stream closed\n\n'];
+  const { ctx, steps } = context();
+  const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
+  assert.equal(result, 'Final answer');
+  assert.deepEqual(steps, ['Using terminal: rm -rf /tmp/orbit-approval-probe', 'Finished terminal']);
+});
+
+test('a failed run surfaces the gateway\'s own error text', async t => {
+  // Recorded from a live gateway with no model provider configured: the status body is
+  // { object: 'hermes.run', run_id, status: 'failed', error: '...', last_event: 'run.failed' }.
+  const f = await fake(t);
+  f.events = [frame('run.failed', {})];
+  f.status = { object: 'hermes.run', run_id: 'run_abc123', status: 'failed',
+    error: 'Parameter validation failed: Invalid length for parameter modelId', last_event: 'run.failed' };
+  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx),
+    /failed: Parameter validation failed: Invalid length for parameter modelId/);
 });
 
 test('a stale approval (HTTP 409) is tolerated: the control already settled', async t => {
