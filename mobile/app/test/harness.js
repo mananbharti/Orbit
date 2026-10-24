@@ -37,6 +37,6 @@ Module._load = function (request, parent, isMain) {
   }
   if (request === 'expo-secure-store') return { getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} };
   if (request === 'react-native-svg') return { __esModule: true, default: stubComponent(), Path: stubComponent(), Circle: stubComponent(), Rect: stubComponent() };
-  if (/(^|[/\\])\.\.[/\\]orbit$/.test(request)) return { friendlyError: e => (e && e.message) || String(e) };
+  if (/(^|[/\\])\.\.[/\\]orbit$/.test(request)) return { friendlyError: e => origLoad.call(this, CORE_DIST, null, false).describeError(e) };
   return origLoad.call(this, request, parent, isMain);
 };

@@ -70,7 +70,10 @@ export class TaskStore {
     const have = this.events.get(taskId) ?? [];
     try {
       const fresh = await this.api.events(taskId, have.at(-1)?.seq ?? 0);
-      if (fresh.length) this.events.set(taskId, [...have, ...fresh]); else if (!this.events.has(taskId)) this.events.set(taskId, have);
+      // Overlapping loads (screen mount + refresh) can fetch the same page twice: never show an event twice.
+      const known = new Set(have.map(e => e.seq));
+      const deduped = fresh.filter(e => !known.has(e.seq));
+      if (deduped.length) this.events.set(taskId, [...have, ...deduped]); else if (!this.events.has(taskId)) this.events.set(taskId, have);
       this.lastError = undefined;
     } catch (error) { this.lastError = describe(error); }
     this.emit();
