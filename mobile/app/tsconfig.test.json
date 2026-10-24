@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": { "@orbit/core": ["../core/src/index.ts"], "zod": ["node_modules/zod"] },
+    "noEmit": false,
+    "outDir": "dist-test",
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "allowJs": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../core/src/**/*.ts"]
+}

@@ -9,7 +9,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "bundle": "expo export --platform android --platform ios --output-dir /tmp/orbit-bundle",
-    "preview": "bash scripts/preview.sh"
+    "preview": "bash scripts/preview.sh",
+    "test": "tsc -p tsconfig.test.json && node --test test/*.test.js"
   },
   "dependencies": {
     "expo": "~54.0.0",

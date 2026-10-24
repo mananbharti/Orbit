@@ -16,6 +16,7 @@ jobs:
           node-version: 24
       - run: npm install --legacy-peer-deps
       - run: npm run typecheck
+      - run: npm test
       - name: Bundle for Android and iOS (catches broken imports and missing packages)
         run: npm run bundle
       - name: Render every screen with mock data (layout check, light and dark)
