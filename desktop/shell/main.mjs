@@ -98,7 +98,8 @@ async function boot() {
     dictationProbe = focusProbeFor(); dictationActivator = focusActivatorFor();
     // Linux/X11 inserts through the same allowlisted paste path as the phone-confirmed flow; its captureFocus only yields a target whose paste binding is known, so the Insert button never appears for an unknown window class.
     dictationInsertion = process.platform === 'linux' ? createDictationInsertion() : undefined;
-    const captureProbe = dictationInsertion ? { current: dictationInsertion.captureFocus } : dictationProbe;
+    // No verified delivery path (Windows typing removed, see type-now) means no captured target, so the preview shows Copy/Dismiss only - never an unverified Insert.
+    const captureProbe = dictationInsertion ? { current: dictationInsertion.captureFocus } : undefined;
     localDictation = new LocalDictation({ ...(captureProbe ? { probe: captureProbe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
       onPreview: dictationPreview, onState: dictationStatePush });
@@ -225,8 +226,9 @@ ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => {
 ipcMain.handle('orbit:dictation-type-now', async () => {
   if (!dictationPending) return { ok: false, reason: 'nothing pending' };
   const { text, target } = dictationPending;
-  if (!target || !dictationProbe || !dictationActivator) return { ok: false, reason: 'no verified window target on this platform' };
-  if (dictationInsertion) {
+  // Insertion is offered only where the delivery path is verified - today that is the X11 paste path. The earlier Windows per-character typing was removed: keystrokes are not safe-by-category in arbitrary apps (command-mode editors, single-key shortcuts, terminal control/newline handling, non-text focused controls) and the wrong-target disclosure risk is independent of paste vs typing. It returns when a delivery path is verified on a real PC.
+  if (!target || !dictationInsertion) return { ok: false, reason: 'no verified window target on this platform' };
+  {
     // X11 paste path: one confirmed action, allowlisted targets only, single-use - the offer is consumed whatever the outcome, and there is no automatic retry after an ambiguous delivery.
     const out = await dictationInsertion.insert(target, text);
     if (out === 'paste-sent') { dictationPending = undefined; return { ok: true, via: 'paste' }; }
@@ -235,14 +237,6 @@ ipcMain.handle('orbit:dictation-type-now', async () => {
     if (out === 'unsupported-target') return { ok: false, reason: 'Orbit does not know how to paste into that window - copy the text instead' };
     return { ok: false, reason: out === 'activation-failed' || out === 'focus-mismatch' ? 'that window is no longer focused - nothing was pasted' : 'the paste keystroke failed - nothing was sent' };
   }
-  // Windows typing path: per-character keystrokes are plain text input, so unlike a Ctrl+V chord they cannot trigger an unrelated action in an arbitrary app - no class allowlist is needed for the side-effect concern. The privacy exposure (text landing in the wrong window) is bounded by the same confirm + activation + per-240-char focus re-checks. Moving Windows to the paste path is a follow-up once paste delivery is verified on a real PC.
-  const { confirmedInsert } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
-  let out;
-  try { out = await confirmedInsert(target, text, dictationProbe, dictationActivator, dictationTypeChunk); }
-  finally { await dictationReleaseDevice(); }
-  if (out === 'typed') { dictationPending = undefined; return { ok: true }; }
-  if (typeof out === 'object' && out.aborted) { dictationPending = { text: out.aborted, target }; return { ok: false, reason: 'the window changed while typing - the untyped part stays here' }; }
-  return { ok: false, reason: out === 'activation-failed' ? 'could not bring that window to the front' : 'that window is no longer focused - nothing was typed' };
 });
 ipcMain.handle('orbit:dictation-finish', async (_e, buffer) => {
   if (!localDictation || localDictation.current !== 'recording') return { ok: false };
@@ -363,10 +357,6 @@ function dictationStatePush(state) {
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
 let dictationDevice; let dictationProbe; let dictationActivator; let dictationInsertion; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; // { text, target } awaiting the user's per-use choice
-async function dictationTypeChunk(chunk) {
-  if (!dictationDevice) { const factory = inputDeviceFactory(); if (!factory) throw new Error('no input adapter on this OS'); dictationDevice = factory(); }
-  await dictationDevice.apply({ t: 'text', text: chunk }, new AbortController().signal);
-}
 async function dictationReleaseDevice() { try { await dictationDevice?.releaseAll(); } catch { /* already released */ } dictationDevice = undefined; }
 // The transcript is never typed automatically: it goes to the preview card, and the user copies it or confirms typing into the captured window.
 function dictationPreview(text, target) {
