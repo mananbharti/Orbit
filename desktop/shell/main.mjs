@@ -89,12 +89,12 @@ async function boot() {
     const attachDictation = paths => { localDictationEngine = new WhisperCpp(paths); new DictationService(registry, localDictationEngine, service.log); };
     const { LocalDictation } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-dictation.js')).href);
     const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
-    const { focusProbeFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
+    const { focusProbeFor, focusActivatorFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
+    dictationProbe = focusProbeFor(); dictationActivator = focusActivatorFor();
     const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-input-device.js')).href);
-    const probe = focusProbeFor();
-    localDictation = new LocalDictation({ ...(probe ? { probe } : {}),
+    localDictation = new LocalDictation({ ...(dictationProbe ? { probe: dictationProbe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
-      typeChunk: dictationTypeChunk, onPreview: dictationPreview, onState: dictationStatePush });
+      onPreview: dictationPreview, onState: dictationStatePush });
     dictationHotkeyApply(dictationHotkeyGet());
     const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log);
     if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
@@ -186,11 +186,23 @@ function knownPath(candidate) {
 
 ipcMain.handle('orbit:state', () => snapshot());
 ipcMain.handle('orbit:dictation-get', () => ({ ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine) }));
-ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator, fallback) => {
-  const cfg = dictationHotkeySave(enabled, accelerator, fallback);
+ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => {
+  const cfg = dictationHotkeySave(enabled, accelerator);
   if (!cfg.enabled && localDictation?.cancel()) dictationWin?.webContents.send('orbit:dictation-capture', 'abort'); // stopping the shortcut stops any recording immediately
   dictationHotkeyApply(cfg);
   return { ok: true, ...cfg };
+});
+ipcMain.handle('orbit:dictation-type-now', async () => {
+  if (!dictationPending) return { ok: false, reason: 'nothing pending' };
+  const { text, target } = dictationPending;
+  if (!target || !dictationProbe || !dictationActivator) return { ok: false, reason: 'no verified window target on this platform' };
+  const { confirmedInsert } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
+  let out;
+  try { out = await confirmedInsert(target, text, dictationProbe, dictationActivator, dictationTypeChunk); }
+  finally { await dictationReleaseDevice(); }
+  if (out === 'typed') { dictationPending = undefined; return { ok: true }; }
+  if (typeof out === 'object' && out.aborted) { dictationPending = { text: out.aborted, target }; return { ok: false, reason: 'the window changed while typing - the untyped part stays here' }; }
+  return { ok: false, reason: out === 'activation-failed' ? 'could not bring that window to the front' : 'that window is no longer focused - nothing was typed' };
 });
 ipcMain.handle('orbit:dictation-finish', async (_e, buffer) => {
   if (!localDictation || localDictation.current !== 'recording') return { ok: false };
@@ -293,11 +305,11 @@ function createWindow() {
 // --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
 const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
 function dictationHotkeyGet() {
-  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', fallback: c.fallback === 'clipboard' ? 'clipboard' : 'preview' }; }
-  catch { return { enabled: false, accelerator: 'Control+Shift+D', fallback: 'preview' }; }
+  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D' }; }
+  catch { return { enabled: false, accelerator: 'Control+Shift+D' }; }
 }
-function dictationHotkeySave(enabled, accelerator, fallback) {
-  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D', fallback: fallback === 'clipboard' ? 'clipboard' : 'preview' };
+function dictationHotkeySave(enabled, accelerator) {
+  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D' };
   writeFileSync(dictationHotkeyPath(), JSON.stringify(cfg), { mode: 0o600 });
   return cfg;
 }
@@ -306,26 +318,18 @@ function dictationStatePush(state) {
   tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
-let dictationDevice; // one input adapter per stop, shared across verified chunks
+let dictationDevice; let dictationProbe; let dictationActivator; let dictationPending; // { text, target } awaiting the user's per-use choice
 async function dictationTypeChunk(chunk) {
   if (!dictationDevice) { const factory = inputDeviceFactory(); if (!factory) throw new Error('no input adapter on this OS'); dictationDevice = factory(); }
   await dictationDevice.apply({ t: 'text', text: chunk }, new AbortController().signal);
 }
 async function dictationReleaseDevice() { try { await dictationDevice?.releaseAll(); } catch { /* already released */ } dictationDevice = undefined; }
-// Preview-first: nothing touches the clipboard unless the user explicitly chose the clipboard fallback.
-function dictationPreview(text, reason) {
-  const midType = reason === 'focus-changed-mid-type';
-  const why = midType ? 'The focused window changed while text was being typed, so typing stopped - part of the text may already have landed there. The rest is below.'
-    : reason === 'focus-changed' ? 'The focused window changed while you spoke, so nothing was typed.'
-    : 'Orbit could not confirm which window to type into, so nothing was typed.';
-  if (dictationHotkeyGet().fallback === 'clipboard') {
-    electronClipboard.writeText(text);
-    if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: why + ' The text is on your clipboard.' }).show();
-  } else {
-    if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: why + ' Open Orbit to copy it.' }).show();
-  }
+// The transcript is never typed automatically: it goes to the preview card, and the user copies it or confirms typing into the captured window.
+function dictationPreview(text, target) {
+  dictationPending = { text, target };
+  if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'Your dictated text is in Orbit. Nothing was typed - copy it, or confirm the window to type it into.' }).show();
   dictationWin?.show();
-  dictationWin?.webContents.send('orbit:dictation-preview', { text, reason });
+  dictationWin?.webContents.send('orbit:dictation-preview', { text, targetLabel: target?.label });
 }
 async function dictationToggleKey() {
   if (!localDictation) return;
@@ -388,7 +392,7 @@ if (process.env.ORBIT_SMOKE_SHOT) {
     const { writeFileSync } = await import('node:fs');
     if (!process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript("document.getElementById('pair').click()");
     if (process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript(`document.querySelector('.nav[data-tab="${process.env.ORBIT_SMOKE_TAB}"]').click()`);
-    if (process.env.ORBIT_SMOKE_DICTATION_PREVIEW) win.webContents.send('orbit:dictation-preview', { text: 'This is where your dictated text appears when Orbit cannot verify the window to type into. Nothing was typed and nothing was copied.', reason: process.env.ORBIT_SMOKE_DICTATION_PREVIEW });
+    if (process.env.ORBIT_SMOKE_DICTATION_PREVIEW) win.webContents.send('orbit:dictation-preview', { text: 'This is where your dictated text appears. Nothing was typed automatically - copy it, or confirm the window to type it into.', targetLabel: process.env.ORBIT_SMOKE_DICTATION_PREVIEW === 'target' ? 'Editor - notes.txt' : undefined });
     await new Promise(r => setTimeout(r, 800));
     writeFileSync(process.env.ORBIT_SMOKE_SHOT, (await win.webContents.capturePage()).toPNG());
     console.log('SMOKE: frame written'); app.exit(0);

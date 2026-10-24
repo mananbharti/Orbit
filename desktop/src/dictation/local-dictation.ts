@@ -1,13 +1,10 @@
-/** Desktop push-to-talk state machine: an explicit toggle (press to start, press again or the cap to stop - never an always-on listener) records one clip, transcribes it with the local engine, and lands the text only where focus identity still matches, chunk by chunk; otherwise it goes to the preview surface. cancel() drops a recording in progress (shortcut disabled, app quitting) and skips any pending insertion. Depends on injected capture/transcribe/insert so every transition is testable without hardware. */
+/** Desktop dictation toggle state machine: an explicit shortcut (press to start, press again or the cap to stop - never an always-on listener) records one clip and transcribes it with the local engine. The transcript is NEVER typed automatically: it always lands on the preview surface with the captured focus target attached, and the user decides per use whether to copy it or confirm typing into that verified window. cancel() drops a recording in progress (shortcut disabled, app quitting). Depends on injected capture/transcribe so every transition is testable without hardware. */
 import type { FocusHandle, FocusProbe } from './local-insert.js';
-import { decideInsertion, typeVerified } from './local-insert.js';
 
-export type PreviewReason = 'focus-changed' | 'focus-unknown' | 'focus-changed-mid-type';
 export interface LocalDictationDeps {
   probe?: FocusProbe;
   transcribe: (pcm: Int16Array) => Promise<string | undefined>; // undefined = no speech / failure
-  typeChunk: (chunk: string) => Promise<void>; // types one chunk into the currently focused window
-  onPreview: (text: string, reason: PreviewReason) => void;
+  onPreview: (text: string, target?: FocusHandle) => void; // the only exit for transcript text
   onState?: (state: LocalDictationState) => void;
 }
 export type LocalDictationState = 'idle' | 'recording' | 'working';
@@ -35,18 +32,12 @@ export class LocalDictation {
     const text = await this.deps.transcribe(pcm).catch(() => undefined);
     pcm.fill(0);
     if (!text || this.cancelled) { this.cancelled = false; this.set('idle'); return 'stopped'; }
-    const endFocus = await this.deps.probe?.current();
-    const decision = decideInsertion(this.startFocus, endFocus);
-    if (decision.action === 'type' && this.startFocus && this.deps.probe) {
-      const outcome = await typeVerified(text, this.startFocus, this.deps.probe, this.deps.typeChunk);
-      if (outcome.action === 'aborted') this.deps.onPreview(outcome.remaining, 'focus-changed-mid-type');
-      else if (outcome.action === 'preview') this.deps.onPreview(text, outcome.reason);
-    } else if (decision.action === 'preview') this.deps.onPreview(text, decision.reason);
+    this.deps.onPreview(text, this.startFocus);
     this.set('idle');
     return 'stopped';
   }
 
-  /** Drops a recording in progress and suppresses any insertion from a transcription already running (shortcut disabled or app quitting). Returns true when something was cancelled. */
+  /** Drops a recording in progress and suppresses the preview from a transcription already running (shortcut disabled or app quitting). Returns true when something was cancelled. */
   cancel(): boolean {
     if (this.state === 'idle') return false;
     this.cancelled = true;

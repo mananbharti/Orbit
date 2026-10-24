@@ -197,3 +197,5 @@ progress.fail::-webkit-progress-value { background: var(--bad); }
 #dictation-preview-card { display: none; margin: 12px 24px 0; }
 #dictation-preview-card.on { display: block; }
 #dictation-preview-text { white-space: pre-wrap; }
+#dictation-preview-type { display: none; }
+#dictation-preview-type.on { display: inline-block; }

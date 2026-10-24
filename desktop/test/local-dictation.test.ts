@@ -1,119 +1,97 @@
-/** Desktop push-to-talk: the toggle state machine and the fail-closed insertion rule (window identity, never title); depends on fakes only; performs no OS calls. */
+/** Desktop dictation toggle: the state machine, window identity capture, verified-target parsing, and the confirmed-insertion path (activate, re-verify, then bounded typing); depends on fakes only; performs no OS calls. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideInsertion, typeVerified, windowsFocusProbe, x11FocusProbe, focusProbeFor } from '../src/dictation/local-insert.js';
+import { typeVerified, confirmedInsert, windowsFocusProbe, x11FocusProbe, focusProbeFor, focusActivatorFor } from '../src/dictation/local-insert.js';
 import { LocalDictation } from '../src/dictation/local-dictation.js';
 
 const clip = () => new Int16Array(16000).fill(100);
 
-test('insertion rule: same window id+pid types, any mismatch or unknown focus previews', () => {
-  assert.deepEqual(decideInsertion({ id: '10', pid: 4 }, { id: '10', pid: 4 }), { action: 'type' });
-  assert.deepEqual(decideInsertion({ id: '10', pid: 4 }, { id: '11', pid: 4 }), { action: 'preview', reason: 'focus-changed' });
-  assert.deepEqual(decideInsertion({ id: '10', pid: 4 }, { id: '10', pid: 9 }), { action: 'preview', reason: 'focus-changed' });
-  assert.deepEqual(decideInsertion(undefined, { id: '10', pid: 4 }), { action: 'preview', reason: 'focus-unknown' });
-  assert.deepEqual(decideInsertion({ id: '10', pid: 4 }, undefined), { action: 'preview', reason: 'focus-unknown' });
-});
-
-test('windows probe parses handle+pid and rejects a null window', async () => {
-  const probe = windowsFocusProbe(async () => ' 49680 4232\r\n');
-  assert.deepEqual(await probe.current(), { id: '49680', pid: 4232 });
+test('windows probe parses handle+pid+label and rejects a null window', async () => {
+  const probe = windowsFocusProbe(async () => ' 49680 4232 notepad\r\n');
+  assert.deepEqual(await probe.current(), { id: '49680', pid: 4232, label: 'notepad' });
   const none = windowsFocusProbe(async () => '0 0');
   assert.equal(await none.current(), undefined);
   const boom = windowsFocusProbe(async () => { throw new Error('no powershell'); });
   assert.equal(await boom.current(), undefined);
 });
 
-test('x11 probe reads window id + pid; wayland gets no probe and fails closed', async () => {
-  const probe = x11FocusProbe(async (_c, args) => (args[0] === 'getactivewindow' ? ' 12345\n' : ' 777\n'));
-  assert.deepEqual(await probe.current(), { id: '12345', pid: 777 });
+test('x11 probe reads window id + pid + title; wayland and macOS get no probe and no activator', async () => {
+  const probe = x11FocusProbe(async (_c, args) => (args[0] === 'getactivewindow' ? ' 12345\n' : args[0] === 'getwindowpid' ? ' 777\n' : ' Editor - notes.txt\n'));
+  assert.deepEqual(await probe.current(), { id: '12345', pid: 777, label: 'Editor - notes.txt' });
   assert.equal(focusProbeFor('linux', 'wayland'), undefined);
+  assert.equal(focusActivatorFor('linux', 'wayland'), undefined);
   assert.equal(focusProbeFor('darwin', undefined), undefined);
   assert.ok(focusProbeFor('win32'));
+  assert.ok(focusActivatorFor('win32'));
 });
 
-test('toggle: start captures focus, stop transcribes and types only into the same window', async () => {
-  const typed: string[] = []; const states: string[] = [];
-  const d = new LocalDictation({ probe: { current: async () => ({ id: '5', pid: 1 }) }, transcribe: async () => 'hello orbit',
-    typeChunk: async t => { typed.push(t); }, onPreview: () => { throw new Error('must not preview'); }, onState: s => states.push(s) });
+test('toggle: transcript always goes to preview with the captured target; nothing is ever typed by the machine', async () => {
+  const previews: { text: string; target?: unknown }[] = []; const states: string[] = [];
+  const d = new LocalDictation({ probe: { current: async () => ({ id: '5', pid: 1, label: 'Editor' }) }, transcribe: async () => 'hello orbit',
+    onPreview: (t, target) => previews.push({ text: t, target }), onState: s => states.push(s) });
   assert.equal(await d.toggle(async () => clip()), 'started');
   assert.equal(d.current, 'recording');
   assert.equal(await d.toggle(async () => clip()), 'stopped');
-  assert.deepEqual(typed, ['hello orbit']);
+  assert.deepEqual(previews, [{ text: 'hello orbit', target: { id: '5', pid: 1, label: 'Editor' } }]);
   assert.deepEqual(states, ['recording', 'working', 'idle']);
 });
 
-test('focus change mid-dictation fails closed to preview with the text preserved', async () => {
-  const previews: { text: string; reason: string }[] = [];
-  let focus = { id: '5', pid: 1 };
-  const d = new LocalDictation({ probe: { current: async () => focus }, transcribe: async () => 'secret draft',
-    typeChunk: async () => { throw new Error('must never type into the wrong window'); }, onPreview: (t, r) => previews.push({ text: t, reason: r }) });
+test('toggle without a probe (wayland/macOS) still previews, with no target to confirm into', async () => {
+  const previews: { text: string; target?: unknown }[] = [];
+  const d = new LocalDictation({ probe: undefined, transcribe: async () => 'text', onPreview: (t, target) => previews.push({ text: t, target }) });
   await d.toggle(async () => clip());
-  focus = { id: '6', pid: 1 }; // user alt-tabbed while speaking
   await d.toggle(async () => clip());
-  assert.deepEqual(previews, [{ text: 'secret draft', reason: 'focus-changed' }]);
+  assert.deepEqual(previews, [{ text: 'text', target: undefined }]);
 });
 
-test('no probe (wayland) means every dictation lands in preview, never typed blind', async () => {
-  const previews: string[] = [];
-  const d = new LocalDictation({ probe: undefined, transcribe: async () => 'text',
-    typeChunk: async () => { throw new Error('must not type'); }, onPreview: t => previews.push(t) });
-  await d.toggle(async () => clip());
-  await d.toggle(async () => clip());
-  assert.deepEqual(previews, ['text']);
-});
-
-test('silence and engine failure stop cleanly without typing; working state ignores re-entry', async () => {
-  let typed = 0;
-  const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => undefined,
-    typeChunk: async () => { typed++; }, onPreview: () => undefined });
+test('silence and engine failure stop cleanly without previewing; working state ignores re-entry', async () => {
+  let previewed = 0;
+  const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => undefined, onPreview: () => { previewed++; } });
   await d.toggle(async () => clip());
   assert.equal(await d.toggle(async () => clip()), 'stopped');
-  assert.equal(typed, 0);
+  assert.equal(previewed, 0);
   assert.equal(d.current, 'idle');
 });
 
-test('verified typing: probe re-checked before every chunk; mid-type focus change bounds the leak and previews the remainder', async () => {
-  const typed: string[] = []; const previews: { text: string; reason: string }[] = [];
-  let focus = { id: '5', pid: 1 }; let probes = 0;
-  const probe = { current: async () => { probes++; return focus; } };
-  const long = 'x'.repeat(500); // 3 chunks at 240
-  const d = new LocalDictation({ probe, transcribe: async () => long,
-    typeChunk: async c => { typed.push(c); if (typed.length === 2) focus = { id: '6', pid: 1 }; }, // focus flips while chunk 2 lands
-    onPreview: (t, r) => previews.push({ text: t, reason: r }) });
-  await d.toggle(async () => clip());
-  await d.toggle(async () => clip());
-  assert.equal(typed.length, 2); // only the chunks before the flip were typed
-  assert.deepEqual(previews, [{ text: 'x'.repeat(500 - 480), reason: 'focus-changed-mid-type' }]);
-  assert.ok(probes >= 4); // start, end, and per-chunk re-checks
-});
-
-test('typeVerified: first-chunk mismatch types nothing at all', async () => {
-  const typed: string[] = [];
-  const out = await typeVerified('hello', { id: '1', pid: 1 }, { current: async () => ({ id: '2', pid: 1 }) }, async c => { typed.push(c); });
-  assert.deepEqual(out, { action: 'preview', reason: 'focus-changed' });
-  assert.deepEqual(typed, []);
-  const typed2: string[] = [];
-  const ok = await typeVerified('hello', { id: '1', pid: 1 }, { current: async () => ({ id: '1', pid: 1 }) }, async c => { typed2.push(c); });
-  assert.deepEqual(ok, { action: 'typed' });
-  assert.deepEqual(typed2, ['hello']);
-});
-
-test('cancel while recording drops the capture; cancel while working skips insertion', async () => {
-  let typed = 0; let previewed = 0;
-  const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => 'text',
-    typeChunk: async () => { typed++; }, onPreview: () => { previewed++; } });
+test('cancel while recording drops the capture; cancel while working suppresses the preview', async () => {
+  let previewed = 0;
+  const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => 'text', onPreview: () => { previewed++; } });
   await d.toggle(async () => clip());
   assert.equal(d.current, 'recording');
   assert.equal(d.cancel(), true);
   assert.equal(d.current, 'idle');
-  // cancel during working: transcription already in flight must not type
   await d.toggle(async () => clip());
   const stop = d.toggle(async () => clip());
   assert.equal(d.current, 'working');
   assert.equal(d.cancel(), true);
   await stop;
-  assert.equal(typed, 0);
   assert.equal(previewed, 0);
   assert.equal(d.current, 'idle');
-  assert.equal(d.cancel(), false); // nothing left to cancel
+  assert.equal(d.cancel(), false);
+});
+
+test('typeVerified bounds a mid-type focus flip to the chunks already sent and returns the rest', async () => {
+  const typed: string[] = [];
+  let focus = { id: '5', pid: 1 };
+  const probe = { current: async () => focus };
+  const out = await typeVerified('x'.repeat(500), { id: '5', pid: 1 }, probe, async c => { typed.push(c); if (typed.length === 2) focus = { id: '6', pid: 1 }; });
+  assert.equal(typed.length, 2);
+  assert.deepEqual(out, { action: 'aborted', remaining: 'x'.repeat(20) });
+  const no = await typeVerified('hello', { id: '1', pid: 1 }, { current: async () => ({ id: '2', pid: 1 }) }, async () => { throw new Error('must not type'); });
+  assert.deepEqual(no, { action: 'preview', reason: 'focus-changed' });
+});
+
+test('confirmedInsert: activation then identity re-verification gate every keystroke; failures never type', async () => {
+  const handle = { id: '9', pid: 3, label: 'Editor' };
+  // happy path: activation succeeds and the same window holds focus
+  const typedOk: string[] = [];
+  const ok = await confirmedInsert(handle, 'hello', { current: async () => ({ id: '9', pid: 3 }) }, { activate: async () => true }, async c => { typedOk.push(c); });
+  assert.equal(ok, 'typed');
+  assert.deepEqual(typedOk, ['hello']);
+  // activation failed: nothing typed
+  const noAct = await confirmedInsert(handle, 'hello', { current: async () => ({ id: '9', pid: 3 }) }, { activate: async () => false }, async () => { throw new Error('must not type'); });
+  assert.equal(noAct, 'activation-failed');
+  // activation "worked" but a different window holds focus now: nothing typed
+  const wrong = await confirmedInsert(handle, 'hello', { current: async () => ({ id: '10', pid: 3 }) }, { activate: async () => true }, async () => { throw new Error('must not type'); });
+  assert.equal(wrong, 'focus-mismatch');
 });

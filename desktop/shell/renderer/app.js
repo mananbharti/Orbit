@@ -260,24 +260,28 @@ if (api.onDictationState) api.onDictationState(st => {
 });
 if (api.onDictationPreview) api.onDictationPreview(payload => {
   const card = $('dictation-preview-card'); if (!card) return;
-  $('dictation-preview-why').textContent = payload.reason === 'focus-changed-mid-type' ? 'The window changed while typing, so typing stopped. Part of this may already have been typed; the rest is here.'
-    : payload.reason === 'focus-changed' ? 'The window changed while you spoke, so nothing was typed.'
-    : 'Orbit could not confirm which window to type into, so nothing was typed.';
+  $('dictation-preview-why').textContent = 'Nothing was typed. Copy the text, or confirm the window to type it into.';
   $('dictation-preview-text').textContent = payload.text;
+  const typeBtn = $('dictation-preview-type');
+  if (typeBtn) { if (payload.targetLabel) { typeBtn.textContent = 'Type into ' + payload.targetLabel; typeBtn.classList.add('on'); } else { typeBtn.classList.remove('on'); } }
   card.classList.add('on');
 });
+if ($('dictation-preview-type')) $('dictation-preview-type').onclick = async () => {
+  const r = await api.dictationTypeNow();
+  if (r.ok) { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; toast('Typed into the window'); }
+  else toast(r.reason || 'Could not type into that window');
+};
 if ($('dictation-preview-copy')) $('dictation-preview-copy').onclick = async () => { await navigator.clipboard.writeText($('dictation-preview-text').textContent); toast('Copied'); };
 if ($('dictation-preview-dismiss')) $('dictation-preview-dismiss').onclick = () => { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; };
 if (api.dictationGet) void (async () => {
   const cfg = await api.dictationGet();
   if ($('dictation-enable')) $('dictation-enable').checked = cfg.enabled;
   if ($('dictation-key')) $('dictation-key').value = cfg.accelerator;
-  if ($('dictation-fallback')) $('dictation-fallback').value = cfg.fallback || 'preview';
   dicKey = cfg.accelerator || 'the shortcut';
   dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
-    const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim(), $('dictation-fallback') ? $('dictation-fallback').value : 'preview');
+    const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
     if (r.ok) dicKey = $('dictation-key').value.trim() || dicKey;
     toast(r.ok ? 'Dictation hotkey saved' : 'Could not save the hotkey');
   };
