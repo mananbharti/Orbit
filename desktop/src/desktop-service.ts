@@ -153,7 +153,9 @@ export async function startDesktop(options: { directory: string; host: string; p
       launchScene: sceneId => launcher!.launchSceneLocal(sceneId),
       launchApp: appId => launcher!.launchLocal(appId),
       power: action => system ? system.powerLocal(action) : Promise.reject(new Error('SYSTEM_UNAVAILABLE')),
-    }, log);
+    }, log, () => new Date(),
+      options.biometric ? (action, context) => options.biometric!.verify(
+        { version: 1, type: 'system.power', requestId: context.requestId, payload: { action } }, context) : undefined);
     automations.start();
     extensionServer = new ExtensionServer(directory, options.onExtensionConnection);
     await extensionServer.start();

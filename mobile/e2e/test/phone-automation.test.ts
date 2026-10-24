@@ -26,7 +26,8 @@ async function phoneOn(t: TestContext, service: Awaited<ReturnType<typeof startD
 test('a phone manages the full automation lifecycle and it survives a restart', async t => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-phone-auto-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true } });
   const api = await phoneOn(t, service);
 
   const created = await api.save({ time: '07:30', days: [1, 2, 3], action: { type: 'power', action: 'lock' } });
@@ -46,7 +47,8 @@ test('a phone manages the full automation lifecycle and it survives a restart', 
   assert.deepEqual((await api.refresh()).map(a => a.id), [entry.id]);
 
   await service.stop();
-  const restarted = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  const restarted = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true } });
   t.after(async () => restarted.stop());
   const api2 = await phoneOn(t, restarted);
   const persisted = await api2.refresh();
@@ -59,7 +61,8 @@ test('a phone manages the full automation lifecycle and it survives a restart', 
 test('a scope-limited phone cannot manage automations', async t => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-phone-auto-scope-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true } });
   t.after(async () => service.stop());
   const api = await phoneOn(t, service, ['clipboard']);
   await assert.rejects(api.refresh(), (e: CommandError) => typeof e.code === 'string');
@@ -69,7 +72,8 @@ test('a scope-limited phone cannot manage automations', async t => {
 test('the desktop rejects invalid schedules at the protocol boundary', async t => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-phone-auto-invalid-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true } });
   t.after(async () => service.stop());
   const api = await phoneOn(t, service);
   await assert.rejects(api.save({ time: '25:00', days: [], action: { type: 'power', action: 'lock' } }), (e: CommandError) => e.code === 'INVALID_PAYLOAD');
@@ -79,7 +83,8 @@ test('the desktop rejects invalid schedules at the protocol boundary', async t =
 
 test('two phones share one schedule list, and a phone that is removed does not take its automations with it', async t => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-phone-auto-two-'));
-  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false });
+  const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true } });
   t.after(async () => { await service.stop(); rmSync(root, { recursive: true, force: true }); });
   const add = async () => {
     const transport = new NodePinnedTransport(new Map());

@@ -81,6 +81,32 @@ test('automation tick with empty days fires every day and a failing action is ma
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('a scheduled power action needs desktop-owner confirmation at creation (execution is unattended)', async () => {
+  // No confirm hook at all: denied.
+  const a = setup();
+  new AutomationService(a.registry, a.store, executor(a.fired), new ActivityLog());
+  await assert.rejects(a.registry.get('automation.save')!.execute({ time: '09:30', days: [], action: { type: 'power', action: 'lock' } }, context()),
+    (e: ProtocolError) => e.code === 'BIOMETRIC_REQUIRED');
+  rmSync(a.dir, { recursive: true, force: true });
+  // Owner declines: denied, nothing stored.
+  const b = setup();
+  new AutomationService(b.registry, b.store, executor(b.fired), new ActivityLog(), () => new Date(), async () => false);
+  await assert.rejects(b.registry.get('automation.save')!.execute({ time: '09:30', days: [], action: { type: 'power', action: 'lock' } }, context()),
+    (e: ProtocolError) => e.code === 'BIOMETRIC_REQUIRED');
+  assert.equal(b.store.list().length, 0);
+  rmSync(b.dir, { recursive: true, force: true });
+  // Owner confirms: saved; app/scene automations never need the power confirmation.
+  const c = setup();
+  let asked = 0;
+  new AutomationService(c.registry, c.store, executor(c.fired), new ActivityLog(), () => new Date(), async () => { asked++; return true; });
+  const saved = await c.registry.get('automation.save')!.execute({ time: '09:30', days: [], action: { type: 'power', action: 'lock' } }, context()) as { automations: unknown[] };
+  assert.equal(saved.automations.length, 1);
+  assert.equal(asked, 1);
+  await c.registry.get('automation.save')!.execute({ time: '10:00', days: [], action: { type: 'app', appId: 'com.example' } }, context());
+  assert.equal(asked, 1, 'non-power automations do not prompt');
+  rmSync(c.dir, { recursive: true, force: true });
+});
+
 test('automation commands validate, authorize, and translate store errors', async () => {
   const { registry, store, dir, fired } = setup();
   new AutomationService(registry, store, executor(fired), new ActivityLog());

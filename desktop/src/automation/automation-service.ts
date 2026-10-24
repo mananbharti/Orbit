@@ -21,15 +21,24 @@ export class AutomationService {
   private timer?: NodeJS.Timeout;
   private running = false;
 
+  /** Desktop-owner confirmation, required before a paired device may create a scheduled power action (execution is unattended, so consent happens at creation). */
+  private readonly confirmPower?: (action: 'sleep' | 'lock', context: CommandContext) => Promise<boolean>;
+
   constructor(registry: CommandRegistry, private readonly store: AutomationStore, private readonly executor: AutomationExecutor,
-    private readonly log: ActivityLog, private readonly now: () => Date = () => new Date()) {
+    private readonly log: ActivityLog, private readonly now: () => Date = () => new Date(),
+    confirmPower?: (action: 'sleep' | 'lock', context: CommandContext) => Promise<boolean>) {
+    this.confirmPower = confirmPower;
     this.unregister = [
       registry.register('automation.list', { validate: p => p === null || (typeof p === 'object' && Object.keys(p).length === 0),
         execute: async (_p, context) => { this.authorize(context); return { automations: this.store.list() }; } }),
       registry.register('automation.save', { validate: p => saveAutomationSchema.safeParse(p).success,
         execute: async (p, context) => {
           this.authorize(context);
-          try { return { automations: this.store.save(saveAutomationSchema.parse(p)) }; }
+          const parsed = saveAutomationSchema.parse(p);
+          // A scheduled power action fires unattended: it must not bypass the desktop-owner gate that direct system.power has. Creation needs explicit owner confirmation.
+          if (parsed.action.type === 'power' && (!this.confirmPower || !await this.confirmPower(parsed.action.action, context)))
+            throw new ProtocolError('BIOMETRIC_REQUIRED');
+          try { return { automations: this.store.save(parsed) }; }
           catch (error) { throw toProtocol(error); }
         } }),
       registry.register('automation.enable', { validate: p => setAutomationEnabledSchema.safeParse(p).success,

@@ -18,6 +18,7 @@ test('a saved automation actually fires at its minute and launches the app exact
   const root = mkdtempSync(join(tmpdir(), 'orbit-auto-fire-'));
   const launches: string[] = [];
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true }, // fixture stands in for the desktop owner's confirmation
     launcher: { createAdapter: () => ({
       list: async () => [{ key: 'registration', name: 'Notes', revision: 'one' }],
       launch: async (app, authorize) => { authorize(); launches.push(app.key); } }) } });
@@ -54,6 +55,7 @@ test('a scene automation fires every app in the scene exactly once', { timeout: 
   const root = mkdtempSync(join(tmpdir(), 'orbit-auto-scene-'));
   const launches: string[] = [];
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true }, // fixture stands in for the desktop owner's confirmation
     launcher: { createAdapter: () => ({
       list: async () => [{ key: 'registration', name: 'Notes', revision: 'one' }, { key: 'registration-2', name: 'Browser', revision: 'one' }],
       launch: async (app, authorize) => { authorize(); launches.push(app.key); } }) } });
@@ -92,6 +94,7 @@ test('a power automation fires on the real clock and reaches the system adapter 
   const root = mkdtempSync(join(tmpdir(), 'orbit-auto-power-'));
   const powered: string[] = [];
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true }, // fixture stands in for the desktop owner's confirmation
     system: { createAdapter: () => ({
       power: async (action) => { powered.push(action); },
       getVolume: async () => ({ level: 50, muted: false }),
@@ -131,6 +134,7 @@ test('at the same minute only the enabled, day-matching automation fires; a disa
   const root = mkdtempSync(join(tmpdir(), 'orbit-auto-select-'));
   const launches: string[] = [];
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => true }, // fixture stands in for the desktop owner's confirmation
     launcher: { createAdapter: () => ({
       list: async () => [{ key: 'registration', name: 'Notes', revision: 'one' }],
       launch: async (app, authorize) => { authorize(); launches.push(app.key); } }) } });
