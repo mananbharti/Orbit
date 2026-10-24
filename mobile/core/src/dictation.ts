@@ -45,6 +45,13 @@ export class DictationApi {
     return parsed.data;
   }
 
+  /** Cancels an in-flight engine download on the computer. Returns the new state. */
+  async cancelSetup(): Promise<DictationSetupState> {
+    const parsed = dictationSetupStateSchema.safeParse(await this.session.command('dictation.setup.cancel', {}));
+    if (!parsed.success) throw new InvalidDesktopReply();
+    return parsed.data;
+  }
+
   /** Asks the computer to retry a failed engine download now (manual retries ignore the 24h automatic backoff). Returns the new state. */
   async retrySetup(): Promise<DictationSetupState> {
     const parsed = dictationSetupStateSchema.safeParse(await this.session.command('dictation.retry', {}));

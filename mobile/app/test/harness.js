@@ -17,6 +17,9 @@ Module._load = function (request, parent, isMain) {
   if (request === '@orbit/core') return origLoad.call(this, CORE_DIST, parent, isMain);
   if (request === 'expo-haptics') return { selectionAsync: async () => {}, notificationAsync: async () => {}, impactAsync: async () => {},
     NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' }, ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' } };
+  if (request === 'expo-audio') return { AudioQuality: { HIGH: 'high' }, IOSOutputFormat: { LINEARPCM: 'lpcm' }, requestRecordingPermissionsAsync: async () => ({ granted: true }),
+    setAudioModeAsync: async () => {}, useAudioRecorder: () => ({ prepareToRecordAsync: async () => {}, record: () => {}, stop: async () => {}, uri: null }) };
+  if (request === 'expo-file-system') return { File: class {} };
   if (request === 'expo-secure-store') return { getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} };
   if (request === 'react-native-svg') return { __esModule: true, default: stubComponent(), Path: stubComponent(), Circle: stubComponent(), Rect: stubComponent() };
   if (/(^|[/\\])\.\.[/\\]orbit$/.test(request)) return { friendlyError: e => (e && e.message) || String(e) };
