@@ -1,6 +1,7 @@
 // Orbit Desktop shell: a tray + window around the existing service. Depends on Electron and the compiled service in ../dist.
 // Runs the service in-process, shows a pairing QR only when the user asks, and never exposes the service to the page except through preload.
-import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, shell } from 'electron';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, safeStorage, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
 import QRCode from 'qrcode';
@@ -85,7 +86,16 @@ async function boot() {
     const { DictationSetup } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
     const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
     const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
-    const attachDictation = paths => { new DictationService(registry, new WhisperCpp(paths), service.log); };
+    const attachDictation = paths => { localDictationEngine = new WhisperCpp(paths); new DictationService(registry, localDictationEngine, service.log); };
+    const { LocalDictation } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-dictation.js')).href);
+    const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
+    const { focusProbeFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
+    const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-input-device.js')).href);
+    const probe = focusProbeFor();
+    localDictation = new LocalDictation({ ...(probe ? { probe } : {}),
+      transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
+      typeText: dictationType, onPreview: dictationPreview, onState: dictationStatePush });
+    dictationHotkeyApply(dictationHotkeyGet());
     const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log);
     if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
       try { attachDictation({ binary: process.env.ORBIT_WHISPER_BIN, model: process.env.ORBIT_WHISPER_MODEL }); dictationSetup.markReady(); }
@@ -175,6 +185,15 @@ function knownPath(candidate) {
 }
 
 ipcMain.handle('orbit:state', () => snapshot());
+ipcMain.handle('orbit:dictation-get', () => ({ ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine) }));
+ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => { const cfg = dictationHotkeySave(enabled, accelerator); dictationHotkeyApply(cfg); return { ok: true, ...cfg }; });
+ipcMain.handle('orbit:dictation-finish', async (_e, buffer) => {
+  if (!localDictation || localDictation.current !== 'recording') return { ok: false };
+  // An empty or malformed clip still completes the toggle so the state machine returns to idle.
+  const pcm = buffer instanceof ArrayBuffer && buffer.byteLength > 0 && buffer.byteLength % 2 === 0 ? new Int16Array(buffer.slice(0)) : undefined;
+  await localDictation.toggle(async () => pcm);
+  return { ok: true };
+});
 ipcMain.handle('orbit:pair', async () => {
   if (!service) return { error: 'Orbit is not running yet.' };
   const payload = service.pairing.open();
@@ -266,6 +285,50 @@ function createWindow() {
   win.on('close', e => { if (!quitting) { e.preventDefault(); win.hide(); } }); // keep serving from the tray
 }
 
+// --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
+const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
+function dictationHotkeyGet() {
+  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D' }; }
+  catch { return { enabled: false, accelerator: 'Control+Shift+D' }; }
+}
+function dictationHotkeySave(enabled, accelerator) {
+  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D' };
+  writeFileSync(dictationHotkeyPath(), JSON.stringify(cfg), { mode: 0o600 });
+  return cfg;
+}
+let localDictation; let localDictationEngine; let dictationWin;
+function dictationStatePush(state) {
+  tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
+  dictationWin?.webContents.send('orbit:dictation-state', state);
+}
+async function dictationType(text) {
+  const factory = inputDeviceFactory();
+  if (!factory) throw new Error('no input adapter on this OS');
+  const device = factory();
+  await device.apply({ t: 'text', text }, new AbortController().signal);
+  await device.releaseAll();
+}
+function dictationPreview(text, reason) {
+  electronClipboard.writeText(text);
+  if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: (reason === 'focus-changed' ? 'The focused window changed while you spoke, so nothing was typed. The text is on your clipboard.' : 'Orbit could not confirm which window to type into, so nothing was typed. The text is on your clipboard.') + '\n\n' + text.slice(0, 180) }).show();
+}
+async function dictationToggleKey() {
+  if (!localDictation) return;
+  if (localDictation.current === 'idle') {
+    if (!localDictationEngine) { if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'The dictation engine is still setting up. Try again in a minute.' }).show(); return; }
+    await localDictation.toggle(async () => undefined); // start: capture runs in the renderer
+    dictationWin?.webContents.send('orbit:dictation-capture', 'start');
+  } else {
+    dictationWin?.webContents.send('orbit:dictation-capture', 'stop');
+  }
+}
+function dictationHotkeyApply(cfg) {
+  globalShortcut.unregisterAll();
+  if (!cfg.enabled) return;
+  try {
+    if (!globalShortcut.register(cfg.accelerator, () => { void dictationToggleKey(); })) throw new Error('accelerator unavailable');
+  } catch (e) { console.error('DICTATION: hotkey registration failed -', String(e?.message ?? e)); }
+}
 function createTray() {
   tray = new Tray(nativeImage.createFromPath(join(here, '..', 'build', 'tray.png')));
   tray.setToolTip('Orbit');
@@ -278,7 +341,7 @@ function createTray() {
 
 app.on('second-instance', () => { win?.show(); win?.focus(); });
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', e => { if (service) { e.preventDefault(); const s = service; service = undefined; console.log('QUIT: stopping'); s.stop().then(() => console.log('QUIT: stopped'), er => console.log('QUIT: stop err ' + er)).finally(() => app.exit(0)); } });
+app.on('will-quit', e => { globalShortcut.unregisterAll(); if (service) { e.preventDefault(); const s = service; service = undefined; console.log('QUIT: stopping'); s.stop().then(() => console.log('QUIT: stopped'), er => console.log('QUIT: stop err ' + er)).finally(() => app.exit(0)); } });
 nativeTheme.on('updated', push);
 setInterval(push, 2000);
 
@@ -300,6 +363,7 @@ if (process.env.ORBIT_DARK) nativeTheme.themeSource = 'dark';
 if (gotLock) app.whenReady().then(async () => {
 await boot();
 createWindow();
+dictationWin = win;
 createTray();
 // Used by CI to smoke-test the packaged window: renders one frame to a PNG and exits.
 if (process.env.ORBIT_QUIT_TEST) { setTimeout(() => { console.log('QUIT: calling app.quit()'); app.quit(); }, 3000); }

@@ -194,3 +194,54 @@ $('agent-test').onclick = async () => {
     : (r.error || 'Could not test the connection.'));
 };
 api.state().then(render); api.onState(render);
+
+// --- Dictation hotkey: capture runs here (mic lives in the renderer); the main process owns the toggle, transcription and insertion. ---
+let dicStream, dicCtx, dicNode, dicChunks = [], dicCapTimer;
+function dictationStatus(text) { const el = $('dictation-status'); if (el) el.textContent = text; }
+async function dictationStartCapture() {
+  try {
+    dicChunks = [];
+    dicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    dicCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = dicCtx.createMediaStreamSource(dicStream);
+    dicNode = dicCtx.createScriptProcessor(4096, 1, 1);
+    const ratio = dicCtx.sampleRate / 16000;
+    let pos = 0; // fractional read cursor, carried across buffers so phase stays correct
+    dicNode.onaudioprocess = e => {
+      const input = e.inputBuffer.getChannelData(0);
+      const out = [];
+      while (pos + 1 <= input.length) { out.push(input[Math.floor(pos)]); pos += ratio; }
+      pos -= input.length;
+      const pcm = new Int16Array(out.length);
+      for (let i = 0; i < out.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(out[i] * 32767)));
+      dicChunks.push(pcm);
+    };
+    src.connect(dicNode); dicNode.connect(dicCtx.destination);
+    dictationStatus('Recording... press the shortcut again to stop');
+    dicCapTimer = setTimeout(() => dictationStopCapture(), 60000);
+  } catch (e) { dictationStatus('Microphone unavailable: ' + (e && e.message ? e.message : e)); }
+}
+async function dictationStopCapture() {
+  clearTimeout(dicCapTimer);
+  try { dicNode && dicNode.disconnect(); dicCtx && await dicCtx.close(); dicStream && dicStream.getTracks().forEach(t => t.stop()); } catch { /* already stopped */ }
+  dicNode = undefined; dicCtx = undefined; dicStream = undefined;
+  const total = dicChunks.reduce((n, c) => n + c.length, 0);
+  const pcm = new Int16Array(total); let off = 0;
+  for (const c of dicChunks) { pcm.set(c, off); off += c.length; }
+  dicChunks = [];
+  dictationStatus('Transcribing...');
+  await api.dictationFinish(pcm.buffer);
+}
+if (api.onDictationCapture) api.onDictationCapture(action => { if (action === 'start') void dictationStartCapture(); else void dictationStopCapture(); });
+if (api.onDictationState) api.onDictationState(st => { if (st === 'idle') dictationStatus('Dictation engine: ready'); if (st === 'working') dictationStatus('Transcribing...'); });
+if (api.dictationGet) void (async () => {
+  const cfg = await api.dictationGet();
+  if ($('dictation-enable')) $('dictation-enable').checked = cfg.enabled;
+  if ($('dictation-key')) $('dictation-key').value = cfg.accelerator;
+  dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
+  const save = $('dictation-save');
+  if (save) save.onclick = async () => {
+    const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
+    toast(r.ok ? 'Dictation hotkey saved' : 'Could not save the hotkey');
+  };
+})();
