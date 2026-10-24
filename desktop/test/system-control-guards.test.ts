@@ -121,12 +121,36 @@ function mediaFixture(opts: { withDevice?: boolean; applyError?: Error } = {}) {
   };
   const createInputDevice = opts.withDevice === false ? undefined : () => {
     created++;
-    return { apply: async (event: { t: string; key?: string }) => { if (opts.applyError) throw opts.applyError; keys.push(String(event.key)); }, releaseAll: async () => {} } as never;
+    return { open: async () => {}, apply: async (event: { t: string; key?: string }) => { if (opts.applyError) throw opts.applyError; keys.push(String(event.key)); }, releaseAll: async () => {} } as never;
   };
   new SystemControl(registry, () => adapter, log, createInputDevice);
   const run = (type: string, payload: object, ctx = context()) => registry.get(type)!.execute(payload as never, ctx);
   return { log, keys, run, created: () => created };
 }
+
+test('media transport opens the device before apply (real adapters require open; the Linux bug this pins reported SYSTEM_UNAVAILABLE)', async () => {
+  const registry = new CommandRegistry();
+  const log = new ActivityLog();
+  let opened = false;
+  const adapter: SystemControlAdapter = {
+    power: async () => {}, getVolume: async () => ({ level: 1, muted: false }), setVolume: async () => {},
+    getBrightness: async () => 5, setBrightness: async () => {},
+    getDisplayMode: async () => ({ theme: 'dark', nightLight: null }), setDisplayMode: async () => {},
+  };
+  // Mimics the real Linux/Wayland adapters: apply before open throws INPUT_UNAVAILABLE.
+  const device = {
+    open: async () => { opened = true; },
+    apply: async () => { if (!opened) throw new Error('INPUT_UNAVAILABLE'); },
+    releaseAll: async () => {}, dispose: async () => {},
+  } as never;
+  new SystemControl(registry, () => adapter, log, () => device);
+  const run = (type: string, payload: object) => registry.get(type)!.execute(payload as never, context());
+  const r = await run('system.media.transport', { action: 'playpause' });
+  assert.deepEqual(r, { applied: true });
+  assert.equal(opened, true);
+  // The device stays usable after the connection that opened it closes (own-lifetime open, not connection-scoped).
+  await run('system.media.transport', { action: 'next' });
+});
 
 test('media transport sends one media key per authorized command and logs it', async () => {
   const f = mediaFixture();

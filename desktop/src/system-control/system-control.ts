@@ -12,6 +12,7 @@ export class SystemControl {
   private readonly unregister: (() => void)[];
   private adapterInstance?: SystemControlAdapter;
   private inputInstance?: InputDevice;
+  private inputAbort?: AbortController;
 
   /** The optional input-device factory powers media transport keys; without one the media command reports SYSTEM_UNAVAILABLE. */
   constructor(registry: CommandRegistry, private readonly createAdapter: () => SystemControlAdapter, private readonly log: ActivityLog,
@@ -59,7 +60,14 @@ export class SystemControl {
             throw new ProtocolError('SYSTEM_UNAVAILABLE');
           }
           try {
-            this.inputInstance ??= this.createInputDevice();
+            // The real adapters (Linux xdotool worker, Wayland uinput) must be opened before apply; Windows SendInput needs no setup.
+            // Open once with the control's own lifetime: tying it to the first connection would kill the shared device when that phone disconnects.
+            if (!this.inputInstance) {
+              this.inputAbort = new AbortController();
+              const device = this.createInputDevice();
+              await device.open(this.inputAbort.signal);
+              this.inputInstance = device;
+            }
             await this.inputInstance.apply({ t: 'key', key: action },
               context.connection?.closed ?? new AbortController().signal);
             this.log.record({ severity: 'info', eventType: 'system.media', outcome: 'success', deviceId: context.session.deviceId });
