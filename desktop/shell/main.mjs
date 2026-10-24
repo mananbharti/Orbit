@@ -235,6 +235,7 @@ ipcMain.handle('orbit:dictation-type-now', async () => {
     if (out === 'unsupported-target') return { ok: false, reason: 'Orbit does not know how to paste into that window - copy the text instead' };
     return { ok: false, reason: out === 'activation-failed' || out === 'focus-mismatch' ? 'that window is no longer focused - nothing was pasted' : 'the paste keystroke failed - nothing was sent' };
   }
+  // Windows typing path: per-character keystrokes are plain text input, so unlike a Ctrl+V chord they cannot trigger an unrelated action in an arbitrary app - no class allowlist is needed for the side-effect concern. The privacy exposure (text landing in the wrong window) is bounded by the same confirm + activation + per-240-char focus re-checks. Moving Windows to the paste path is a follow-up once paste delivery is verified on a real PC.
   const { confirmedInsert } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
   let out;
   try { out = await confirmedInsert(target, text, dictationProbe, dictationActivator, dictationTypeChunk); }
