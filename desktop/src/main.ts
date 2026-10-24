@@ -7,6 +7,9 @@ import { showPairing } from './security-pairing/pairing-display.js';
 import { WindowsInputDevice } from './os-integration/input-device.windows.js';
 import { windowsApproval } from './security-pairing/windows-approval.js';
 import { WhisperCpp } from './dictation/whisper-cpp.js';
+import { DictationService } from './dictation/dictation-service.js';
+import { ensureEngine } from './dictation/provision.js';
+import { CommandRegistry } from './command-router/command-registry.js';
 import { ffmpegDecoder } from './dictation/ffmpeg-decoder.js';
 import { HermesRunner } from './agent/hermes-runner.js';
 
@@ -20,11 +23,22 @@ async function main(): Promise<void> {
   // Remote terminal: opt-in, Windows only, every session needs a Yes at the PC. Untested on a real PC.
   const terminal = process.platform === 'win32' && process.env.ORBIT_ENABLE_TERMINAL === '1'
     ? { confirmation: windowsApproval(undefined, undefined, 'terminal') } : undefined;
-  // Dictation is off unless a local whisper.cpp binary and model are named. ORBIT_FFMPEG additionally lets Android phones send compressed audio.
+  // Dictation: an env-named engine wins; otherwise the pinned whisper.cpp build + model are provisioned once into the data directory in the background and dictation.* registers as soon as they are verified. ORBIT_FFMPEG additionally lets Android phones send compressed audio.
   const whisperBin = process.env.ORBIT_WHISPER_BIN; const whisperModel = process.env.ORBIT_WHISPER_MODEL; const ffmpeg = process.env.ORBIT_FFMPEG;
+  const decoder = ffmpeg ? ffmpegDecoder(ffmpeg) : undefined;
   const dictation = whisperBin && whisperModel
-    ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(ffmpeg ? { decoder: ffmpegDecoder(ffmpeg) } : {}) } : undefined;
-  const service = await startDesktop({ ...readConfig(), agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}) });
+    ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(decoder ? { decoder } : {}) } : undefined;
+  const registry = new CommandRegistry();
+  const config = readConfig();
+  const service = await startDesktop({ ...config, agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}), registry });
+  if (!dictation) {
+    void ensureEngine({ dataDir: config.directory }).then(paths => {
+      new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder);
+      service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
+    }).catch(() => {
+      service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' });
+    });
+  }
   const input = createInterface({ input: process.stdin });
   let cleanup: (() => void) | undefined;
   let expiry: NodeJS.Timeout | undefined;

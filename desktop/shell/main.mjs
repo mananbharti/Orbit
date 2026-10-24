@@ -76,8 +76,28 @@ async function boot() {
       try { agent = { runner: new HermesRunner({ apiKey: hermes.apiKey, ...(hermes.baseUrl ? { baseUrl: hermes.baseUrl } : {}) }), ...(layaUrl ? { layaUrl } : {}), ...(hermes.fastModel ? { fastModel: hermes.fastModel } : {}) }; }
       catch (error) { console.error('AGENT: disabled -', String(error?.message ?? error)); }
     }
-    service = await startDesktop({ directory: join(app.getPath('userData'), 'orbit-data'), host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), onExtensionConnection: () => push() });
+    const { CommandRegistry } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'command-router', 'command-registry.js')).href);
+    const registry = new CommandRegistry();
+    const dataDir = join(app.getPath('userData'), 'orbit-data');
+    service = await startDesktop({ directory: dataDir, host, port: DEFAULT_PORT,
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), registry, onExtensionConnection: () => push() });
+    // Dictation: provision the pinned whisper.cpp engine once in the background; dictation.* registers when verified. Failures leave dictation off and are logged metadata-only.
+    if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
+      const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
+      const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
+      try {
+        new DictationService(registry, new WhisperCpp({ binary: process.env.ORBIT_WHISPER_BIN, model: process.env.ORBIT_WHISPER_MODEL }), service.log);
+        service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
+      } catch { service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }); }
+    } else {
+      const { ensureEngine } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
+      const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
+      const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
+      void ensureEngine({ dataDir }).then(paths => {
+        new DictationService(registry, new WhisperCpp(paths), service.log);
+        service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
+      }).catch(() => service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }));
+    }
     state = { phase: 'running', host, port: DEFAULT_PORT };
     if (agent) { void probeAgentGateway(hermes); void probeLaya(hermes); } else { agentGateway = 'unknown'; agentLaya = 'unknown'; }
   } catch (error) {
