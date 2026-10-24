@@ -215,6 +215,18 @@ function dictationEngineLine(cfg) { // honest setup state: 'setting up' only whi
   if (s === 'failed') return 'Dictation engine: download failed - re-save the hotkey or switch models to retry';
   return 'Dictation engine: setting up (one-time download)';
 }
+let dicSetupPoll;
+function dictationEngineWatch(cfg) { // keeps the status line honest while a one-time download finishes in the background
+  if (dicSetupPoll) { clearInterval(dicSetupPoll); dicSetupPoll = undefined; }
+  if (!cfg || cfg.engine || !cfg.setup || cfg.setup.state !== 'downloading') return;
+  dicSetupPoll = setInterval(async () => {
+    try {
+      const c = await api.dictationGet();
+      dictationStatus(dictationEngineLine(c));
+      if (c.engine || !c.setup || c.setup.state !== 'downloading') { clearInterval(dicSetupPoll); dicSetupPoll = undefined; }
+    } catch { clearInterval(dicSetupPoll); dicSetupPoll = undefined; }
+  }, 2000);
+}
 function dictationCleanupMic() { // every exit path releases the mic: tracks stopped, context closed, chunks zeroed
   clearTimeout(dicCapTimer);
   try { dicNode && dicNode.disconnect(); } catch { /* already stopped */ }
@@ -300,17 +312,19 @@ if (api.dictationGet) void (async () => {
     modelSel.value = cfg.model;
     if (cfg.suggested && cfg.suggested !== cfg.model) dictationStatus(dictationEngineLine(cfg) + ' - suggested for this computer: ' + cfg.suggested);
     else dictationStatus(dictationEngineLine(cfg));
+    dictationEngineWatch(cfg);
     modelSel.onchange = async () => {
       dictationStatus('Dictation engine: preparing ' + modelSel.value + ' model...');
       const r = await api.dictationSetModel(modelSel.value);
       dictationStatus('Dictation engine: ' + (r.ok ? (r.downloaded ? 'ready' : 'downloading ' + modelSel.value + ' (one-time)') : 'could not switch models'));
+      if (r.ok && !r.downloaded) dictationEngineWatch(await api.dictationGet());
     };
   } else dictationStatus(dictationEngineLine(cfg));
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
     const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
     if (r.ok) dicKey = $('dictation-key').value.trim() || dicKey;
-    if (r.ok && $('dictation-enable').checked) { const cfg2 = await api.dictationGet(); dictationStatus(dictationEngineLine(cfg2)); }
+    if (r.ok && $('dictation-enable').checked) { const cfg2 = await api.dictationGet(); dictationStatus(dictationEngineLine(cfg2)); dictationEngineWatch(cfg2); }
     toast(r.ok ? 'Dictation hotkey saved' : 'Could not save the hotkey');
   };
 })();
