@@ -16,7 +16,7 @@ test('inserted: transcript pasted, focus verified before and after, prior clipbo
   let probed = 0; let pasted = false;
   const outcome = await confirmedPaste(handle, 'dictated words', { current: async () => { probed++; return handle; } },
     { activate: async () => true }, clip, async () => { pasted = true; }, 1);
-  assert.equal(outcome, 'inserted');
+  assert.equal(outcome, 'paste-sent');
   assert.equal(pasted, true);
   assert.deepEqual(clip.writes, ['dictated words', 'prior']);
   assert.equal(probed, 2);

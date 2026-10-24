@@ -220,7 +220,7 @@ export const dictationResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('text'), text: z.string().min(1).max(20_000), insertOffered: z.boolean().optional() }),
   z.strictObject({ status: z.literal('no-speech') })]);
 export type DictationResult = z.infer<typeof dictationResultSchema>;
-export const dictationInsertOutcomeSchema = z.strictObject({ outcome: z.enum(['inserted', 'activation-failed', 'focus-mismatch', 'focus-lost', 'paste-failed', 'clipboard-unavailable', 'unavailable']) });
+export const dictationInsertOutcomeSchema = z.strictObject({ outcome: z.enum(['paste-sent', 'activation-failed', 'focus-mismatch', 'focus-lost', 'paste-failed', 'clipboard-unavailable', 'unsupported-target', 'unavailable']) });
 export type DictationInsertOutcome = z.infer<typeof dictationInsertOutcomeSchema>['outcome'];
 export const dictationSetupStateSchema = z.strictObject({ state: z.enum(['off', 'downloading', 'ready', 'failed']), reason: z.string().max(64).optional() });
 export type DictationSetupState = z.infer<typeof dictationSetupStateSchema>;

@@ -14,7 +14,7 @@ import type { AudioDecoder } from './ffmpeg-decoder.js';
 interface Clip { id: string; owner: string; connection: NonNullable<CommandContext['connection']>; samples: Int16Array; length: number; language?: string;
   compressed?: Buffer; compressedLength: number; timer: NodeJS.Timeout; abort: AbortController; remove: () => void; busy: boolean; focusHandle?: FocusHandle; text?: string }
 
-export type DictationInsertOutcome = 'inserted' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable' | 'unavailable';
+export type DictationInsertOutcome = 'paste-sent' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable' | 'unsupported-target' | 'unavailable';
 
 /** Phone-confirmed insertion of the retained transcript into the window that was focused when dictation began. Implemented by createDictationInsertion where the platform supports it. */
 export interface DictationInsertion {
@@ -107,7 +107,7 @@ export class DictationService {
         const clip = this.owned(context, refSchema.parse(p).dictationId, ok(context));
         if (!clip.text) throw new ProtocolError('INVALID_PAYLOAD');
         const outcome: DictationInsertOutcome = this.insertion && clip.focusHandle ? await this.insertion.insert(clip.focusHandle, clip.text) : 'unavailable';
-        this.log.record({ severity: 'info', eventType: 'dictation.insert', outcome: outcome === 'inserted' ? 'success' : 'failed' });
+        this.log.record({ severity: 'info', eventType: 'dictation.insert', outcome: outcome === 'paste-sent' ? 'success' : 'failed' });
         this.drop(clip);
         return { outcome };
       } }),

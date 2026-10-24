@@ -40,7 +40,7 @@ const focus: FocusHandle = { id: '101', pid: 4242 };
 
 test('finish offers insertion when focus was captured and confirmInsert inserts once', async t => {
   const inserted: { handle: FocusHandle; text: string }[] = [];
-  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async (h, text) => { inserted.push({ handle: h, text }); return 'inserted'; } };
+  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async (h, text) => { inserted.push({ handle: h, text }); return 'paste-sent'; } };
   const { handle } = fixture(t, insertion);
   const conn = connection();
   const { id, result } = await dictateOnce(handle, contextFor(conn));
@@ -48,13 +48,13 @@ test('finish offers insertion when focus was captured and confirmInsert inserts 
   assert.equal(result.text, 'Hello orbit');
   assert.equal(result.insertOffered, true);
   const confirmed = await handle('dictation.insert').execute({ dictationId: id }, contextFor(conn)) as { outcome: DictationInsertOutcome };
-  assert.equal(confirmed.outcome, 'inserted');
+  assert.equal(confirmed.outcome, 'paste-sent');
   assert.deepEqual(inserted, [{ handle: focus, text: 'Hello orbit' }]);
   await assert.rejects(handle('dictation.insert').execute({ dictationId: id }, contextFor(conn)), /INVALID_PAYLOAD/);
 });
 
 test('no captured focus or no insertion path means insertion is not offered and confirmInsert answers unavailable', async t => {
-  const insertion: DictationInsertion = { captureFocus: async () => undefined, insert: async () => 'inserted' };
+  const insertion: DictationInsertion = { captureFocus: async () => undefined, insert: async () => 'paste-sent' };
   const { handle } = fixture(t, insertion);
   const conn = connection();
   const { id, result } = await dictateOnce(handle, contextFor(conn));
@@ -80,18 +80,18 @@ test('insertion failure categories pass through unchanged', async t => {
 });
 
 test('confirmInsert is owned by the dictating connection and device', async t => {
-  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async () => 'inserted' };
+  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async () => 'paste-sent' };
   const { handle } = fixture(t, insertion);
   const conn = connection();
   const { id } = await dictateOnce(handle, contextFor(conn));
   await assert.rejects(handle('dictation.insert').execute({ dictationId: id }, contextFor(connection())), /INVALID_PAYLOAD/);
   await assert.rejects(handle('dictation.insert').execute({ dictationId: id }, contextFor(conn, 'phone-2')), /INVALID_PAYLOAD/);
   const confirmed = await handle('dictation.insert').execute({ dictationId: id }, contextFor(conn)) as { outcome: DictationInsertOutcome };
-  assert.equal(confirmed.outcome, 'inserted');
+  assert.equal(confirmed.outcome, 'paste-sent');
 });
 
 test('cancel after finish wipes the retained transcript', async t => {
-  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async () => 'inserted' };
+  const insertion: DictationInsertion = { captureFocus: async () => focus, insert: async () => 'paste-sent' };
   const { handle } = fixture(t, insertion);
   const conn = connection();
   const { id } = await dictateOnce(handle, contextFor(conn));

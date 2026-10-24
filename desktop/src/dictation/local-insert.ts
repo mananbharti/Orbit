@@ -118,7 +118,7 @@ export interface InsertionClipboard {
   write(text: string): Promise<void>;
 }
 
-export type PasteInsertOutcome = 'inserted' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable';
+export type PasteInsertOutcome = 'paste-sent' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable' | 'unsupported-target';
 
 /** The transcript reaches the confirmed target through the system clipboard and one paste keystroke, not per-character typing: the window in which a focus flip could misdirect text shrinks from seconds of typing to the instant of a single keystroke, and delivery is all-or-nothing instead of a partial stream. Focus identity is verified after activation and again immediately after the keystroke; a flip seen afterwards is reported honestly as 'focus-lost' (the paste may have gone elsewhere) with no automatic retry or resume. A clipboard holding anything but plain restorable text (password-manager copies, images, oversized content) is never clobbered: insertion reports 'clipboard-unavailable'. The prior clipboard is restored after a short delay so the target's asynchronous paste fetch completes first; on X11 the transcript may be visible to local clipboard readers during that sub-second window. */
 export const PASTE_RESTORE_DELAY_MS = 750;
@@ -132,7 +132,7 @@ export async function confirmedPaste(handle: FocusHandle, text: string, probe: F
     prior = snapshot.text;
     await clipboard.write(text);
   } catch { return 'clipboard-unavailable'; }
-  let outcome: PasteInsertOutcome = 'inserted';
+  let outcome: PasteInsertOutcome = 'paste-sent';
   try {
     if (!await activator.activate(handle)) return 'activation-failed';
     const now = await probe.current();
