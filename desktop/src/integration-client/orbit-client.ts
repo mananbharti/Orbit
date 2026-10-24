@@ -15,6 +15,8 @@ const RETRY_MAX_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 10_000;
 // Launch revalidates discovery and activation through two native helpers, each bounded to eight seconds.
 const LAUNCHER_COMMAND_TIMEOUT_MS = 20_000;
+// Approval-gated commands wait on the owner answering a dialog at the PC (up to 30s), so they need room beyond it.
+const APPROVAL_COMMAND_TIMEOUT_MS = 45_000;
 export const RENEW_AFTER_COMMANDS = 3_000;
 const MAX_ONLINE_COMMANDS = 16;
 export const responseSchema = z.strictObject({ version: z.literal(1), type: z.literal('response'),
@@ -94,7 +96,9 @@ export class OrbitClient extends EventEmitter {
       const timer = setTimeout(() => {
         this.failPending();
         this.socket?.terminate();
-      }, type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS : COMMAND_TIMEOUT_MS);
+      }, type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS
+        : type === 'terminal.begin' || type.startsWith('input.') ? APPROVAL_COMMAND_TIMEOUT_MS
+        : COMMAND_TIMEOUT_MS);
       this.pending = { id: requestId, resolve, reject, timer };
       this.submitted++;
       this.socket!.send(message, error => { if (error) this.failPending(); });
