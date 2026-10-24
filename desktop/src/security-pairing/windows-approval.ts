@@ -14,6 +14,12 @@ export type PromptSpawn = (text: string) => ChildProcessWithoutNullStreams;
 const defaultSpawn: PromptSpawn = text => spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', SCRIPT],
   { windowsHide: false, stdio: 'pipe', env: windowsPowerShellEnv({ ORBIT_PROMPT_TEXT: text }) });
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function formatDays(days: number[] | undefined): string {
+  if (!days?.length) return 'every day';
+  return `every ${[...days].sort((a, b) => a - b).map(d => DAY_NAMES[d] ?? `day ${d}`).join(', ')}`;
+}
+
 export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeoutMs = APPROVAL_TIMEOUT_MS,
   family: 'input' | 'terminal' | 'power' = 'input'): BiometricConfirmation {
   return { verify: (message, context) => new Promise<boolean>(resolve => {
@@ -29,7 +35,7 @@ export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeout
       ? `Allow your phone (device ${device}) to run commands on this computer? Commands can change or delete anything.\n\nChoose No unless you just started this on your phone.`
       : family === 'power'
       ? sched?.time
-        ? `Allow your phone (device ${device}) to schedule ${action} at ${sched.time}${sched.days?.length ? ' on ' + sched.days.length + ' weekday(s)' : ' every day'} on this computer? It fires unattended at that time.\n\nChoose No unless you just created this schedule on your phone.`
+        ? `Allow your phone (device ${device}) to schedule ${action} at ${sched.time} (this computer's local time) ${formatDays(sched.days)} on this computer? It fires unattended at that time.\n\nChoose No unless you just created this schedule on your phone.`
         : `Allow your phone (device ${device}) to ${action} this computer?\n\nChoose No unless you just started this on your phone.`
       : `Allow your phone (device ${device}) to move the mouse and type on this computer?\n\nChoose No unless you just started this on your phone.`;
     try { child = spawnPrompt(text); }

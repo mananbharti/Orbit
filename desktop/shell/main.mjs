@@ -142,6 +142,9 @@ function notifyNewTransfers(rows) {
 
 // PC-side approval for phone remote control: a focused native dialog, default Deny, 30s timeout.
 const electronApproval = { verify: async (message, context) => {
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const formatDays = days => !days?.length ? 'every day'
+    : `every ${[...days].sort((a, b) => a - b).map(d => DAY_NAMES[d] ?? `day ${d}`).join(', ')}`;
   const isInput = message.type.startsWith('input.');
   const isTerminal = message.type === 'terminal.begin';
   const isPower = message.type === 'system.power';
@@ -153,7 +156,7 @@ const electronApproval = { verify: async (message, context) => {
     message: isPower ? 'Allow power action?' : isTerminal ? 'Allow terminal access?' : 'Allow remote control?',
     detail: isPower
       ? (message.payload?.schedule?.time
-        ? `Your phone (device ${device}) wants to schedule ${message.payload?.action ?? 'a power action'} at ${message.payload.schedule.time}${message.payload.schedule.days?.length ? ' on ' + message.payload.schedule.days.length + ' weekday(s)' : ' every day'} on this computer. It fires unattended at that time.\n\nChoose Deny unless you just created this schedule on your phone.`
+        ? `Your phone (device ${device}) wants to schedule ${message.payload?.action ?? 'a power action'} at ${message.payload.schedule.time} (this computer's local time) ${formatDays(message.payload.schedule.days)} on this computer. It fires unattended at that time.\n\nChoose Deny unless you just created this schedule on your phone.`
         : `Your phone (device ${device}) wants to ${message.payload?.action ?? 'change the power state of'} this computer.\n\nChoose Deny unless you just started this on your phone.`)
       : isTerminal
       ? `Your phone (device ${device}) wants to run commands on this computer. Commands can change or delete anything.\n\nChoose Deny unless you just started this on your phone.`
