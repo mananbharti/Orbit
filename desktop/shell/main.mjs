@@ -287,6 +287,8 @@ ipcMain.handle('orbit:file-open', (_e, path) => { const p = knownPath(path); if 
 ipcMain.handle('orbit:file-reveal', (_e, path) => { const p = knownPath(path); if (p) shell.showItemInFolder(p); return Boolean(p); });
 ipcMain.handle('orbit:open-inbox', () => { if (!service) return false; void shell.openPath(service.files.store.inbox); return true; });
 ipcMain.handle('orbit:file-copy-path', (_e, path) => { const p = knownPath(path); if (p) electronClipboard.writeText(p); return Boolean(p); });
+// Renderer clipboard writes can silently no-op when the window lacks OS focus; the main-process clipboard always lands.
+ipcMain.handle('orbit:copy-text', (_e, text) => { if (typeof text !== 'string' || !text || text.length > 64 * 1024) return false; electronClipboard.writeText(text); return true; });
 
 async function offerToPhones(paths) {
   if (!service) return { error: 'Orbit is not running yet.' };

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('orbit', {
   openFile: path => ipcRenderer.invoke('orbit:file-open', path),
   revealFile: path => ipcRenderer.invoke('orbit:file-reveal', path),
   copyPath: path => ipcRenderer.invoke('orbit:file-copy-path', path),
+  copyText: text => ipcRenderer.invoke('orbit:copy-text', text),
   sendFiles: () => ipcRenderer.invoke('orbit:send-files'),
   openInbox: () => ipcRenderer.invoke('orbit:open-inbox'),
   sendPaths: paths => ipcRenderer.invoke('orbit:send-files', paths),

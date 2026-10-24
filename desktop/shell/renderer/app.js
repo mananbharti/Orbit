@@ -9,7 +9,7 @@ const api = window.orbit ?? (() => {
       { id: '3', name: 'orbit-logo.png', size: 184320, direction: 'to-client', state: 'completed', progress: 1, updatedAt: Date.now() - 3600000, device: 'iphone-17-pro' }],
     activity: [{ timestamp: new Date().toISOString(), eventType: 'session.opened', outcome: 'success', severity: 'info' }, { timestamp: new Date().toISOString(), eventType: 'clipboard.sync', outcome: 'success', severity: 'info' }],
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
-  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => { const expiresAt = Date.now() + 120000; s.pairingUntil = expiresAt; return { svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt }; }, cancelPair: async () => { s.pairingUntil = 0; }, revoke: async () => true, retry: async () => {}, loginItem: async () => false, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }), agentTest: async () => ({ status: 'ok' }),
+  return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => { const expiresAt = Date.now() + 120000; s.pairingUntil = expiresAt; return { svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt }; }, cancelPair: async () => { s.pairingUntil = 0; }, revoke: async () => true, retry: async () => {}, loginItem: async () => false, copyText: async () => true, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }), agentTest: async () => ({ status: 'ok' }),
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name,
     dictationGet: async () => ({ enabled: false, accelerator: 'Control+Shift+D', model: 'tiny', engine: true, suggested: null }), dictationSet: async () => ({ ok: true }), dictationSetModel: async () => ({ ok: true, downloaded: true }), dictationFinish: async () => ({ text: '' }), dictationTypeNow: async () => ({ ok: true }), fastDetect: async () => ({ error: 'No Ollama or LM Studio server detected on this computer' }),
@@ -51,8 +51,8 @@ $('choose-files').onclick = async () => {
   if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
 };
 $('open-inbox').onclick = () => api.openInbox();
-$('ext-copy-port').onclick = () => { navigator.clipboard.writeText($('ext-port').textContent); toast('Port copied'); };
-$('ext-copy-token').onclick = () => { navigator.clipboard.writeText($('ext-token').textContent); toast('Token copied'); };
+$('ext-copy-port').onclick = async () => { if (await api.copyText($('ext-port').textContent)) toast('Port copied'); };
+$('ext-copy-token').onclick = async () => { if (await api.copyText($('ext-token').textContent)) toast('Token copied'); };
 
 // Drag and drop anywhere on the Files tab.
 const dz = $('dropzone');
@@ -281,7 +281,7 @@ if ($('dictation-preview-type')) $('dictation-preview-type').onclick = async () 
   if (r.ok) { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; toast('Typed into the window'); }
   else toast(r.reason || 'Could not type into that window');
 };
-if ($('dictation-preview-copy')) $('dictation-preview-copy').onclick = async () => { await navigator.clipboard.writeText($('dictation-preview-text').textContent); toast('Copied'); };
+if ($('dictation-preview-copy')) $('dictation-preview-copy').onclick = async () => { if (await api.copyText($('dictation-preview-text').textContent)) toast('Copied'); };
 if ($('dictation-preview-dismiss')) $('dictation-preview-dismiss').onclick = () => { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; };
 if (api.dictationGet) void (async () => {
   const cfg = await api.dictationGet();
