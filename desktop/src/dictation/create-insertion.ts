@@ -7,6 +7,12 @@ import type { DictationInsertion } from './dictation-service.js';
 
 const run = promisify(execFile);
 
+/** Terminal emulators paste CLIPBOARD with Ctrl+Shift+V and treat Ctrl+V as quoted-insert; GUI toolkits paste with Ctrl+V. The wrong choice fails benignly (nothing is pasted), never with wrong content. */
+const TERMINAL_WINDOW_CLASSES = /^(xterm|xfce4-terminal|gnome-terminal|konsole|alacritty|kitty|wezterm|tilix|lxterminal|mate-terminal|st|urxvt)/i;
+export function pasteKeySequence(windowClass: string): string {
+  return TERMINAL_WINDOW_CLASSES.test(windowClass) ? 'ctrl+shift+v' : 'ctrl+v';
+}
+
 export function createDictationInsertion(environment: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): DictationInsertion | undefined {
   if (platform !== 'linux') return undefined;
   const probe = focusProbeFor(platform, environment.XDG_SESSION_TYPE);
@@ -16,7 +22,14 @@ export function createDictationInsertion(environment: NodeJS.ProcessEnv = proces
   try { clipboard = new LinuxClipboard(environment); } catch { return undefined; }
   return {
     captureFocus: () => probe.current(),
-    insert: (handle, text) => confirmedPaste(handle, text, probe, activator, clipboard,
-      async () => { await run('xdotool', ['key', 'shift+Insert'], { timeout: 3000 }); }),
+    insert: async (handle, text) => {
+      let windowClass = '';
+      try {
+        const out = (await run('xprop', ['-id', handle.id, 'WM_CLASS'], { timeout: 3000 })).stdout;
+        windowClass = /"[^"]*"\s*,\s*"([^"]*)"/.exec(out)?.[1] ?? /"([^"]*)"/.exec(out)?.[1] ?? '';
+      } catch { /* unknown class: the GUI default applies */ }
+      return confirmedPaste(handle, text, probe, activator, clipboard,
+        async () => { await run('xdotool', ['key', pasteKeySequence(windowClass)], { timeout: 3000 }); });
+    },
   };
 }
