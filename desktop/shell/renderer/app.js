@@ -69,11 +69,18 @@ dz.addEventListener('drop', async e => {
 });
 
 let clipTimer;
+const CLIP_MESSAGES = {
+  empty: 'Nothing to show - the clipboard holds no text right now.',
+  unavailable: 'Clipboard is not available on this computer.',
+  unsupported: 'The clipboard holds content Orbit cannot read as text.',
+  oversized: 'The clipboard item is too large to show.',
+  sensitive: 'The clipboard holds a private item from a password manager. Orbit never shows or syncs it.'
+};
 async function readClipboard() {
   const body = $('clip-body');
   const r = await api.clipboardRead();
   if (r.kind === 'text') { body.textContent = r.text; body.classList.remove('muted'); }
-  else { body.textContent = r.kind === 'unavailable' ? 'Clipboard is not available on this computer.' : 'Nothing to show - the clipboard holds no text right now.'; body.classList.add('muted'); }
+  else { body.textContent = CLIP_MESSAGES[r.kind] || CLIP_MESSAGES.unavailable; body.classList.add('muted'); }
   $('clip-copy').hidden = r.kind !== 'text';
 }
 $('clip-refresh').onclick = readClipboard;
