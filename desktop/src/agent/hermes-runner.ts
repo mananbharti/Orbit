@@ -59,9 +59,11 @@ export class HermesRunner implements AgentRunner {
     const status = await (await this.request('GET', `/v1/runs/${runId}`, context.signal)).json() as { status?: string; output?: unknown; error?: unknown };
     if (status.status === 'completed') return typeof status.output === 'string' && status.output ? status.output : 'Done';
     if (status.status && !TERMINAL.has(status.status)) throw new AgentRunError('Hermes run did not finish');
-    // Surface the gateway's own reason (for example a missing model provider) so the phone shows why.
-    const reason = typeof status.error === 'string' && status.error ? `: ${this.clean(status.error)}` : '';
-    throw new AgentRunError(`Hermes run ${status.status ?? 'unknown'}${reason}`);
+    // Fixed categories only: raw gateway exception text never reaches the phone - owner pairing makes
+    // the source known, not its strings safe. redactSecrets stays on narration text as defense in depth.
+    const category = status.status === 'failed' ? 'failed' : status.status === 'interrupted' ? 'interrupted'
+      : status.status === 'cancelled' ? 'cancelled' : 'unknown';
+    throw new AgentRunError(`Hermes run ${category}`);
   }
 
   private clean(value: string): string { return clean(redactSecrets(value, this.options.apiKey)); }

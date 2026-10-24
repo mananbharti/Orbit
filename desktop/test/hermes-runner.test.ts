@@ -132,24 +132,27 @@ test('the real gateway stream format parses: data-only frames, keepalives, event
   assert.deepEqual(steps, ['Using terminal: rm -rf /tmp/orbit-approval-probe', 'Finished terminal']);
 });
 
-test('a failed run surfaces the gateway\'s own error text', async t => {
-  // Recorded from a live gateway with no model provider configured: the status body is
-  // { object: 'hermes.run', run_id, status: 'failed', error: '...', last_event: 'run.failed' }.
+test('a failed run surfaces a fixed category, never the gateway\'s raw error text', async t => {
+  // Shape recorded from a live gateway with no model provider configured; the phone gets the category only.
   const f = await fake(t);
   f.events = [frame('run.failed', {})];
   f.status = { object: 'hermes.run', run_id: 'run_abc123', status: 'failed',
     error: 'Parameter validation failed: Invalid length for parameter modelId', last_event: 'run.failed' };
   await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx),
-    /failed: Parameter validation failed: Invalid length for parameter modelId/);
+    (e: Error) => e.message === 'Hermes run failed');
 });
 
-test('gateway error text is redacted: the API key and Bearer tokens never reach the phone', async t => {
+test('narration text is redacted as defense in depth: the API key and Bearer tokens never reach the phone', async t => {
   const f = await fake(t);
-  f.events = [frame('run.failed', {})];
-  f.status = { object: 'hermes.run', run_id: 'run_abc123', status: 'failed',
-    error: 'upstream denied key test-key with Bearer abc123def456', last_event: 'run.failed' };
-  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx),
-    (e: Error) => e.message.includes('Bearer [redacted]') && !e.message.includes('abc123def456') && !e.message.includes('denied key test-key'));
+  f.events = [frame('tool.started', { tool: 'terminal', preview: 'curl -H "Authorization: Bearer abc123def456" -H "x-key: test-key" https://x' }),
+    frame('run.completed', {})];
+  f.status = { object: 'hermes.run', run_id: 'run_abc123', status: 'completed', output: 'done' };
+  const { ctx, steps } = context();
+  await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
+  const joined = steps.join(' ');
+  assert.equal(joined.includes('Bearer [redacted]'), true);
+  assert.equal(joined.includes('abc123def456'), false);
+  assert.equal(joined.includes('x-key: test-key'), false);
 });
 
 test('a stale approval (HTTP 409) is tolerated: the control already settled', async t => {
