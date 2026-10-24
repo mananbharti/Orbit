@@ -369,6 +369,18 @@ async function dictationToggleKey() {
   if (!localDictation) return;
   if (localDictation.current === 'idle') {
     if (!localDictationEngine) { if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'The dictation engine is still setting up. Try again in a minute.' }).show(); return; }
+    if (process.env.ORBIT_DICTATION_FAKE_CLIP) {
+      // TEST HOOK ONLY - injected audio, NOT microphone capture. When this env var names a raw s16le 16 kHz mono PCM file,
+      // one shortcut press runs the whole toggle through with that fixed clip, so the X11 flow (focus capture, transcription,
+      // preview card, allowlisted confirmed paste) can be exercised without microphone hardware. Everything after the capture
+      // step is the real path; any proof made this way is proof with INJECTED audio and says nothing about mic capture.
+      console.log('DICTATION: ORBIT_DICTATION_FAKE_CLIP set - INJECTED audio test hook, NOT microphone capture');
+      const raw = readFileSync(process.env.ORBIT_DICTATION_FAKE_CLIP);
+      const pcm = new Int16Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 2));
+      await localDictation.toggle(async () => undefined); // start: captures the focused window target
+      await localDictation.toggle(async () => pcm);       // stop: injected clip instead of renderer mic audio
+      return;
+    }
     await localDictation.toggle(async () => undefined); // start: capture runs in the renderer
     dictationWin?.webContents.send('orbit:dictation-capture', 'start');
   } else {
