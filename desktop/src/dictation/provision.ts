@@ -216,7 +216,7 @@ export class DictationSetup {
         this.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
       } catch (e) {
         const reason = e instanceof ProvisionError ? e.code : 'DOWNLOAD_FAILED';
-        this.current = { state: 'failed', reason };
+        if (this.current.state === 'downloading') this.current = { state: 'failed', reason }; // a user cancel already settled the honest 'cancelled' reason
         this.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' });
       } finally { this.running = undefined; this.abort = undefined; }
     })();

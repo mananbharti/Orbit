@@ -63,6 +63,9 @@ test('cancel aborts an in-flight download and reports failed/cancelled', async (
   assert.equal(setup.state.reason, 'cancelled');
   await run;
   assert.ok(seenSignal?.aborted);
+  assert.equal(setup.state.state, 'failed'); // the settled state keeps the honest cancel reason
+  assert.equal(setup.state.reason, 'cancelled');
+  assert.deepEqual(await call(registry, 'dictation.status'), { state: 'failed', reason: 'cancelled' });
 });
 
 test('autoStart attaches an existing env engine, skips downloads within the backoff window, and starts once after it', async () => {
