@@ -23,15 +23,16 @@ export interface AudioSession { id: string; name: string; volume: number; muted:
 
 export class SystemApi {
   constructor(private readonly session: OrbitSession) {}
-  private async call(type: string, payload: Record<string, JsonValue>, schema: z.ZodTypeAny): Promise<unknown> {
+  private async call(type: string, payload: Record<string, JsonValue>, schema: z.ZodTypeAny, timeoutMs = 15_000): Promise<unknown> {
     if (this.session.status !== 'connected') throw new NotSent('Not connected');
-    const result: unknown = await this.session.command(type, payload, { timeoutMs: 15_000 });
+    const result: unknown = await this.session.command(type, payload, { timeoutMs });
     const parsed = schema.safeParse(result);
     if (!parsed.success) throw new InvalidDesktopReply();
     return parsed.data;
   }
   power(action: PowerAction): Promise<void> {
-    return this.call('system.power', { action }, powerResultSchema).then(() => {});
+    // Power actions wait on the desktop owner's confirmation dialog (up to 30s); the default 15s would report failure while the dialog is still open.
+    return this.call('system.power', { action }, powerResultSchema, 45_000).then(() => {});
   }
   /** Per-app volume: apps currently playing audio on the computer. */
   audioSessions(): Promise<AudioSession[]> {

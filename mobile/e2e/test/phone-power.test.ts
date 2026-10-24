@@ -12,10 +12,11 @@ import { CommandError, OrbitSession } from '../../core/src/session.js';
 import { SystemApi } from '../../core/src/system.js';
 import { NodePinnedTransport } from './node-pinned-transport.js';
 
-async function phone(t: TestContext, failing = false, uuid: () => string = randomUUID) {
+async function phone(t: TestContext, failing = false, uuid: () => string = randomUUID, ownerApproves = true) {
   const powered: string[] = [];
   const root = mkdtempSync(join(tmpdir(), 'orbit-power-'));
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test', discovery: false,
+    biometric: { verify: async () => ownerApproves }, // fixture stands in for the desktop owner's confirmation dialog
     system: { createAdapter: () => ({
       power: async action => { if (failing) throw new SystemControlUnavailable(); powered.push(action); },
       getVolume: async () => ({ level: 1, muted: false }), setVolume: async () => {}, getBrightness: async () => null, setBrightness: async () => {},
@@ -51,6 +52,12 @@ test('when the machine cannot do it the phone gets an honest error, not a fake s
   const { system, powered } = await phone(t, true);
   await assert.rejects(system.power('sleep'), (e: unknown) => e instanceof CommandError);
   assert.deepEqual(powered, []);
+});
+
+test('without the desktop owner\'s confirmation a power command never reaches the adapter', async t => {
+  const { system, powered } = await phone(t, false, randomUUID, false);
+  await assert.rejects(system.power('shutdown'), (e: unknown) => e instanceof CommandError && e.code === 'BIOMETRIC_REQUIRED');
+  assert.deepEqual(powered, [], 'nothing reached the machine');
 });
 
 test('a replayed request id never powers the machine a second time', async t => {
