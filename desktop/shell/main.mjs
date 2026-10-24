@@ -94,7 +94,6 @@ async function boot() {
     const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
     const { focusProbeFor, focusActivatorFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
     dictationProbe = focusProbeFor(); dictationActivator = focusActivatorFor();
-    const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-input-device.js')).href);
     localDictation = new LocalDictation({ ...(dictationProbe ? { probe: dictationProbe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
       onPreview: dictationPreview, onState: dictationStatePush });
