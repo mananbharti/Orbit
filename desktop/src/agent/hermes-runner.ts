@@ -111,28 +111,23 @@ export class HermesRunner implements AgentRunner {
         // the user never saw.
         const mentionsIdentity = 'prompt_id' in event.data || 'request_id' in event.data || 'execution_generation' in event.data;
         if (mentionsIdentity && !identity) { context.step('Hermes sent a malformed approval identity; the decision was not delivered'); break; }
+        if (!identity) {
+          // Gateways up to at least v0.19.0 carry no control identity: their endpoint takes
+          // { choice } and resolves WHATEVER is pending for the run, with no way to bind the answer
+          // to the exact control the user was shown. An old tap could approve a different - possibly
+          // destructive - command, so Orbit never answers identity-less approvals from the phone.
+          // The control stays pending gateway-side; approving or denying on the computer resumes the
+          // run and Orbit keeps streaming. Cancelling the task from the phone still stops the run.
+          context.step('This Hermes version cannot verify a phone approval safely. Approve or deny this action on the computer to continue; Orbit will not answer it from the phone.');
+          break;
+        }
         const approved = await context.requestApproval(detail);
         // Deliver only while the same stream that showed the request is still live; a dead stream
         // means Orbit can no longer observe what control is pending.
         if (!state.active) { context.step('The run stream ended before the answer; it was not delivered'); break; }
-        let body: Record<string, unknown>;
-        if (identity) {
-          // Newer gateways implementing the documented request_id/execution_generation contract:
-          // the identity binds the answer to the exact control, so a late answer cannot settle a newer one.
-          body = (this.options.approvalBody ?? defaultApprovalBody)(approved, identity);
-        } else {
-          // Gateways up to at least v0.19.0 carry no control identity: their endpoint takes
-          // { choice } and resolves whatever is pending for the run. Because that could settle a
-          // different control than the one displayed, deliver only while the run still reports
-          // waiting_for_approval and the gateway advertises the approval endpoint; otherwise refuse.
-          // Residual race: a control settling and a new one appearing between this check and the
-          // POST cannot be excluded against v0.19.0; the window is the round-trip itself.
-          const current = await this.runStatus(runId);
-          if (current !== 'waiting_for_approval') { context.step(`The approval was no longer pending when the answer arrived (${current ?? 'status unknown'}); it was not delivered`); break; }
-          const features = (await this.capabilities())?.features as Record<string, unknown> | undefined;
-          if (features?.run_approval_response !== true) { context.step('This gateway does not advertise approval answers; the decision was not delivered'); break; }
-          body = { choice: approved ? 'once' : 'deny' };
-        }
+        // Newer gateways implementing the documented request_id/execution_generation contract:
+        // the identity binds the answer to the exact control, so a late answer cannot settle a newer one.
+        const body = (this.options.approvalBody ?? defaultApprovalBody)(approved, identity);
         try { await this.request('POST', `/v1/runs/${runId}/approval`, undefined, body); }
         catch (error) {
           // 409 = the control settled or moved on while the user decided. It never means accepted.
@@ -143,21 +138,6 @@ export class HermesRunner implements AgentRunner {
       }
       default: break; // deltas and lifecycle frames carry no user-facing step
     }
-  }
-
-  /** Current run status, undefined when it cannot be read (callers fail closed). */
-  private async runStatus(runId: string): Promise<string | undefined> {
-    try {
-      const status = await (await this.request('GET', `/v1/runs/${runId}`, undefined)).json() as { status?: unknown };
-      return typeof status.status === 'string' ? status.status : undefined;
-    } catch { return undefined; }
-  }
-
-  private capsPromise?: Promise<Record<string, unknown> | undefined>;
-  /** The gateway's advertised capability list, fetched once; undefined when unreadable. */
-  private capabilities(): Promise<Record<string, unknown> | undefined> {
-    return (this.capsPromise ??= this.request('GET', '/v1/capabilities', undefined)
-      .then(response => response.json() as Promise<Record<string, unknown>>).catch(() => undefined));
   }
 
   /** The control identity for an approval: from the event itself, else the run's pending_controls. */

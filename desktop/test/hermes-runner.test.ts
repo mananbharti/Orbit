@@ -84,57 +84,25 @@ test('an approval event without identity falls back to the run pending_controls'
   assert.deepEqual(f.approvals, [{ request_id: 'prompt-11', execution_generation: 7, choice: 'once' }]);
 });
 
-test('an approval with no control identity answers with the plain choice contract (the real v0.19.0 gateway)', async t => {
+test('an identity-less approval is never answered from the phone; the user is sent to the computer', async t => {
   // Verified live against Hermes Agent v0.19.0 (2026-10-24): its approval.request carries
-  // command/description/choices and no prompt_id or execution_generation, its run status has no
-  // pending_controls, and POST /v1/runs/{id}/approval resolves the pending control from { choice }.
-  // Orbit must deliver the user's answer in that shape, or every approval hangs until timeout.
+  // command/description/choices and no control identity, so a plain { choice } answer resolves
+  // WHATEVER is pending - an old tap could approve a different, possibly destructive, command.
+  // Orbit must not POST anything: it explains on the phone and the run resumes only when the
+  // user approves or denies on the computer. Task intent is never changed by Orbit.
   const f = await fake(t);
   f.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path',
     choices: ['once', 'session', 'always', 'deny'] }), frame('run.completed', {})];
-  // Status reads in order: pending_controls fallback, the pre-delivery pending check, the final status.
-  f.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
   const asked: string[] = [];
-  const { ctx } = context({ requestApproval: async d => { asked.push(d); return true; } });
+  const { ctx, steps } = context({ requestApproval: async d => { asked.push(d); return true; } });
   const result = await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx);
   assert.equal(result, 'Final answer');
-  assert.deepEqual(asked, ['delete in root path']);
-  assert.deepEqual(f.approvals, [{ choice: 'once' }]);
-  const denied = context({ requestApproval: async () => false });
-  const g = await fake(t); g.events = f.events;
-  g.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
-  await new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(denied.ctx);
-  assert.deepEqual(g.approvals, [{ choice: 'deny' }]);
-});
-
-test('an identity-less answer is refused when the control is no longer pending, the run ended, or the capability is unadvertised', async t => {
-  // Settled while the user decided: status says running, so the plain choice could settle a DIFFERENT control.
-  const f = await fake(t);
-  f.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.completed', {})];
-  f.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'running' }, { status: 'completed', output: 'Final answer' }];
-  const { ctx, steps } = context({ requestApproval: async () => true });
-  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(ctx), 'Final answer');
-  assert.deepEqual(f.approvals, []);
-  assert.ok(steps.some(step => step.includes('no longer pending') && step.includes('not delivered')));
-
-  // The run already failed: nothing may be answered, and the failure reason still surfaces.
-  const g = await fake(t);
-  g.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.failed', {})];
-  g.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'failed', error: 'provider down' }];
-  const denied = context({ requestApproval: async () => true });
-  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: g.url }).run(denied.ctx), /failed: provider down/);
-  assert.deepEqual(g.approvals, []);
-  assert.ok(denied.steps.some(step => step.includes('no longer pending')));
-
-  // The gateway does not advertise approval answers: refuse rather than POST into the unknown.
-  const h = await fake(t);
-  h.caps = { object: 'hermes.api_server.capabilities', features: { run_submission: true, run_approval_response: false } };
-  h.events = [frame('approval.request', { command: 'rm -rf /tmp/x', description: 'delete in root path' }), frame('run.completed', {})];
-  h.statusSequence = [{ status: 'waiting_for_approval' }, { status: 'waiting_for_approval' }, { status: 'completed', output: 'Final answer' }];
-  const third = context({ requestApproval: async () => true });
-  assert.equal(await new HermesRunner({ apiKey: 'test-key', baseUrl: h.url }).run(third.ctx), 'Final answer');
-  assert.deepEqual(h.approvals, []);
-  assert.ok(third.steps.some(step => step.includes('does not advertise approval answers')));
+  assert.deepEqual(asked, []); // no phantom approve/deny prompt: the tap could not be delivered safely
+  assert.deepEqual(f.approvals, []); // nothing was answered
+  const remediation = steps.find(step => step.includes('cannot verify a phone approval'));
+  assert.ok(remediation, 'the phone shows why and what to do instead');
+  assert.ok(remediation!.includes('on the computer'), 'remediation names the computer as the place to act');
+  assert.ok(!steps.some(step => step.includes('not delivered')), 'nothing was denied or settled by Orbit');
 });
 
 test('a malformed identity-bearing approval is never downgraded to a plain choice', async t => {

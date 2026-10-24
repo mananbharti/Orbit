@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 export const MAX_AUDIT_ENTRIES = 2_000;
 export const AUDIT_PAGE = 50;
-export const auditKinds = ['submitted', 'approval-requested', 'approved', 'denied', 'approval-timeout', 'cancelled-by-user', 'finished', 'paused', 'resumed'] as const;
+export const auditKinds = ['submitted', 'approval-requested', 'approved', 'denied', 'approval-timeout', 'cancelled-by-user', 'finished', 'paused', 'resumed', 'approval-stacked-refused'] as const;
 export const auditEntrySchema = z.strictObject({ at: z.number().int().min(0), taskId: z.string().uuid().optional(), deviceId: z.string().uuid(),
   kind: z.enum(auditKinds), outcome: z.string().max(32).optional() });
 export type AuditEntry = z.infer<typeof auditEntrySchema>;

@@ -182,6 +182,9 @@ export class AgentTasks {
       output: text => { this.noteSafely(task, 'output', text); publish(); },
       requestApproval: description => new Promise<boolean>(resolve => {
         if (signal.aborted || TERMINAL_TASK_STATES.has(task.state)) return resolve(false);
+        // A runner may never stack a second control on the same task: the phone shows one approval
+        // per task, so a stacked ask would be unanswerable and its resolver would clobber the first.
+        if (this.approvals.has(task.taskId)) { this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'approval-stacked-refused' }); return resolve(false); }
         const timer = setTimeout(() => { this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'approval-timeout' }); settle(false); }, APPROVAL_TIMEOUT_MS);
         const settle = (approved: boolean): void => {
           clearTimeout(timer); this.approvals.delete(task.taskId);
