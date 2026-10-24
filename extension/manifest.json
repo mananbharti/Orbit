@@ -3,7 +3,7 @@
   "name": "Orbit",
   "version": "1.0.0",
   "description": "Lets your phone see and control this browser's tabs through the Orbit app on your computer. Talks only to your own machine.",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["tabs", "storage", "alarms"],
   "background": { "service_worker": "background.js" },
   "options_page": "options.html",
   "icons": { "48": "icon48.png", "128": "icon128.png" }

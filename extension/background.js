@@ -79,6 +79,18 @@ function schedule() {
   setTimeout(() => { void connect(); }, wait);
 }
 
-chrome.storage.onChanged.addListener(() => { try { socket?.close(); } catch { /* reconnect below */ } });
+// Saving settings on the options page wakes this worker: reconnect immediately instead of waiting
+// for a timer the next suspension would kill.
+chrome.storage.onChanged.addListener(changes => {
+  if (!('port' in changes) && !('token' in changes)) return;
+  try { socket?.close(); } catch { /* closed already */ }
+  void connect();
+});
+// MV3 service workers are suspended when idle and setTimeout retries die with them; a repeating
+// alarm survives suspension and wakes the worker to recover a dropped connection.
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === 'orbit-reconnect' && (!socket || socket.readyState !== WebSocket.OPEN)) void connect();
+});
+chrome.alarms.create('orbit-reconnect', { periodInMinutes: 0.5 });
 void setBadge(false);
 void connect();
