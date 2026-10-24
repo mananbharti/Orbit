@@ -13,6 +13,7 @@ import { pairedDesktopSchema, type PairedDesktop } from './paired-desktop.js';
 const RETRY_BASE_MS = 500;
 const RETRY_MAX_MS = 30_000;
 const COMMAND_TIMEOUT_MS = 10_000;
+const TERMINAL_EXEC_TIMEOUT_MS = 130_000; // server allows up to 120s per command, plus pad
 // Launch revalidates discovery and activation through two native helpers, each bounded to eight seconds.
 const LAUNCHER_COMMAND_TIMEOUT_MS = 20_000;
 // Approval-gated commands wait on the owner answering a dialog at the PC (up to 30s), so they need room beyond it.
@@ -96,7 +97,8 @@ export class OrbitClient extends EventEmitter {
       const timer = setTimeout(() => {
         this.failPending();
         this.socket?.terminate();
-      }, type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS
+      }, type === 'terminal.exec' ? TERMINAL_EXEC_TIMEOUT_MS
+        : type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS
         : type === 'terminal.begin' || type.startsWith('input.') || type === 'system.power' ? APPROVAL_COMMAND_TIMEOUT_MS
         : COMMAND_TIMEOUT_MS);
       this.pending = { id: requestId, resolve, reject, timer };
