@@ -143,6 +143,15 @@ test('a failed run surfaces the gateway\'s own error text', async t => {
     /failed: Parameter validation failed: Invalid length for parameter modelId/);
 });
 
+test('gateway error text is redacted: the API key and Bearer tokens never reach the phone', async t => {
+  const f = await fake(t);
+  f.events = [frame('run.failed', {})];
+  f.status = { object: 'hermes.run', run_id: 'run_abc123', status: 'failed',
+    error: 'upstream denied key test-key with Bearer abc123def456', last_event: 'run.failed' };
+  await assert.rejects(new HermesRunner({ apiKey: 'test-key', baseUrl: f.url }).run(context().ctx),
+    (e: Error) => e.message.includes('Bearer [redacted]') && !e.message.includes('abc123def456') && !e.message.includes('denied key test-key'));
+});
+
 test('a stale approval (HTTP 409) is tolerated: the control already settled', async t => {
   const f = await fake(t);
   f.approvalStatus = 409;

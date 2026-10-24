@@ -14,6 +14,7 @@ function harness(chromeBehavior: { queryFails?: string; createFails?: string }) 
   const chrome = {
     storage: { local: { get: (_keys: string[], cb: (v: object) => void) => cb({ port: 9123, token: 'tok' }) },
       onChanged: { addListener: () => {} } },
+    alarms: { onAlarm: { addListener: () => {} }, create: () => {} },
     action: { setBadgeBackgroundColor: async () => {}, setBadgeText: async () => {} },
     runtime: { get lastError() { return lastError.message ? { message: lastError.message } : undefined; } },
     tabs: {

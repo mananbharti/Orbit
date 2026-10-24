@@ -60,9 +60,11 @@ export class HermesRunner implements AgentRunner {
     if (status.status === 'completed') return typeof status.output === 'string' && status.output ? status.output : 'Done';
     if (status.status && !TERMINAL.has(status.status)) throw new AgentRunError('Hermes run did not finish');
     // Surface the gateway's own reason (for example a missing model provider) so the phone shows why.
-    const reason = typeof status.error === 'string' && status.error ? `: ${clean(status.error)}` : '';
+    const reason = typeof status.error === 'string' && status.error ? `: ${this.clean(status.error)}` : '';
     throw new AgentRunError(`Hermes run ${status.status ?? 'unknown'}${reason}`);
   }
+
+  private clean(value: string): string { return clean(redactSecrets(value, this.options.apiKey)); }
 
   private async consume(runId: string, context: AgentRunContext): Promise<void> {
     const state = { active: true };
@@ -96,7 +98,7 @@ export class HermesRunner implements AgentRunner {
   }
 
   private async handle(runId: string, event: { type: string; data: Record<string, unknown> }, context: AgentRunContext, state: { active: boolean }): Promise<void> {
-    const text = (value: unknown): string => typeof value === 'string' ? clean(value) : '';
+    const text = (value: unknown): string => typeof value === 'string' ? this.clean(value) : '';
     switch (event.type) {
       case 'tool.started': context.step(`Using ${text(event.data.tool) || 'tool'}${event.data.preview ? `: ${text(event.data.preview)}` : ''}`); break;
       case 'tool.completed': context.step(`${event.data.error ? 'Failed' : 'Finished'} ${text(event.data.tool) || 'tool'}`); break;
@@ -175,6 +177,13 @@ function defaultApprovalBody(approved: boolean, identity: ApprovalIdentity): Rec
   return { request_id: identity.requestId, execution_generation: identity.generation, choice: approved ? 'once' : 'deny' };
 }
 function clean(value: string): string { return value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, MAX_TEXT); }
+// Phone-bound gateway text is sanitized, not trusted: strip the configured API key verbatim and any
+// Bearer-shaped token, so a provider error echoing request details cannot leak credentials.
+function redactSecrets(value: string, apiKey: string): string {
+  let out = value.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
+  if (apiKey.length >= 8) out = out.split(apiKey).join('[redacted]');
+  return out;
+}
 function parseEvent(name: string, data: string): { type: string; data: Record<string, unknown> } | undefined {
   let parsed: unknown;
   try { parsed = JSON.parse(data); } catch { return undefined; }
