@@ -13,6 +13,7 @@ import { MemoryClipboard, waitForClipboard as waitFor } from './clipboard-helper
 async function fixture(t: TestContext, adapter: SystemControlAdapter) {
   const root = mkdtempSync(join(tmpdir(), 'orbit-system-wss-'));
   const service = await startDesktop({ directory: join(root, 'service'), host: '127.0.0.1', port: 0, displayName: 'Orbit System Test',
+    biometric: { verify: async () => true }, // test fixture: desktop owner approves sensitive commands
     discovery: false, clipboard: { createAdapter: () => new MemoryClipboard(), pollMs: 10 }, system: { createAdapter: () => adapter } });
   const paired = await pairDesktop(service.pairing.open(), service.hint);
   const client = new OrbitClient(paired);
