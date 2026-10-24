@@ -28,6 +28,13 @@ export function MicButton({ api, onText, onError }: { api: DictationApi; onText:
 
   const start = async (): Promise<void> => {
     try {
+      // Ask the computer whether its dictation engine is usable before recording, so a one-time download or a failed setup surfaces honestly instead of a dead transcription. Older desktops without dictation.status throw; treat them as ready (they only ever ran an env-configured engine).
+      try {
+        const setup = await api.setupState();
+        if (setup.state === 'downloading') { onError('Dictation is setting up on your computer (one-time download). Try again in a minute.'); return; }
+        if (setup.state === 'failed') { void api.retrySetup().catch(() => undefined); onError(setup.reason === 'cancelled' ? 'Dictation setup was cancelled on your computer. It is retrying now; try again shortly.' : 'Dictation setup failed on your computer. It is retrying now; try again shortly.'); return; }
+        if (setup.state === 'off') { onError('Dictation is not available on this computer.'); return; }
+      } catch { /* older desktop: proceed */ }
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) { onError('Allow the microphone in Settings to dictate.'); return; }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });

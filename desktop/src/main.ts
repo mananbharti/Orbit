@@ -8,7 +8,7 @@ import { WindowsInputDevice } from './os-integration/input-device.windows.js';
 import { windowsApproval } from './security-pairing/windows-approval.js';
 import { WhisperCpp } from './dictation/whisper-cpp.js';
 import { DictationService } from './dictation/dictation-service.js';
-import { ensureEngine } from './dictation/provision.js';
+import { DictationSetup } from './dictation/provision.js';
 import { CommandRegistry } from './command-router/command-registry.js';
 import { ffmpegDecoder } from './dictation/ffmpeg-decoder.js';
 import { HermesRunner } from './agent/hermes-runner.js';
@@ -31,13 +31,13 @@ async function main(): Promise<void> {
   const registry = new CommandRegistry();
   const config = readConfig();
   const service = await startDesktop({ ...config, agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}), registry });
-  if (!dictation) {
-    void ensureEngine({ dataDir: config.directory }).then(paths => {
-      new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder);
-      service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
-    }).catch(() => {
-      service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' });
-    });
+  // Dictation availability stays visible and honest: dictation.status always answers, retry ignores the 24h auto-attempt backoff, setup.cancel aborts an in-flight download.
+  const setup = new DictationSetup(registry, config.directory,
+    paths => { new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder); }, service.log);
+  if (dictation) setup.markReady();
+  else {
+    const existing = setup.autoStart();
+    if (existing) new DictationService(registry, new WhisperCpp(existing), service.log, undefined, undefined, decoder);
   }
   const input = createInterface({ input: process.stdin });
   let cleanup: (() => void) | undefined;

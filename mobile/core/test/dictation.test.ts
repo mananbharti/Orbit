@@ -120,3 +120,18 @@ test('empty or oversized compressed clips are refused before anything is sent', 
   assert.equal(calls.length, 0);
   s.stop();
 });
+
+test('setupState parses the computer dictation engine state', async () => {
+  const { api, calls } = await setup(() => ({ state: 'downloading' }));
+  assert.deepEqual(await api.setupState(), { state: 'downloading' });
+  assert.equal(calls[0]?.type, 'dictation.status');
+});
+
+test('setupState rejects a malformed reply and retrySetup returns the new state', async () => {
+  const good = await setup((type: string) => type === 'dictation.retry' ? { state: 'downloading' } : { state: 'failed', reason: 'HASH_MISMATCH' });
+  assert.deepEqual(await good.api.setupState(), { state: 'failed', reason: 'HASH_MISMATCH' });
+  assert.deepEqual(await good.api.retrySetup(), { state: 'downloading' });
+  assert.equal(good.calls[1]?.type, 'dictation.retry');
+  const bad = await setup(() => ({ state: 'melting' }));
+  await assert.rejects(bad.api.setupState(), InvalidDesktopReply);
+});

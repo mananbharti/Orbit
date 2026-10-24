@@ -1,7 +1,7 @@
 /** First-run dictation engine provisioning: downloads one pinned whisper.cpp build and one pinned ggml model per computer, verifies sha256 before use, extracts with the system tar, and stores both under the private data directory. Downloads binaries only; audio never leaves the device. Env overrides (ORBIT_WHISPER_BIN / ORBIT_WHISPER_MODEL) always win and skip every download. */
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -34,8 +34,8 @@ async function sha256Of(path: string): Promise<string> {
   });
 }
 
-async function defaultFetch(url: string, dest: string): Promise<void> {
-  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10 * 60_000) });
+async function defaultFetch(url: string, dest: string, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(url, { redirect: 'follow', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10 * 60_000)]) : AbortSignal.timeout(10 * 60_000) });
   if (!res.ok) throw new ProvisionError('DOWNLOAD_FAILED', `${url} -> HTTP ${res.status}`);
   writeFileSync(dest, Buffer.from(await res.arrayBuffer()), { mode: 0o600 });
 }
@@ -48,9 +48,10 @@ async function defaultExtract(archive: string, destDir: string): Promise<void> {
 
 export interface ProvisionOptions {
   platform?: string; arch?: string; env?: NodeJS.ProcessEnv; dataDir: string;
-  assets?: AssetTable; fetchImpl?: (url: string, dest: string) => Promise<void>;
+  assets?: AssetTable; fetchImpl?: (url: string, dest: string, signal?: AbortSignal) => Promise<void>;
   extractImpl?: (archive: string, destDir: string) => Promise<void>;
   onStage?: (stage: 'engine' | 'model' | 'verify' | 'done') => void;
+  signal?: AbortSignal;
 }
 
 /** Env pair first, then an already-provisioned pair, else null. Never throws. */
@@ -74,6 +75,8 @@ export async function ensureEngine(options: ProvisionOptions): Promise<EnginePat
   const existing = resolveEnginePaths(env, options.dataDir, assets, platform, arch);
   if (existing) return existing;
   const fetchImpl = options.fetchImpl ?? defaultFetch;
+  const signal = options.signal;
+  const cancelled = () => { if (signal?.aborted) throw new ProvisionError('DOWNLOAD_FAILED', 'cancelled'); };
   const extractImpl = options.extractImpl ?? defaultExtract;
   const build = assets.builds[`${platform}-${arch}`];
   if (!build) throw new ProvisionError('UNSUPPORTED_PLATFORM', `${platform}-${arch}: install whisper.cpp yourself and set ORBIT_WHISPER_BIN/ORBIT_WHISPER_MODEL`);
@@ -82,8 +85,9 @@ export async function ensureEngine(options: ProvisionOptions): Promise<EnginePat
   const work = mkdtempSync(join(tmpdir(), 'orbit-engine-'));
   try {
     options.onStage?.('engine');
+    cancelled();
     const engineArchive = join(work, build.file);
-    await fetchImpl(build.url, engineArchive).catch(e => { throw e instanceof ProvisionError ? e : new ProvisionError('DOWNLOAD_FAILED', e instanceof Error ? e.message : String(e)); });
+    await fetchImpl(build.url, engineArchive, signal).catch(e => { throw e instanceof ProvisionError ? e : new ProvisionError('DOWNLOAD_FAILED', e instanceof Error ? e.message : String(e)); });
     options.onStage?.('verify');
     if ((await sha256Of(engineArchive)) !== build.sha256) throw new ProvisionError('HASH_MISMATCH', build.file);
     const engineOut = join(work, 'engine');
@@ -97,8 +101,9 @@ export async function ensureEngine(options: ProvisionOptions): Promise<EnginePat
     else throw new ProvisionError('EXTRACT_FAILED', `whisper-cli missing after extracting ${build.file}`);
 
     options.onStage?.('model');
+    cancelled();
     const modelPath = join(work, assets.model.file);
-    await fetchImpl(assets.model.url, modelPath).catch(e => { throw e instanceof ProvisionError ? e : new ProvisionError('DOWNLOAD_FAILED', e instanceof Error ? e.message : String(e)); });
+    await fetchImpl(assets.model.url, modelPath, signal).catch(e => { throw e instanceof ProvisionError ? e : new ProvisionError('DOWNLOAD_FAILED', e instanceof Error ? e.message : String(e)); });
     if ((await sha256Of(modelPath)) !== assets.model.sha256) throw new ProvisionError('HASH_MISMATCH', assets.model.file);
 
     rmSync(dir, { recursive: true, force: true });
@@ -111,5 +116,96 @@ export async function ensureEngine(options: ProvisionOptions): Promise<EnginePat
     return { binary, model: join(dir, assets.model.file) };
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+}
+
+// --- Provisioning state, honesty and backoff --------------------------------
+
+const ATTEMPT_FILE = 'dictation-last-attempt';
+export const AUTO_RETRY_AFTER_MS = 24 * 60 * 60_000;
+
+/** True when an automatic (startup) provision attempt is allowed: never attempted, or the last attempt is older than the backoff window. User-triggered retries ignore this. */
+export function autoProvisionAllowed(dataDir: string, now: number = Date.now()): boolean {
+  try {
+    const stamp = Number(readFileSync(join(dataDir, 'dictation', ATTEMPT_FILE), 'utf8'));
+    return !Number.isFinite(stamp) || now - stamp >= AUTO_RETRY_AFTER_MS;
+  } catch { return true; }
+}
+
+export function markProvisionAttempt(dataDir: string, now: number = Date.now()): void {
+  const dir = join(dataDir, 'dictation');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ATTEMPT_FILE), String(now), { mode: 0o600 });
+}
+
+export type DictationSetupState = { state: 'off' | 'downloading' | 'ready' | 'failed'; reason?: string };
+
+import type { CommandRegistry } from '../command-router/command-registry.js';
+import type { CommandContext } from '../command-router/command-context.js';
+import type { ActivityLog } from '../activity-log/activity-log.js';
+import { ProtocolError } from '../protocol/errors.js';
+
+/** Owns dictation engine availability as a visible, retryable, cancellable state machine; registers dictation.status/retry so a phone always gets an honest answer, including while the one-time download runs. Depends on the registry and ensureEngine; never retries in a loop by itself. */
+export class DictationSetup {
+  private current: DictationSetupState = { state: 'off' };
+  private abort?: AbortController;
+  private running?: Promise<void>;
+
+  constructor(registry: CommandRegistry, private readonly dataDir: string,
+    private readonly onReady: (paths: EnginePaths) => void, private readonly log: ActivityLog,
+    private readonly options: { env?: NodeJS.ProcessEnv; provision?: (o: ProvisionOptions) => Promise<EnginePaths>; auto?: boolean } = {}) {
+    const ok = (context: CommandContext): void => { if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED'); };
+    registry.register('dictation.status', { validate: p => p === undefined || (typeof p === 'object' && p !== null && Object.keys(p).length === 0),
+      execute: async (_p, context) => { ok(context); return this.statusPayload(); } });
+    registry.register('dictation.retry', { validate: p => p === undefined || (typeof p === 'object' && p !== null && Object.keys(p).length === 0),
+      execute: async (_p, context) => { ok(context); void this.start(true); return this.statusPayload(); } });
+    registry.register('dictation.setup.cancel', { validate: p => p === undefined || (typeof p === 'object' && p !== null && Object.keys(p).length === 0),
+      execute: async (_p, context) => { ok(context); this.cancel(); return this.statusPayload(); } });
+  }
+
+  private statusPayload(): Record<string, string> {
+    return this.current.reason ? { state: this.current.state, reason: this.current.reason } : { state: this.current.state };
+  }
+
+  get state(): DictationSetupState { return this.current; }
+
+  /** Marks the engine ready when it was configured outside provisioning (env override wired at startup). */
+  markReady(): void { this.current = { state: 'ready' }; }
+
+  /** Startup path: attach an existing engine immediately, or kick off one automatic attempt when backoff allows. */
+  autoStart(): EnginePaths | undefined {
+    const existing = resolveEnginePaths(this.options.env ?? process.env, this.dataDir);
+    if (existing) { this.current = { state: 'ready' }; return existing; }
+    if ((this.options.auto ?? true) && autoProvisionAllowed(this.dataDir)) void this.start(false);
+    return undefined;
+  }
+
+  /** Starts (or joins) the one-time download. `manual` retries ignore the backoff window. */
+  async start(manual: boolean): Promise<void> {
+    if (this.current.state === 'ready' || this.running) return this.running;
+    if (!manual && !autoProvisionAllowed(this.dataDir)) return;
+    markProvisionAttempt(this.dataDir);
+    this.abort = new AbortController();
+    this.current = { state: 'downloading' };
+    const provision = this.options.provision ?? (o => ensureEngine(o));
+    this.running = (async () => {
+      try {
+        const paths = await provision({ dataDir: this.dataDir, env: this.options.env, signal: this.abort!.signal });
+        this.current = { state: 'ready' };
+        this.onReady(paths);
+        this.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
+      } catch (e) {
+        const reason = e instanceof ProvisionError ? e.code : 'DOWNLOAD_FAILED';
+        this.current = { state: 'failed', reason };
+        this.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' });
+      } finally { this.running = undefined; this.abort = undefined; }
+    })();
+    return this.running;
+  }
+
+  /** Cancels an in-flight download; the partial tree is cleaned by ensureEngine. */
+  cancel(): void {
+    this.abort?.abort();
+    if (this.current.state === 'downloading') this.current = { state: 'failed', reason: 'cancelled' };
   }
 }

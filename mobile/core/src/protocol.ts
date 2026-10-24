@@ -218,3 +218,5 @@ export const dictationResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('text'), text: z.string().min(1).max(20_000) }),
   z.strictObject({ status: z.literal('no-speech') })]);
 export type DictationResult = z.infer<typeof dictationResultSchema>;
+export const dictationSetupStateSchema = z.strictObject({ state: z.enum(['off', 'downloading', 'ready', 'failed']), reason: z.string().max(64).optional() });
+export type DictationSetupState = z.infer<typeof dictationSetupStateSchema>;

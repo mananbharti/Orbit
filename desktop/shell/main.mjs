@@ -81,22 +81,18 @@ async function boot() {
     const dataDir = join(app.getPath('userData'), 'orbit-data');
     service = await startDesktop({ directory: dataDir, host, port: DEFAULT_PORT,
       displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), registry, onExtensionConnection: () => push() });
-    // Dictation: provision the pinned whisper.cpp engine once in the background; dictation.* registers when verified. Failures leave dictation off and are logged metadata-only.
+    // Dictation: one visible setup machine - status always answers, retry is user-triggered, cancel aborts the download; the engine registers when verified.
+    const { DictationSetup } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
+    const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
+    const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
+    const attachDictation = paths => { new DictationService(registry, new WhisperCpp(paths), service.log); };
+    const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log);
     if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
-      const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
-      const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
-      try {
-        new DictationService(registry, new WhisperCpp({ binary: process.env.ORBIT_WHISPER_BIN, model: process.env.ORBIT_WHISPER_MODEL }), service.log);
-        service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
-      } catch { service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }); }
+      try { attachDictation({ binary: process.env.ORBIT_WHISPER_BIN, model: process.env.ORBIT_WHISPER_MODEL }); dictationSetup.markReady(); }
+      catch { service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }); }
     } else {
-      const { ensureEngine } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
-      const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
-      const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
-      void ensureEngine({ dataDir }).then(paths => {
-        new DictationService(registry, new WhisperCpp(paths), service.log);
-        service.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
-      }).catch(() => service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }));
+      const existing = dictationSetup.autoStart();
+      if (existing) { try { attachDictation(existing); } catch { service.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' }); } }
     }
     state = { phase: 'running', host, port: DEFAULT_PORT };
     if (agent) { void probeAgentGateway(hermes); void probeLaya(hermes); } else { agentGateway = 'unknown'; agentLaya = 'unknown'; }
