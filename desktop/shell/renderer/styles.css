@@ -66,7 +66,9 @@ h2 { font-size: 17px; font-weight: 650; margin: 26px 2px 10px; letter-spacing: -
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
 .hero { display: flex; gap: 28px; padding: 26px; align-items: center; }
-.qrbox { width: 196px; height: 196px; border-radius: 14px; background: #fff; display: grid; place-items: center; overflow: hidden; flex-shrink: 0; border: 1px solid var(--border); }
+.qrbox { width: 196px; height: 196px; border-radius: 14px; background: var(--card); display: grid; place-items: center; overflow: hidden; flex-shrink: 0; border: 1px solid var(--border); }
+/* A live QR keeps a hard-white tile in both themes so phone cameras always get full contrast. */
+.qrbox.live { background: #ffffff; }
 .qrbox svg { width: 184px; height: 184px; }
 .qr-empty { color: #86868b; font-size: 13px; text-align: center; padding: 20px; }
 .hero-side { display: flex; flex-direction: column; gap: 13px; align-items: flex-start; }
