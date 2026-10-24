@@ -8,6 +8,7 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { AgentRunner } from './agent-runner.js';
+import { AgentRunError } from './agent-runner.js';
 import type { AuditTrail } from './audit-trail.js';
 import { AUDIT_PAGE } from './audit-trail.js';
 import type { TaskLedger, TaskRecord } from './task-ledger.js';
@@ -207,7 +208,12 @@ export class AgentTasks {
       .then(result => {
         if (signal.aborted) return this.finish(task, 'cancelled', 'Cancelled');
         this.finish(task, 'completed', result.slice(0, 500));
-      }, () => this.finish(task, signal.aborted ? 'cancelled' : 'failed', signal.aborted ? 'Cancelled' : 'Failed'));
+      }, (error: unknown) => {
+        // Privacy boundary: arbitrary runner errors can carry local secrets (paths, stacks, key material),
+        // so only messages the runner explicitly marked phone-safe reach the phone; anything else stays bare.
+        const reason = error instanceof AgentRunError && error.message ? `: ${error.message.slice(0, 160)}` : '';
+        this.finish(task, signal.aborted ? 'cancelled' : 'failed', signal.aborted ? 'Cancelled' : `Failed${reason}`);
+      });
   }
 
   private finish(task: TaskRecord, state: 'completed' | 'failed' | 'cancelled', text: string): void {

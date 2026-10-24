@@ -9,6 +9,7 @@ import { AgentTasks, APPROVAL_TIMEOUT_MS, MAX_CONCURRENT_TASKS } from '../src/ag
 import { CommandRegistry } from '../src/command-router/command-registry.js';
 import { CommandRouter } from '../src/command-router/command-router.js';
 import type { AgentRunContext, AgentRunner } from '../src/agent/agent-runner.js';
+import { AgentRunError } from '../src/agent/agent-runner.js';
 import { MAX_LEDGER_TASKS, TaskLedger } from '../src/agent/task-ledger.js';
 import type { JsonValue, ResponseMessage } from '../src/protocol/messages.js';
 import { core } from './helpers.js';
@@ -185,6 +186,15 @@ test('a failing runner marks the task failed without leaking its error text', as
   assert.equal(result(await command('agent.get', { taskId })).state, 'failed');
   const events = JSON.stringify(result(await command('agent.events', { taskId })));
   assert.equal(events.includes('secret'), false);
+});
+
+test('a runner error explicitly marked phone-safe reaches the phone with its reason', async t => {
+  const { command, runner } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  runner.failures[0]!(new AgentRunError('Hermes run failed: provider unavailable')); await tick(); await tick();
+  assert.equal(result(await command('agent.get', { taskId })).state, 'failed');
+  const events = JSON.stringify(result(await command('agent.events', { taskId })));
+  assert.equal(events.includes('Failed: Hermes run failed: provider unavailable'), true);
 });
 
 test('tasks are private to the device that created them', async t => {

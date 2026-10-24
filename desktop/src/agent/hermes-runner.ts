@@ -1,5 +1,5 @@
 /** Runs agent tasks on a local Hermes gateway through its documented Runs API; depends on fetch and the runner boundary; never executes tools itself. */
-import type { AgentRunContext, AgentRunner } from './agent-runner.js';
+import { AgentRunError, type AgentRunContext, type AgentRunner } from './agent-runner.js';
 
 export interface HermesRunnerOptions {
   /** Base URL of the Hermes API server. Must be loopback unless allowRemote is set. */
@@ -19,7 +19,7 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 export interface ApprovalIdentity { requestId: string; generation: number }
 
 /** Thrown for any non-2xx Hermes response; carries the status so callers can tolerate specific ones. */
-export class HermesHttpError extends Error { constructor(readonly status: number) { super(`Hermes HTTP ${status}`); } }
+export class HermesHttpError extends AgentRunError { constructor(readonly status: number) { super(`Hermes HTTP ${status}`); } }
 
 export class HermesRunner implements AgentRunner {
   private readonly base: URL;
@@ -49,7 +49,7 @@ export class HermesRunner implements AgentRunner {
     const created = await this.request('POST', '/v1/runs', context.signal,
       { input: context.prompt, session_id: context.taskId }, { 'Idempotency-Key': context.taskId });
     const runId = (await created.json() as { run_id?: unknown }).run_id;
-    if (typeof runId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(runId)) throw new Error('Hermes returned no run id');
+    if (typeof runId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(runId)) throw new AgentRunError('Hermes returned no run id');
     const onAbort = (): void => { void this.request('POST', `/v1/runs/${runId}/stop`, undefined).catch(() => undefined); };
     context.signal.addEventListener('abort', onAbort, { once: true });
     try {
@@ -58,10 +58,10 @@ export class HermesRunner implements AgentRunner {
     // The status endpoint is the authority; the event stream only provides progress.
     const status = await (await this.request('GET', `/v1/runs/${runId}`, context.signal)).json() as { status?: string; output?: unknown; error?: unknown };
     if (status.status === 'completed') return typeof status.output === 'string' && status.output ? status.output : 'Done';
-    if (status.status && !TERMINAL.has(status.status)) throw new Error('Hermes run did not finish');
+    if (status.status && !TERMINAL.has(status.status)) throw new AgentRunError('Hermes run did not finish');
     // Surface the gateway's own reason (for example a missing model provider) so the phone shows why.
     const reason = typeof status.error === 'string' && status.error ? `: ${clean(status.error)}` : '';
-    throw new Error(`Hermes run ${status.status ?? 'unknown'}${reason}`);
+    throw new AgentRunError(`Hermes run ${status.status ?? 'unknown'}${reason}`);
   }
 
   private async consume(runId: string, context: AgentRunContext): Promise<void> {
