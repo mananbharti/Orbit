@@ -99,7 +99,7 @@ export class OrbitClient extends EventEmitter {
         this.socket?.terminate();
       }, type === 'terminal.exec' ? TERMINAL_EXEC_TIMEOUT_MS
         : type === 'launcher.list' || type === 'launcher.launch' ? LAUNCHER_COMMAND_TIMEOUT_MS
-        : type === 'terminal.begin' || type.startsWith('input.') || type === 'system.power' ? APPROVAL_COMMAND_TIMEOUT_MS
+        : type === 'terminal.begin' || type.startsWith('input.') || type === 'system.power' || type === 'automation.save' || type === 'automation.enable' ? APPROVAL_COMMAND_TIMEOUT_MS
         : COMMAND_TIMEOUT_MS);
       this.pending = { id: requestId, resolve, reject, timer };
       this.submitted++;

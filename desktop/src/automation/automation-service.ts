@@ -22,11 +22,11 @@ export class AutomationService {
   private running = false;
 
   /** Desktop-owner confirmation, required before a paired device may create a scheduled power action (execution is unattended, so consent happens at creation). */
-  private readonly confirmPower?: (action: 'sleep' | 'lock', context: CommandContext) => Promise<boolean>;
+  private readonly confirmPower?: (action: 'sleep' | 'lock', context: CommandContext, schedule: { time: string; days: number[] }) => Promise<boolean>;
 
   constructor(registry: CommandRegistry, private readonly store: AutomationStore, private readonly executor: AutomationExecutor,
     private readonly log: ActivityLog, private readonly now: () => Date = () => new Date(),
-    confirmPower?: (action: 'sleep' | 'lock', context: CommandContext) => Promise<boolean>) {
+    confirmPower?: (action: 'sleep' | 'lock', context: CommandContext, schedule: { time: string; days: number[] }) => Promise<boolean>) {
     this.confirmPower = confirmPower;
     this.unregister = [
       registry.register('automation.list', { validate: p => p === null || (typeof p === 'object' && Object.keys(p).length === 0),
@@ -36,16 +36,20 @@ export class AutomationService {
           this.authorize(context);
           const parsed = saveAutomationSchema.parse(p);
           // A scheduled power action fires unattended: it must not bypass the desktop-owner gate that direct system.power has. Creation needs explicit owner confirmation.
-          if (parsed.action.type === 'power' && (!this.confirmPower || !await this.confirmPower(parsed.action.action, context)))
+          if (parsed.action.type === 'power' && (!this.confirmPower || !await this.confirmPower(parsed.action.action, context, { time: parsed.time, days: parsed.days })))
             throw new ProtocolError('BIOMETRIC_REQUIRED');
-          try { return { automations: this.store.save(parsed) }; }
+          try { return { automations: this.store.save(parsed, parsed.action.type === 'power') }; }
           catch (error) { throw toProtocol(error); }
         } }),
       registry.register('automation.enable', { validate: p => setAutomationEnabledSchema.safeParse(p).success,
         execute: async (p, context) => {
           this.authorize(context);
           const { id, enabled } = setAutomationEnabledSchema.parse(p);
-          try { return { automations: this.store.setEnabled(id, enabled) }; }
+          // Re-enabling a power schedule is a new consent moment (it may have been disabled by the pre-gate migration).
+          const existing = this.store.get(id);
+          if (enabled && existing?.action.type === 'power' && (!this.confirmPower || !await this.confirmPower(existing.action.action, context, { time: existing.time, days: existing.days })))
+            throw new ProtocolError('BIOMETRIC_REQUIRED');
+          try { return { automations: this.store.setEnabled(id, enabled, enabled && existing?.action.type === 'power') }; }
           catch (error) { throw toProtocol(error); }
         } }),
       registry.register('automation.delete', { validate: p => automationIdSchema.safeParse(p).success,

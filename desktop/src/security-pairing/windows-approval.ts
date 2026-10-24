@@ -23,8 +23,14 @@ export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeout
     let out = ''; let done = false;
     const finish = (v: boolean): void => { if (done) return; done = true; clearTimeout(timer); try { child.kill(); } catch { /* already gone */ } resolve(v); };
     const timer = setTimeout(() => finish(false), timeoutMs);
+    const sched = (message.payload as { schedule?: { time?: string; days?: number[] } } | undefined)?.schedule;
+    const action = (message.payload as { action?: string } | undefined)?.action ?? 'change the power state of';
     const text = family === 'terminal'
       ? `Allow your phone (device ${device}) to run commands on this computer? Commands can change or delete anything.\n\nChoose No unless you just started this on your phone.`
+      : family === 'power'
+      ? sched?.time
+        ? `Allow your phone (device ${device}) to schedule ${action} at ${sched.time}${sched.days?.length ? ' on ' + sched.days.length + ' weekday(s)' : ' every day'} on this computer? It fires unattended at that time.\n\nChoose No unless you just created this schedule on your phone.`
+        : `Allow your phone (device ${device}) to ${action} this computer?\n\nChoose No unless you just started this on your phone.`
       : `Allow your phone (device ${device}) to move the mouse and type on this computer?\n\nChoose No unless you just started this on your phone.`;
     try { child = spawnPrompt(text); }
     catch { clearTimeout(timer); resolve(false); return; }

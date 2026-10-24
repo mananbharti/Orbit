@@ -1,7 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { AutomationService, type AutomationExecutor } from '../src/automation/automation-service.js';
 import { AutomationStore } from '../src/automation/automation-store.js';
@@ -105,6 +106,46 @@ test('a scheduled power action needs desktop-owner confirmation at creation (exe
   await c.registry.get('automation.save')!.execute({ time: '10:00', days: [], action: { type: 'app', appId: 'com.example' } }, context());
   assert.equal(asked, 1, 'non-power automations do not prompt');
   rmSync(c.dir, { recursive: true, force: true });
+});
+
+test('pre-gate power schedules are disabled at load, never fire silently, and re-enabling needs fresh confirmation', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'orbit-auto-migrate-'));
+  const path = join(dir, 'automations.json');
+  // A store file written before the confirmation gate existed: an enabled power schedule, no stamp.
+  writeFileSync(path, JSON.stringify([
+    { id: randomUUID(), time: '09:30', days: [], enabled: true, action: { type: 'power', action: 'lock' } },
+    { id: randomUUID(), time: '10:00', days: [], enabled: true, action: { type: 'app', appId: 'com.example' } }]));
+  const store = new AutomationStore(path);
+  assert.equal(store.disabledAtLoad.length, 1, 'the unapproved power schedule was disabled at load');
+  const [power, app] = store.list();
+  assert.equal(power!.enabled, false);
+  assert.equal(app!.enabled, true, 'non-power schedules are untouched');
+  assert.ok(!('powerConfirmedAt' in power!), 'internal stamps never reach the wire shape');
+  // The migration persisted.
+  const reloaded = new AutomationStore(path);
+  assert.equal(reloaded.list()[0]!.enabled, false);
+  assert.equal(reloaded.disabledAtLoad.length, 0, 'migration runs once');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('automation.enable on a power schedule needs desktop-owner confirmation', async () => {
+  const c = setup();
+  let asked = 0;
+  new AutomationService(c.registry, c.store, executor(c.fired), new ActivityLog(), () => new Date(), async () => { asked++; return true; });
+  const saved = await c.registry.get('automation.save')!.execute({ time: '09:30', days: [], action: { type: 'power', action: 'lock' } }, context()) as { automations: { id: string }[] };
+  asked = 0;
+  const id = saved.automations[0]!.id;
+  await c.registry.get('automation.enable')!.execute({ id, enabled: false }, context());
+  assert.equal(asked, 0, 'disabling never prompts');
+  await c.registry.get('automation.enable')!.execute({ id, enabled: true }, context());
+  assert.equal(asked, 1, 're-enabling a power schedule re-prompts');
+  rmSync(c.dir, { recursive: true, force: true });
+  const d = setup();
+  new AutomationService(d.registry, d.store, executor(d.fired), new ActivityLog(), () => new Date(), async () => false);
+  const savedD = await d.store.save({ time: '09:30', days: [], action: { type: 'power', action: 'sleep' } }, true);
+  await assert.rejects(d.registry.get('automation.enable')!.execute({ id: savedD[0]!.id, enabled: true }, context()),
+    (e: ProtocolError) => e.code === 'BIOMETRIC_REQUIRED');
+  rmSync(d.dir, { recursive: true, force: true });
 });
 
 test('automation commands validate, authorize, and translate store errors', async () => {

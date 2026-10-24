@@ -5,38 +5,60 @@ import { z } from 'zod';
 import { atomicWrite } from '../security-pairing/atomic-file.js';
 import { MAX_AUTOMATIONS, automationSchema, type Automation, type AutomationAction } from '../protocol/automation.js';
 
+/** Internal record: the wire shape plus the desktop-owner confirmation stamp for power schedules. Never sent to phones (strict wire schemas reject extra keys). */
+const storedSchema = automationSchema.extend({ powerConfirmedAt: z.number().int().nonnegative().optional() });
+type StoredAutomation = z.infer<typeof storedSchema>;
+
 export class AutomationStore {
-  private automations: Automation[] = [];
+  private automations: StoredAutomation[] = [];
+  /** Power schedules disabled at load because they predate the owner-confirmation gate (ids, for logging). */
+  readonly disabledAtLoad: string[] = [];
 
   constructor(private readonly path?: string) {
     if (!path || !existsSync(path)) return;
     try {
-      const parsed = z.array(automationSchema).max(MAX_AUTOMATIONS).safeParse(JSON.parse(readFileSync(path, 'utf8')));
-      if (parsed.success) this.automations = parsed.data;
+      const parsed = z.array(storedSchema).max(MAX_AUTOMATIONS).safeParse(JSON.parse(readFileSync(path, 'utf8')));
+      if (parsed.success) {
+        // Migration: a stored power schedule without an owner-confirmation stamp predates the gate and must never fire silently.
+        this.automations = parsed.data.map(a => {
+          if (a.action.type === 'power' && a.enabled && a.powerConfirmedAt === undefined) { this.disabledAtLoad.push(a.id); return { ...a, enabled: false }; }
+          return a;
+        });
+        if (this.disabledAtLoad.length) this.persist();
+      }
     } catch { /* unreadable automations are simply forgotten */ }
   }
 
-  list(): Automation[] { return this.automations.map(a => ({ ...a, days: [...a.days] })); }
-  get(id: string): Automation | undefined { const a = this.automations.find(x => x.id === id); return a ? { ...a, days: [...a.days] } : undefined; }
+  private static strip(a: StoredAutomation): Automation {
+    const { powerConfirmedAt: _, ...wire } = a;
+    return { ...wire, days: [...wire.days] };
+  }
+
+  list(): Automation[] { return this.automations.map(a => AutomationStore.strip(a)); }
+  get(id: string): Automation | undefined { const a = this.automations.find(x => x.id === id); return a ? AutomationStore.strip(a) : undefined; }
 
   /** Creates without an id, replaces with one. */
-  save(entry: { id?: string; time: string; days: number[]; action: AutomationAction }): Automation[] {
+  save(entry: { id?: string; time: string; days: number[]; action: AutomationAction }, powerConfirmed = false): Automation[] {
+    const stamp = powerConfirmed ? { powerConfirmedAt: Date.now() } : {};
     if (entry.id) {
       const index = this.automations.findIndex(a => a.id === entry.id);
       if (index === -1) throw new Error('AUTOMATION_NOT_FOUND');
-      this.automations[index] = { ...this.automations[index]!, time: entry.time, days: [...new Set(entry.days)].sort(), action: entry.action };
+      const prior = this.automations[index]!;
+      // Every power save re-prompts upstream (service), so a fresh stamp replaces any prior one; non-power entries carry no stamp.
+      const { powerConfirmedAt: _dropped, ...rest } = prior;
+      this.automations[index] = { ...rest, time: entry.time, days: [...new Set(entry.days)].sort(), action: entry.action, ...stamp };
     } else {
       if (this.automations.length >= MAX_AUTOMATIONS) throw new Error('AUTOMATION_LIMIT');
-      this.automations.push({ id: randomUUID(), time: entry.time, days: [...new Set(entry.days)].sort(), enabled: true, action: entry.action });
+      this.automations.push({ id: randomUUID(), time: entry.time, days: [...new Set(entry.days)].sort(), enabled: true, action: entry.action, ...stamp });
     }
     this.persist();
     return this.list();
   }
 
-  setEnabled(id: string, enabled: boolean): Automation[] {
+  setEnabled(id: string, enabled: boolean, powerConfirmed = false): Automation[] {
     const index = this.automations.findIndex(a => a.id === id);
     if (index === -1) throw new Error('AUTOMATION_NOT_FOUND');
-    this.automations[index] = { ...this.automations[index]!, enabled };
+    this.automations[index] = { ...this.automations[index]!, enabled, ...(powerConfirmed ? { powerConfirmedAt: Date.now() } : {}) };
     this.persist();
     return this.list();
   }

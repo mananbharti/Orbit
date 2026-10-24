@@ -152,7 +152,9 @@ const electronApproval = { verify: async (message, context) => {
   const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'Orbit',
     message: isPower ? 'Allow power action?' : isTerminal ? 'Allow terminal access?' : 'Allow remote control?',
     detail: isPower
-      ? `Your phone (device ${device}) wants to ${message.payload?.action ?? 'change the power state of'} this computer.\n\nChoose Deny unless you just started this on your phone.`
+      ? (message.payload?.schedule?.time
+        ? `Your phone (device ${device}) wants to schedule ${message.payload?.action ?? 'a power action'} at ${message.payload.schedule.time}${message.payload.schedule.days?.length ? ' on ' + message.payload.schedule.days.length + ' weekday(s)' : ' every day'} on this computer. It fires unattended at that time.\n\nChoose Deny unless you just created this schedule on your phone.`
+        : `Your phone (device ${device}) wants to ${message.payload?.action ?? 'change the power state of'} this computer.\n\nChoose Deny unless you just started this on your phone.`)
       : isTerminal
       ? `Your phone (device ${device}) wants to run commands on this computer. Commands can change or delete anything.\n\nChoose Deny unless you just started this on your phone.`
       : `Your phone (device ${device}) wants to move the mouse and type on this computer.\n\nChoose Deny unless you just started this on your phone.`,

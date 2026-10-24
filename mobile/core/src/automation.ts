@@ -4,6 +4,7 @@ import { automationListResultSchema, type Automation, type AutomationAction } fr
 import type { OrbitSession } from './session.js';
 
 const AUTOMATION_TIMEOUT_MS = 10_000;
+const AUTOMATION_APPROVAL_TIMEOUT_MS = 45_000; // saving/enabling a power schedule waits on the desktop owner's confirmation dialog
 
 export class AutomationApi {
   private automations: Automation[] = [];
@@ -19,11 +20,11 @@ export class AutomationApi {
 
   /** Creates without an id, replaces with one. Returns the fresh list. */
   async save(entry: { id?: string; time: string; days: number[]; action: AutomationAction }): Promise<Automation[]> {
-    return this.apply(await this.session.command('automation.save', entry, { timeoutMs: AUTOMATION_TIMEOUT_MS }));
+    return this.apply(await this.session.command('automation.save', entry, { timeoutMs: entry.action.type === 'power' ? AUTOMATION_APPROVAL_TIMEOUT_MS : AUTOMATION_TIMEOUT_MS }));
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<Automation[]> {
-    return this.apply(await this.session.command('automation.enable', { id, enabled }, { timeoutMs: AUTOMATION_TIMEOUT_MS }));
+    return this.apply(await this.session.command('automation.enable', { id, enabled }, { timeoutMs: AUTOMATION_APPROVAL_TIMEOUT_MS })); // enable may prompt for an existing power schedule
   }
 
   async remove(id: string): Promise<Automation[]> {
