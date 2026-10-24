@@ -21,8 +21,17 @@ this corpus and runner exist so the decision can be revisited with numbers.
 node tools/laya-eval/run.js laya-multilingual
 ```
 
-Loopback only. The English `laya` checkpoint loads in fp32 on CPU and needs
-well over 2 GB of free memory (a 2 GB environment OOM-kills it); the
-multilingual checkpoint fits in about 1.5 GB.
+Loopback only. The multilingual checkpoint fits in about 1.5 GB. The English
+`laya` checkpoint wants ~4 GB free in stock form (fp32 container over fp16
+weights); on a memory-tight box it can still run with a LOCAL, uncommitted
+patch to the server venv - fp16 model container, per-tensor streamed weight
+loading via safetensors safe_open, and two activation casts following weight
+dtype (agent.py: build wrapped in torch.set_default_dtype(torch.float16);
+common.py: AutoModel.from_config(..., dtype=torch.float16); common.py forward:
+drop `.float()` on pooled, cast the concatenated head input to the head weight
+dtype). Numbers produced that way must be labeled fp16-forced; prefer a bigger
+machine over the patch. Note the sequential node client stalled mid-corpus
+twice against the fp16 server while curl with a hard timeout did not - chunk
+long runs with curl rather than trusting one long-lived process.
 
 Results are kept in [docs/laya.md](../../docs/laya.md).

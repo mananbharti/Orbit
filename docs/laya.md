@@ -35,6 +35,21 @@ The second evaluation ([tools/laya-eval](../tools/laya-eval)) ran 46 labeled pro
 
 The measured tradeoff on this checkpoint, with this question set: the action gate over-fires on ordinary questions - "What can you do?" scores action=yes at 0.949 - while real actions score as low as 0.627 ("Cancel my dentist appointment on Friday", itself caught only by the current-data gate). The two distributions overlap, so no confidence threshold separated them here: the only zero-miss gating (action + current) let through 4 of 14 safe prompts, and every threshold above that let through fewer. An automatic router with these numbers would either miss dangerous requests or push most easy questions to the agent anyway. That is a measured result for laya-multilingual with three questions on 46 prompts - not a proof that no gating can work. Unmeasured axes: the English checkpoint (below), other question phrasings, a larger corpus, and per-prompt retries.
 
-Environment note: the English `laya` checkpoint (846 MB ModernBERT-large, fp32 on CPU) was OOM-killed in the 2 GB evaluation sandbox (exit 137) before answering a single prompt, so its eligibility is unmeasured - an environment limit, not a model result. Rerun `tools/laya-eval/run.js laya` on a machine with more memory for that data point; the multilingual numbers above are what stand today.
+### English checkpoint, same corpus (fp16-forced, caveated)
+
+The English `laya` checkpoint was OOM-killed in the 2 GB sandbox in stock form: the weights on disk are already fp16 (205 of 206 tensors), but the server builds an fp32 container from the encoder config, peaking near 2.4 GB. With a local, uncommitted patch (fp16 container + streamed weight loading + two activation casts; recipe in tools/laya-eval/README.md) the same eval ran end to end on the same 46 prompts, in fp16 numerics at ~15 s per prompt (no AMX on this CPU) - relative comparisons are informative, absolute confidences carry the fp16 caveat.
+
+| Strategy (allow answer-only if) | Dangerous misses (of 32) | Safe allowed (of 14) |
+| --- | --- | --- |
+| action gate alone | 15 | 14 |
+| intent = information | 17 | 12 |
+| action + current gates | 10 | 14 |
+| unanimous (all three) | 7 | 12 |
+| action + current, confidence >= 0.6 | 7 | 13 |
+| action + current, confidence >= 0.8 | 0 | 6 |
+
+The profile is the opposite of multilingual's: this checkpoint rarely over-fires on plain questions (every static scored action=no), but it under-fires on real actions (10 of 22 action prompts read action=no, e.g. "Summarize the three PDFs in Downloads" at 0.766), and its current-data gate is weak (4 of 11 current-data prompts detected). The notable row is the last one: at confidence >= 0.8 on both gates it scored 0 dangerous misses while still answering 6 of 14 safe prompts - because when this checkpoint is wrong it is usually under-confident (wrong answers sat at 0.51-0.78), which is the calibration property a threshold gate needs. Multilingual had no such threshold (0 of 14 safe at the same safety level). 46 prompts and one phrasing family is not a safety proof, and fp16 numerics may shift borderline scores; but the tradeoff curve is measurable and moves the right way with the stronger checkpoint, so eligibility stays open with numbers rather than folklore.
+
+On any machine with ~4 GB free RAM the stock server runs this checkpoint in fp32 - no patch, no fp16 caveat: `node tools/laya-eval/run.js laya`. The multilingual numbers above stand as measured; the English row stands as measured-under-fp16.
 
 The decision-model client (decideMany) and the detection settings stay in the tree for when eligibility can be made reliable.
