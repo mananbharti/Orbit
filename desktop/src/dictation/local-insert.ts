@@ -111,3 +111,38 @@ export async function confirmedInsert(handle: FocusHandle, text: string, probe: 
   if (out.action === 'aborted') return { aborted: out.remaining };
   return 'focus-mismatch';
 }
+
+/** Clipboard access needed by paste insertion: read returns the current snapshot (kind 'text' with content, or sensitive/unsupported/oversized), write replaces the selection. */
+export interface InsertionClipboard {
+  read(): Promise<{ kind: string; text?: string }>;
+  write(text: string): Promise<void>;
+}
+
+export type PasteInsertOutcome = 'inserted' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable';
+
+/** The transcript reaches the confirmed target through the system clipboard and one paste keystroke, not per-character typing: the window in which a focus flip could misdirect text shrinks from seconds of typing to the instant of a single keystroke, and delivery is all-or-nothing instead of a partial stream. Focus identity is verified after activation and again immediately after the keystroke; a flip seen afterwards is reported honestly as 'focus-lost' (the paste may have gone elsewhere) with no automatic retry or resume. A clipboard holding anything but plain restorable text (password-manager copies, images, oversized content) is never clobbered: insertion reports 'clipboard-unavailable'. The prior clipboard is restored after a short delay so the target's asynchronous paste fetch completes first; on X11 the transcript may be visible to local clipboard readers during that sub-second window. */
+export const PASTE_RESTORE_DELAY_MS = 750;
+
+export async function confirmedPaste(handle: FocusHandle, text: string, probe: FocusProbe, activator: FocusActivator,
+  clipboard: InsertionClipboard, pasteKey: () => Promise<void>, restoreDelayMs = PASTE_RESTORE_DELAY_MS): Promise<PasteInsertOutcome> {
+  let prior: string;
+  try {
+    const snapshot = await clipboard.read();
+    if (snapshot.kind !== 'text' || typeof snapshot.text !== 'string') return 'clipboard-unavailable';
+    prior = snapshot.text;
+    await clipboard.write(text);
+  } catch { return 'clipboard-unavailable'; }
+  let outcome: PasteInsertOutcome = 'inserted';
+  try {
+    if (!await activator.activate(handle)) return 'activation-failed';
+    const now = await probe.current();
+    if (!now || now.id !== handle.id || now.pid !== handle.pid) return 'focus-mismatch';
+    try { await pasteKey(); } catch { return 'paste-failed'; }
+    const after = await probe.current();
+    if (!after || after.id !== handle.id || after.pid !== handle.pid) outcome = 'focus-lost';
+  } finally {
+    await new Promise(resolve => setTimeout(resolve, restoreDelayMs));
+    await clipboard.write(prior).catch(() => {});
+  }
+  return outcome;
+}

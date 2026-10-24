@@ -82,17 +82,19 @@ test('a different connection or device cannot touch someone else\'s clip', async
   await assert.rejects(handle('dictation.cancel').execute({ dictationId: id }, contextFor(mallory.conn)), /INVALID_PAYLOAD/);
 });
 
-test('finish returns text for speech and frees the slot afterwards', async t => {
+test('finish returns text for speech, retains the transcript for confirmInsert, and cancel frees the slot', async t => {
   const { handle, log } = fixture(t);
   const { conn } = connection();
   const context = contextFor(conn);
   const id = await begin(handle, context);
   await handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: loudPcm(16_000) }, context);
   const result = await handle('dictation.finish').execute({ dictationId: id }, context);
-  assert.deepEqual(result, { status: 'text', text: 'Hello orbit' });
+  assert.deepEqual(result, { status: 'text', text: 'Hello orbit', insertOffered: false });
   assert.ok(log.snapshot().some(event => event.eventType === 'dictation.finished' && event.outcome === 'success'));
+  await assert.rejects(begin(handle, context), /BUSY/, 'the retained transcript holds the slot until confirmInsert, cancel or TTL');
+  assert.deepEqual(await handle('dictation.cancel').execute({ dictationId: id }, context), { cancelled: true });
   const again = await begin(handle, context);
-  assert.notEqual(again, id, 'a new clip can start immediately');
+  assert.notEqual(again, id, 'a new clip can start after cancel');
 });
 
 test('silence transcribes as no-speech', async t => {
@@ -176,7 +178,7 @@ test('m4a needs a decoder; with one, compressed bytes are tracked and decoded', 
   assert.deepEqual(await withDecoder.handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: aac }, context), { nextOffset: 4 });
   await assert.rejects(withDecoder.handle('dictation.chunk').execute({ dictationId: id, offset: 0, dataBase64: aac }, context), /INVALID_PAYLOAD/);
   const result = await withDecoder.handle('dictation.finish').execute({ dictationId: id }, context);
-  assert.deepEqual(result, { status: 'text', text: 'Hello orbit' });
+  assert.deepEqual(result, { status: 'text', text: 'Hello orbit', insertOffered: false });
   assert.equal(decoded.length, 1);
   assert.deepEqual([...decoded[0]!], [0xff, 0xf1, 0x50, 0x80], 'decoder received exactly the uploaded bytes');
 });
@@ -238,7 +240,7 @@ test('a clip that is transcribing refuses more chunks and a second finish with B
   await assert.rejects(handle('dictation.chunk').execute({ dictationId: id, offset: 16_000, dataBase64: pcmChunk(4) }, context), /BUSY/);
   await assert.rejects(handle('dictation.finish').execute({ dictationId: id }, context), /BUSY/);
   release();
-  assert.deepEqual(await finishing, { status: 'text', text: 'Done' });
+  assert.deepEqual(await finishing, { status: 'text', text: 'Done', insertOffered: false });
 });
 
 test('audio buffers are zeroed after finish, including the copies handed to the decoder and engine', async t => {

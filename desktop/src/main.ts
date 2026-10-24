@@ -10,6 +10,7 @@ import { WhisperCpp } from './dictation/whisper-cpp.js';
 import { DictationService } from './dictation/dictation-service.js';
 import { DictationSetup } from './dictation/provision.js';
 import { CommandRegistry } from './command-router/command-registry.js';
+import { createDictationInsertion } from './dictation/create-insertion.js';
 import { ffmpegDecoder } from './dictation/ffmpeg-decoder.js';
 import { HermesRunner } from './agent/hermes-runner.js';
 
@@ -26,18 +27,19 @@ async function main(): Promise<void> {
   // Dictation: an env-named engine wins; otherwise the pinned whisper.cpp build + model are provisioned once into the data directory in the background and dictation.* registers as soon as they are verified. ORBIT_FFMPEG additionally lets Android phones send compressed audio.
   const whisperBin = process.env.ORBIT_WHISPER_BIN; const whisperModel = process.env.ORBIT_WHISPER_MODEL; const ffmpeg = process.env.ORBIT_FFMPEG;
   const decoder = ffmpeg ? ffmpegDecoder(ffmpeg) : undefined;
+  const insertion = createDictationInsertion();
   const dictation = whisperBin && whisperModel
-    ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(decoder ? { decoder } : {}) } : undefined;
+    ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(decoder ? { decoder } : {}), ...(insertion ? { insertion } : {}) } : undefined;
   const registry = new CommandRegistry();
   const config = readConfig();
   const service = await startDesktop({ ...config, agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}), registry });
   // Dictation availability stays visible and honest: dictation.status always answers, retry ignores the 24h auto-attempt backoff, setup.cancel aborts an in-flight download.
   const setup = new DictationSetup(registry, config.directory,
-    paths => { new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder); }, service.log);
+    paths => { new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder, insertion); }, service.log);
   if (dictation) setup.markReady();
   else {
     const existing = setup.autoStart();
-    if (existing) new DictationService(registry, new WhisperCpp(existing), service.log, undefined, undefined, decoder);
+    if (existing) new DictationService(registry, new WhisperCpp(existing), service.log, undefined, undefined, decoder, insertion);
   }
   const input = createInterface({ input: process.stdin });
   let cleanup: (() => void) | undefined;

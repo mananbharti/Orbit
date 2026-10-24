@@ -7,18 +7,28 @@ import type { JsonValue } from '../protocol/messages.js';
 import { ProtocolError } from '../protocol/errors.js';
 import { DICTATION_TTL_MS, MAX_COMPRESSED_BYTES, MAX_DICTATION_SAMPLES, beginSchema, chunkSchema, refSchema } from '../protocol/dictation.js';
 import { DictationError, dictate, type Transcriber } from './pipeline.js';
+import type { FocusHandle } from './local-insert.js';
 import type { CleanupOptions } from './cleanup.js';
 import type { AudioDecoder } from './ffmpeg-decoder.js';
 
 interface Clip { id: string; owner: string; connection: NonNullable<CommandContext['connection']>; samples: Int16Array; length: number; language?: string;
-  compressed?: Buffer; compressedLength: number; timer: NodeJS.Timeout; abort: AbortController; remove: () => void; busy: boolean }
+  compressed?: Buffer; compressedLength: number; timer: NodeJS.Timeout; abort: AbortController; remove: () => void; busy: boolean; focusHandle?: FocusHandle; text?: string }
+
+export type DictationInsertOutcome = 'inserted' | 'activation-failed' | 'focus-mismatch' | 'focus-lost' | 'paste-failed' | 'clipboard-unavailable' | 'unavailable';
+
+/** Phone-confirmed insertion of the retained transcript into the window that was focused when dictation began. Implemented by createDictationInsertion where the platform supports it. */
+export interface DictationInsertion {
+  captureFocus(): Promise<FocusHandle | undefined>;
+  insert(handle: FocusHandle, text: string): Promise<DictationInsertOutcome>;
+}
 
 export class DictationService {
   private clip?: Clip;
   private readonly unregister: (() => void)[];
 
   constructor(registry: CommandRegistry, private engine: Transcriber, private readonly log: ActivityLog,
-    private readonly cleanup: () => CleanupOptions = () => ({}), private readonly ttlMs = DICTATION_TTL_MS, private readonly decoder?: AudioDecoder) {
+    private readonly cleanup: () => CleanupOptions = () => ({}), private readonly ttlMs = DICTATION_TTL_MS, private readonly decoder?: AudioDecoder,
+    private readonly insertion?: DictationInsertion) {
     const ok = (context: CommandContext): NonNullable<CommandContext['connection']> => {
       if (!context.connection?.isAuthorized()) throw new ProtocolError('UNAUTHENTICATED');
       return context.connection;
@@ -37,6 +47,7 @@ export class DictationService {
           remove: () => connection.closed.removeEventListener('abort', onClose), busy: false };
         clip.timer.unref();
         this.clip = clip;
+        if (this.insertion) { const focus = await this.insertion.captureFocus().catch(() => undefined); if (focus) clip.focusHandle = focus; }
         this.log.record({ severity: 'info', eventType: 'dictation.started', outcome: 'success' });
         return { dictationId: clip.id };
       } }),
@@ -61,6 +72,7 @@ export class DictationService {
       registry.register('dictation.finish', { validate: p => refSchema.safeParse(p).success, execute: async (p, context): Promise<JsonValue> => {
         const clip = this.owned(context, refSchema.parse(p).dictationId, ok(context));
         clip.busy = true;
+        let keepForInsert = false;
         try {
           let pcm: Int16Array;
           if (clip.compressed) {
@@ -70,12 +82,30 @@ export class DictationService {
           } else pcm = clip.samples.slice(0, clip.length);
           const result = await dictate(pcm, this.engine, { ...(clip.language ? { language: clip.language } : {}), cleanup: this.cleanup(), signal: clip.abort.signal });
           this.log.record({ severity: 'info', eventType: 'dictation.finished', outcome: 'success' });
-          if (result.status === 'text') return { status: 'text', text: result.text };
+          if (result.status === 'text') {
+            // Only the transcript and the captured focus target survive for dictation.insert; the audio buffers are wiped now.
+            clip.samples.fill(0); clip.compressed?.fill(0);
+            clip.text = result.text;
+            clip.busy = false;
+            clearTimeout(clip.timer);
+            clip.timer = setTimeout(() => this.drop(), this.ttlMs);
+            clip.timer.unref();
+            keepForInsert = true;
+            return { status: 'text', text: result.text, insertOffered: !!(this.insertion && clip.focusHandle) };
+          }
           return { status: 'no-speech' };
         } catch (error) {
           this.log.record({ severity: 'warn', eventType: 'dictation.finished', outcome: 'failed' });
           throw new ProtocolError(error instanceof DictationError && error.code === 'CLIP_TOO_LONG' ? 'INVALID_PAYLOAD' : 'COMMAND_FAILED');
-        } finally { this.drop(clip); }
+        } finally { if (!keepForInsert) this.drop(clip); }
+      } }),
+      registry.register('dictation.insert', { validate: p => refSchema.safeParse(p).success, execute: async (p, context): Promise<JsonValue> => {
+        const clip = this.owned(context, refSchema.parse(p).dictationId, ok(context));
+        if (!clip.text) throw new ProtocolError('INVALID_PAYLOAD');
+        const outcome: DictationInsertOutcome = this.insertion && clip.focusHandle ? await this.insertion.insert(clip.focusHandle, clip.text) : 'unavailable';
+        this.log.record({ severity: 'info', eventType: 'dictation.insert', outcome: outcome === 'inserted' ? 'success' : 'failed' });
+        this.drop(clip);
+        return { outcome };
       } }),
       registry.register('dictation.cancel', { validate: p => refSchema.safeParse(p).success, execute: async (p, context) => {
         // A busy clip is exactly the one worth cancelling: dropping it aborts the engine run.
@@ -99,6 +129,7 @@ export class DictationService {
   private drop(clip: Clip | undefined = this.clip): void {
     if (!clip) return;
     clearTimeout(clip.timer); clip.abort.abort(); clip.remove(); clip.samples.fill(0); clip.compressed?.fill(0);
+    delete clip.text; delete clip.focusHandle;
     if (this.clip === clip) this.clip = undefined;
   }
 }

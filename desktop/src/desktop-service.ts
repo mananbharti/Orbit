@@ -43,7 +43,7 @@ import { createAudioMixer } from './os-integration/create-audio-mixer.js';
 import type { AudioMixerAdapter } from './os-integration/audio-mixer.js';
 import type { SystemControlAdapter } from './os-integration/system-control.js';
 import { GraphStore } from './memory/graph-store.js';
-import { DictationService } from './dictation/dictation-service.js';
+import { DictationService, type DictationInsertion } from './dictation/dictation-service.js';
 import type { AudioDecoder } from './dictation/ffmpeg-decoder.js';
 import type { Transcriber } from './dictation/pipeline.js';
 import type { CleanupOptions } from './dictation/cleanup.js';
@@ -86,7 +86,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   /** Local speech-to-text for phone dictation. Off unless an engine is supplied. */
   /** Local graph memory. On by default; stored in the private data directory. */
   memory?: boolean;
-  dictation?: { engine: Transcriber; cleanup?: () => CleanupOptions; decoder?: AudioDecoder };
+  dictation?: { engine: Transcriber; cleanup?: () => CleanupOptions; decoder?: AudioDecoder; insertion?: DictationInsertion };
   /** Power, volume and brightness control. On by default; pass a custom adapter to test. */
   system?: { createAdapter: () => SystemControlAdapter } | false;
   audioMixer?: { createAdapter: () => AudioMixerAdapter } | false;
@@ -130,7 +130,7 @@ export async function startDesktop(options: { directory: string; host: string; p
       makeTriage(options.agent.layaUrl), makeFastAnswer(options.agent.fastModel));
     if (options.input) input = new InputControl(registry, options.input.createDevice, log, options.input.confirmation,
       new KeyboardMacroStore(join(directory, 'keyboard-macros.json')));
-    if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder);
+    if (options.dictation) dictation = new DictationService(registry, options.dictation.engine, log, options.dictation.cleanup, undefined, options.dictation.decoder, options.dictation.insertion);
     if (options.memory !== false) memory = new MemoryService(registry, new GraphStore(join(directory, 'memory.json')), log);
     const systemFactory = options.system === false ? undefined : (options.system?.createAdapter ?? createSystemControl);
     if (systemFactory) system = new SystemControl(registry, systemFactory, log, options.input?.createDevice ?? inputDeviceFactory());
