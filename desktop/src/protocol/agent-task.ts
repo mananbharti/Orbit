@@ -19,6 +19,8 @@ export const taskSummarySchema = z.strictObject({ taskId: taskIdSchema, state: t
   createdAt: z.number().int().min(0), updatedAt: z.number().int().min(0), headline: z.string().max(200) });
 export const taskEventsQuerySchema = z.strictObject({ taskId: taskIdSchema, afterSeq: z.number().int().min(0).default(0) });
 export const taskEventSchema = z.strictObject({ seq: z.number().int().min(1), at: z.number().int().min(0),
-  kind: z.enum(['state', 'step', 'output', 'approval-request']), text: z.string().max(2_000) });
+  kind: z.enum(['state', 'step', 'output', 'approval-request']), text: z.string().max(2_000),
+  /** Present on approval-request events: the decision must name this exact control or it is refused. */
+  controlId: z.string().uuid().optional() });
 export const taskEventsPageSchema = z.strictObject({ events: z.array(taskEventSchema).max(MAX_TASK_EVENTS_PAGE), hasMore: z.boolean() });
 export type TaskSummary = z.infer<typeof taskSummarySchema>;

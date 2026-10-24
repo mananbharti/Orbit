@@ -76,9 +76,9 @@ export class TaskLedger {
     this.transitionInternal(task, next, text);
     this.save();
   }
-  note(task: TaskRecord, kind: 'step' | 'output' | 'approval-request', text: string): void {
+  note(task: TaskRecord, kind: 'step' | 'output' | 'approval-request', text: string, controlId?: string): void {
     if (TERMINAL_TASK_STATES.has(task.state)) return;
-    this.append(task, kind, text);
+    this.append(task, kind, text, controlId);
     this.save();
   }
   private transitionInternal(task: TaskRecord, next: TaskState, text: string): void {
@@ -86,12 +86,12 @@ export class TaskLedger {
     task.state = next;
     this.append(task, 'state', text);
   }
-  private append(task: TaskRecord, kind: 'state' | 'step' | 'output' | 'approval-request', text: string): void {
+  private append(task: TaskRecord, kind: 'state' | 'step' | 'output' | 'approval-request', text: string, controlId?: string): void {
     const at = this.now();
     task.updatedAt = at;
     if (task.events.length >= MAX_EVENTS_PER_TASK) task.events.splice(0, 1); // bounded: oldest event drops, seq stays monotonic
     const seq = (task.events.at(-1)?.seq ?? 0) + 1;
-    task.events.push({ seq, at, kind, text: text.slice(0, 2_000) });
+    task.events.push({ seq, at, kind, text: text.slice(0, 2_000), ...(controlId ? { controlId } : {}) });
   }
   private evictOldestTerminal(): void {
     const victim = [...this.tasks.values()].filter(task => TERMINAL_TASK_STATES.has(task.state) || task.state === 'unknown')

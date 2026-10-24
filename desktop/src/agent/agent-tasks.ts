@@ -6,6 +6,7 @@ import type { JsonValue } from '../protocol/messages.js';
 import { TERMINAL_TASK_STATES, submitTaskSchema, retryTaskSchema, taskEventsQuerySchema, taskRefSchema, MAX_TASK_EVENTS_PAGE } from '../protocol/agent-task.js';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import type { AgentRunner } from './agent-runner.js';
 import type { AuditTrail } from './audit-trail.js';
 import { AUDIT_PAGE } from './audit-trail.js';
@@ -15,12 +16,12 @@ import type { TaskState } from '../protocol/agent-task.js';
 export const MAX_CONCURRENT_TASKS = 2;
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000;
 const emptySchema = z.strictObject({});
-const approvalSchema = z.strictObject({ taskId: z.string().uuid(), approve: z.boolean() });
+const approvalSchema = z.strictObject({ taskId: z.string().uuid(), approve: z.boolean(), controlId: z.string().uuid() });
 
 export class AgentTasks {
   private readonly unregister: (() => void)[];
   private readonly aborts = new Map<string, AbortController>();
-  private readonly approvals = new Map<string, (approved: boolean) => void>();
+  private readonly approvals = new Map<string, { controlId: string; settle: (approved: boolean) => void }>();
   private readonly jobs = new Set<Promise<unknown>>();
   private readonly stopping = new AbortController();
   private paused: boolean;
@@ -84,18 +85,20 @@ export class AgentTasks {
           if (TERMINAL_TASK_STATES.has(task.state)) throw new ProtocolError('AGENT_INVALID_STATE');
           this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'cancelled-by-user' });
           this.aborts.get(task.taskId)?.abort();
-          this.approvals.get(task.taskId)?.(false);
+          this.approvals.get(task.taskId)?.settle(false);
           if (task.state === 'queued' || task.state === 'unknown') this.ledger.transition(task, 'cancelled', 'Cancelled by user');
           return summary(task);
         } }),
       registry.register('agent.approve', { validate: p => approvalSchema.safeParse(p).success,
         execute: async (payload, context) => {
-          const { taskId, approve } = approvalSchema.parse(payload);
+          const { taskId, approve, controlId } = approvalSchema.parse(payload);
           const task = this.ledger.get(owner(context), taskId);
-          const resolve = this.approvals.get(taskId);
-          if (task.state !== 'awaiting-approval' || !resolve) throw new ProtocolError('AGENT_INVALID_STATE');
+          const pending = this.approvals.get(taskId);
+          // The decision must name the exact control it answers: a late tap on an earlier prompt
+          // (timed out, then a new request on the same task) never settles the newer control.
+          if (task.state !== 'awaiting-approval' || !pending || pending.controlId !== controlId) throw new ProtocolError('AGENT_INVALID_STATE');
           this.audit?.record({ taskId, deviceId: task.ownerDeviceId, kind: approve ? 'approved' : 'denied' });
-          resolve(approve);
+          pending.settle(approve);
           return { status: approve ? 'approved' : 'denied' };
         } }),
       registry.register('agent.status', { validate: p => emptySchema.safeParse(p).success,
@@ -106,7 +109,7 @@ export class AgentTasks {
           const device = owner(context);
           this.setPaused(true);
           this.audit?.record({ deviceId: device, kind: 'paused' });
-          for (const [taskId, abort] of this.aborts) { abort.abort(); this.approvals.get(taskId)?.(false); }
+          for (const [taskId, abort] of this.aborts) { abort.abort(); this.approvals.get(taskId)?.settle(false); }
           return { paused: true };
         } }),
       registry.register('agent.resume', { validate: p => emptySchema.safeParse(p).success,
@@ -132,7 +135,7 @@ export class AgentTasks {
   async stop(): Promise<void> {
     this.stopping.abort();
     for (const abort of this.aborts.values()) abort.abort();
-    for (const resolve of this.approvals.values()) resolve(false);
+    for (const pending of this.approvals.values()) pending.settle(false);
     for (const unregister of this.unregister) unregister();
     await Promise.allSettled(this.jobs);
   }
@@ -191,10 +194,11 @@ export class AgentTasks {
           if (task.state === 'awaiting-approval') this.transitionSafely(task, 'running', approved ? 'Approved' : 'Denied');
           publish(); resolve(approved);
         };
-        this.approvals.set(task.taskId, settle);
+        const controlId = randomUUID();
+        this.approvals.set(task.taskId, { controlId, settle });
         this.transitionSafely(task, 'awaiting-approval', 'Waiting for approval');
         this.audit?.record({ taskId: task.taskId, deviceId: task.ownerDeviceId, kind: 'approval-requested' });
-        this.noteSafely(task, 'approval-request', description);
+        this.noteSafely(task, 'approval-request', description, controlId);
         publish();
       }) })
       .then(result => {
@@ -211,8 +215,8 @@ export class AgentTasks {
 
   // Disk trouble on the async path must never reach the runner or reject the job: transitionInternal has already
   // moved the in-memory record before save() throws, so the service keeps a true picture and the next save persists it.
-  private noteSafely(task: TaskRecord, kind: 'step' | 'output' | 'approval-request', text: string): void {
-    try { this.ledger.note(task, kind, text); } catch { /* keep serving; memory holds the event */ }
+  private noteSafely(task: TaskRecord, kind: 'step' | 'output' | 'approval-request', text: string, controlId?: string): void {
+    try { this.ledger.note(task, kind, text, controlId); } catch { /* keep serving; memory holds the event */ }
   }
   private transitionSafely(task: TaskRecord, next: TaskState, text: string): void {
     try { this.ledger.transition(task, next, text); } catch { /* keep serving; memory holds the state */ }

@@ -13,7 +13,8 @@ const { CommandError } = require('../dist-test/core/src/session.js');
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const task = (state, updatedAt = 1) => ({ taskId: ID, state, createdAt: 0, updatedAt, headline: 'Clean up temp files' });
-const askEvent = { seq: 1, at: 1, kind: 'approval-request', text: 'delete in root path' };
+const CONTROL = '22222222-2222-4222-8222-222222222222';
+const askEvent = { seq: 1, at: 1, kind: 'approval-request', text: 'delete in root path', controlId: CONTROL };
 
 let api, store, alerts, renderers;
 beforeEach(() => {
@@ -26,7 +27,7 @@ beforeEach(() => {
     async list() { return [api.task]; },
     async get() { api.calls.push('get'); return api.task; },
     async events() { return api.eventList; },
-    async approve(taskId, approve) { api.calls.push(`approve:${approve}`); api.task = task('running', 2); api.eventList = [...api.eventList, { seq: 2, at: 2, kind: 'state', text: approve ? 'Approved' : 'Denied' }]; return 'approved'; },
+    async approve(taskId, approve, controlId) { api.calls.push(`approve:${approve}:${controlId}`); api.task = task('running', 2); api.eventList = [...api.eventList, { seq: 2, at: 2, kind: 'state', text: approve ? 'Approved' : 'Denied' }]; return 'approved'; },
     async cancel() { api.calls.push('cancel'); return (api.task = task('cancelled', 2)); },
     async retry() { api.calls.push('retry'); return task('queued', 3); },
   };
@@ -63,13 +64,13 @@ test('Approve and Deny taps send the real decision for the exact task', async ()
   let r = await mount();
   assert.ok(allText(r).includes('delete in root path'), 'the ask text is shown');
   await pressByText(r, 'Approve');
-  assert.ok(api.calls.includes('approve:true'), JSON.stringify(api.calls));
+  assert.ok(api.calls.includes(`approve:true:${CONTROL}`), 'the tap names the exact displayed control: ' + JSON.stringify(api.calls));
   assert.ok(api.calls.includes('get'), 'the store re-reads the task after answering');
   r.unmount(); renderers = []; store.dispose(); store = undefined;
   api.task = task('awaiting-approval'); api.eventList = [askEvent]; api.calls = [];
   r = await mount();
   await pressByText(r, 'Deny');
-  assert.ok(api.calls.includes('approve:false'), JSON.stringify(api.calls));
+  assert.ok(api.calls.includes(`approve:false:${CONTROL}`), JSON.stringify(api.calls));
 });
 
 test('a stale tap shows the desktop refusal instead of pretending to work', async () => {

@@ -66,7 +66,7 @@ test('list, get, cancel and approve call the right commands', async () => {
   assert.equal((await api.list()).length, 1);
   assert.equal((await api.get(TASK)).taskId, TASK);
   assert.equal((await api.cancel(TASK)).state, 'cancelled');
-  assert.equal(await api.approve(TASK, true), 'approved');
+  assert.equal(await api.approve(TASK, true, '22222222-2222-4222-8222-222222222222'), 'approved');
   assert.deepEqual(calls, ['agent.list', 'agent.get', 'agent.cancel', 'agent.approve']);
   s.stop();
 });

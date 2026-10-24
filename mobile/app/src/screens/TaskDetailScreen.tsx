@@ -2,7 +2,7 @@ import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { TERMINAL_TASK_STATES, type TaskStore } from '@orbit/core';
+import { NotSent, TERMINAL_TASK_STATES, type TaskStore } from '@orbit/core';
 import { StatusPill } from '../components/StatusPill';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
@@ -35,9 +35,9 @@ export function TaskDetailScreen({ store, taskId, onBack }: { store: TaskStore; 
           <Text style={[styles.label, { color: t.sub }]}>The agent is asking permission to</Text>
           <Text style={[styles.ask, { color: t.text }]}>{request.text}</Text>
           <View style={styles.row}>
-            <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void act(() => store.approve(taskId, false)); }} style={[styles.btn, { backgroundColor: t.fill }]}>
+            <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void act(() => request.controlId ? store.approve(taskId, false, request.controlId) : Promise.reject(new NotSent('Update Orbit on your computer to answer this safely.'))); }} style={[styles.btn, { backgroundColor: t.fill }]}>
               <Text style={{ color: t.text, fontSize: 17, fontWeight: '600' }}>Deny</Text></Pressable>
-            <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void act(() => store.approve(taskId, true)); }} style={[styles.btn, { backgroundColor: t.tint }]}>
+            <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void act(() => request.controlId ? store.approve(taskId, true, request.controlId) : Promise.reject(new NotSent('Update Orbit on your computer to answer this safely.'))); }} style={[styles.btn, { backgroundColor: t.tint }]}>
               <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600' }}>Approve</Text></Pressable>
           </View>
         </View>

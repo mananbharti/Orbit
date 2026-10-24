@@ -77,7 +77,7 @@ test('submit adds the task immediately; approve refreshes it', async () => {
   await sleep(20);
   await store.submit('do it');
   assert.deepEqual(store.getState().needsAttention.map(t => t.taskId), [T1]);
-  await store.approve(T1, true);
+  await store.approve(T1, true, '22222222-2222-4222-8222-222222222222');
   assert.equal(store.getState().tasks[0]!.state, 'running');
   assert.equal(store.getState().needsAttention.length, 0);
   store.dispose(); s.stop();

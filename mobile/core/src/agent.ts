@@ -47,8 +47,9 @@ export class AgentApi {
   async cancel(taskId: string): Promise<TaskSummary> {
     return check(taskSummarySchema, await this.session.command('agent.cancel', { taskId }));
   }
-  async approve(taskId: string, approve: boolean): Promise<'approved' | 'denied'> {
-    return check(approvalResultSchema, await this.session.command('agent.approve', { taskId, approve })).status;
+  /** The controlId must come from the approval-request event the user actually saw: the desktop refuses anything else. */
+  async approve(taskId: string, approve: boolean, controlId: string): Promise<'approved' | 'denied'> {
+    return check(approvalResultSchema, await this.session.command('agent.approve', { taskId, approve, controlId })).status;
   }
   /** Newest first: what this phone asked for and decided. */
   async audit(): Promise<AuditEntry[]> {

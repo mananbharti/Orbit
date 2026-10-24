@@ -93,8 +93,8 @@ export class TaskStore {
     return task;
   }
   async cancel(taskId: string): Promise<void> { this.put(await this.api.cancel(taskId)); }
-  async approve(taskId: string, approve: boolean): Promise<void> {
-    await this.api.approve(taskId, approve);
+  async approve(taskId: string, approve: boolean, controlId: string): Promise<void> {
+    await this.api.approve(taskId, approve, controlId);
     this.put(await this.api.get(taskId));
     await this.loadEvents(taskId);
   }

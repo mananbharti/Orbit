@@ -110,7 +110,9 @@ export const taskSummarySchema = z.strictObject({ taskId: z.string().uuid(), sta
   createdAt: z.number().int().min(0), updatedAt: z.number().int().min(0), headline: z.string().max(200) });
 export type TaskSummary = z.infer<typeof taskSummarySchema>;
 export const taskEventSchema = z.strictObject({ seq: z.number().int().min(1), at: z.number().int().min(0),
-  kind: z.enum(['state', 'step', 'output', 'approval-request']), text: z.string().max(2_000) });
+  kind: z.enum(['state', 'step', 'output', 'approval-request']), text: z.string().max(2_000),
+  /** Present on approval-request events: the decision must name this exact control or the desktop refuses it. */
+  controlId: z.string().uuid().optional() });
 export type TaskEvent = z.infer<typeof taskEventSchema>;
 export const taskEventsPageSchema = z.strictObject({ events: z.array(taskEventSchema).max(64), hasMore: z.boolean() });
 export const taskListSchema = z.strictObject({ tasks: z.array(taskSummarySchema) });

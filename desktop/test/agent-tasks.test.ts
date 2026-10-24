@@ -86,11 +86,35 @@ test('approval gates a step: denial and approval are explicit, and nothing is au
   const pending = runner.contexts[0]!.requestApproval('Delete 3 files');
   await tick();
   assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval');
-  assert.equal(result(await command('agent.events', { taskId })).events.at(-1).kind, 'approval-request');
-  assert.deepEqual(result(await command('agent.approve', { taskId, approve: false })), { status: 'denied' });
+  const ask = result(await command('agent.events', { taskId })).events.at(-1);
+  assert.equal(ask.kind, 'approval-request');
+  assert.ok(ask.controlId, 'the displayed request carries its control identity');
+  assert.deepEqual(result(await command('agent.approve', { taskId, approve: false, controlId: ask.controlId })), { status: 'denied' });
   assert.equal(await pending, false);
   assert.equal(result(await command('agent.get', { taskId })).state, 'running');
-  error(await command('agent.approve', { taskId, approve: true }), 'AGENT_INVALID_STATE');
+  error(await command('agent.approve', { taskId, approve: true, controlId: ask.controlId }), 'AGENT_INVALID_STATE');
+});
+
+test('a decision names its control: a late tap on an earlier request never settles a newer one on the same task', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { command, runner } = fixture(t);
+  const { taskId } = result(await command('agent.submit', submit()));
+  const first = runner.contexts[0]!.requestApproval('Delete 3 files');
+  await tick();
+  const firstAsk = result(await command('agent.events', { taskId })).events.at(-1);
+  t.mock.timers.tick(APPROVAL_TIMEOUT_MS); // the first request times out unanswered
+  await tick();
+  assert.equal(await first, false);
+  const second = runner.contexts[0]!.requestApproval('Delete EVERYTHING');
+  await tick();
+  const secondAsk = result(await command('agent.events', { taskId })).events.at(-1);
+  assert.notEqual(firstAsk.controlId, secondAsk.controlId);
+  assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval');
+  // The stale tap for "Delete 3 files" arrives while "Delete EVERYTHING" is pending: refused, nothing settles.
+  error(await command('agent.approve', { taskId, approve: true, controlId: firstAsk.controlId }), 'AGENT_INVALID_STATE');
+  assert.equal(result(await command('agent.get', { taskId })).state, 'awaiting-approval', 'the newer control is still pending');
+  assert.deepEqual(result(await command('agent.approve', { taskId, approve: false, controlId: secondAsk.controlId })), { status: 'denied' });
+  assert.equal(await second, false);
 });
 
 test('cancel aborts the runner, resolves pending approvals as denied and is final', async t => {
@@ -243,8 +267,8 @@ test('an approval nobody answers is denied after five minutes, and an answer jus
   t.mock.timers.tick(1);
   assert.equal(await silent, false, 'silence is never approval');
   assert.equal(result(await command('agent.get', { taskId })).state, 'running');
-  assert.equal(result(await command('agent.events', { taskId })).events.at(-1).text, 'Denied');
-  error(await command('agent.approve', { taskId, approve: true }), 'AGENT_INVALID_STATE');
+  const timedOut = result(await command('agent.events', { taskId })).events.find((e: any) => e.kind === 'approval-request');
+  error(await command('agent.approve', { taskId, approve: true, controlId: timedOut.controlId }), 'AGENT_INVALID_STATE');
 });
 
 test('the ledger evicts the oldest finished task at 500, never an active one, lists newest 50, and freezes terminal tasks', t => {

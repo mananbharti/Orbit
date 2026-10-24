@@ -39,7 +39,8 @@ test('submit, approval, decision and completion are recorded, without prompt or 
   const f = fixture(t);
   const { taskId } = result(await f.command('agent.submit', { prompt: 'PRIVATE-PROMPT ask', idempotencyKey: randomUUID() }));
   await tick();
-  result(await f.command('agent.approve', { taskId, approve: true }));
+  const ask = result(await f.command('agent.events', { taskId })).events.at(-1);
+  result(await f.command('agent.approve', { taskId, approve: true, controlId: ask.controlId }));
   await tick(); f.runner.release('done'); await tick();
   const kinds = result(await f.command('agent.audit', {})).entries.map((e: any) => e.kind).reverse();
   assert.deepEqual(kinds, ['submitted', 'approval-requested', 'approved', 'finished']);
@@ -54,7 +55,8 @@ test('denial and cancellation are recorded; an idempotent retry is not a second 
   const a = result(await f.command('agent.submit', { prompt: 'ask one', idempotencyKey: key }));
   await f.command('agent.submit', { prompt: 'ask one', idempotencyKey: key });
   await tick();
-  result(await f.command('agent.approve', { taskId: a.taskId, approve: false })); await tick();
+  const askA = result(await f.command('agent.events', { taskId: a.taskId })).events.at(-1);
+  result(await f.command('agent.approve', { taskId: a.taskId, approve: false, controlId: askA.controlId })); await tick();
   const b = result(await f.command('agent.submit', { prompt: 'plain', idempotencyKey: randomUUID() }));
   result(await f.command('agent.cancel', { taskId: b.taskId })); await tick();
   const entries = result(await f.command('agent.audit', {})).entries;
@@ -65,7 +67,7 @@ test('denial and cancellation are recorded; an idempotent retry is not a second 
 });
 test('a failed command is not audited as a decision', async t => {
   const f = fixture(t);
-  const r = await f.command('agent.approve', { taskId: randomUUID(), approve: true });
+  const r = await f.command('agent.approve', { taskId: randomUUID(), approve: true, controlId: randomUUID() });
   assert.equal(r.payload.ok, false);
   assert.equal(result(await f.command('agent.audit', {})).entries.length, 0);
 });
