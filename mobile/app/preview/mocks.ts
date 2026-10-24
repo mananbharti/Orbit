@@ -45,7 +45,14 @@ export function mockStoreAnswered(): { store: TaskStore; taskId: string } {
   return { store: { ...store(state), refresh: async () => {}, submit: async () => {}, approve: async () => {}, cancel: async () => {}, retry: async () => {}, loadEvents: async () => {} } as unknown as TaskStore, taskId: answeredTask.taskId };
 }
 export const mockAgent = (paused = false): AgentApi => ({ audit: async () => audit, safeMode: async () => paused, status: async () => ({ paused, answerOnly: true }), pause: async () => {}, resume: async () => {} }) as unknown as AgentApi;
-export const mockDictation = {} as unknown as DictationApi;
+/** Ready engine: the preview shows the record button, not the setup notice. */
+export const mockDictation = {
+  setupState: async () => ({ state: 'ready' }),
+  retrySetup: async () => ({ state: 'downloading' }),
+  cancelSetup: async () => ({ state: 'failed', reason: 'cancelled' }),
+  transcribe: async () => ({ status: 'text', text: '' }),
+  transcribeCompressed: async () => ({ status: 'text', text: '' }),
+} as unknown as DictationApi;
 export const mockLauncher = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [], scenes: async () => [] }) as unknown as LauncherApi;
 /** Two saved scenes, one pinned favourite: the lived-in state. */
 export const mockLauncherScenes = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [apps[4]!.appId],
@@ -56,6 +63,7 @@ export const mockLauncherScenes = (): LauncherApi => ({ list: async () => apps, 
   saveScene: async () => [], deleteScene: async () => [], launchScene: async () => ({ launched: 3, failed: [] }) }) as unknown as LauncherApi;
 /** The apps screen with two favourites pinned at the top, as the owner arranged them. */
 export const mockLauncherPinned = (): LauncherApi => ({ list: async () => apps, launch: async () => {}, getPinned: () => [apps[4]!.appId, apps[3]!.appId],
+  scenes: async () => [],
   pin: async (id: string) => [id], unpin: async () => [], reorder: async (ids: string[]) => ids }) as unknown as LauncherApi;
 export const mockClipboard = (incoming = true): ClipboardApi => ({ ...store({ active: true, ...(incoming ? { incoming: { text: 'Meeting moved to 4pm, room 2B', revision: 3 } } : {}) }),
   history: async () => ({ entries: [

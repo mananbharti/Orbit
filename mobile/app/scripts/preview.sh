@@ -42,7 +42,7 @@ port=$(cat "$scratch/port")
 mkdir -p preview-shots
 screens=("$@")
 if [ ${#screens[@]} -eq 0 ]; then
-  screens=(tasks tasks-empty tasks-offline tasks-wake task-detail activity apps apps-pinned apps-scenes clipboard files memory remote remote-macros present control settings devices devices-limited computers computers-switching automations automations-edit terminal terminal-start files-backup tabs remote-keys pair)
+  screens=(tasks tasks-answer tasks-empty tasks-offline tasks-wake task-detail task-answer-detail activity apps apps-pinned apps-scenes clipboard files memory remote remote-macros present control settings devices devices-limited computers computers-switching automations automations-edit terminal terminal-start files-backup tabs remote-keys pair)
 fi
 for screen in "${screens[@]}"; do
   [[ "$screen" =~ ^[a-z0-9-]+$ ]] || { echo "Invalid screen name: $screen" >&2; exit 1; }
