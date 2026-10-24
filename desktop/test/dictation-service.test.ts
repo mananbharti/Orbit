@@ -91,10 +91,9 @@ test('finish returns text for speech, retains the transcript for confirmInsert, 
   const result = await handle('dictation.finish').execute({ dictationId: id }, context);
   assert.deepEqual(result, { status: 'text', text: 'Hello orbit', insertOffered: false });
   assert.ok(log.snapshot().some(event => event.eventType === 'dictation.finished' && event.outcome === 'success'));
-  await assert.rejects(begin(handle, context), /BUSY/, 'the retained transcript holds the slot until confirmInsert, cancel or TTL');
-  assert.deepEqual(await handle('dictation.cancel').execute({ dictationId: id }, context), { cancelled: true });
   const again = await begin(handle, context);
-  assert.notEqual(again, id, 'a new clip can start after cancel');
+  assert.notEqual(again, id, 'a new dictation from the same device abandons the retained insert offer');
+  await assert.rejects(handle('dictation.insert').execute({ dictationId: id }, context), /INVALID_PAYLOAD/, 'the abandoned offer is gone');
 });
 
 test('silence transcribes as no-speech', async t => {

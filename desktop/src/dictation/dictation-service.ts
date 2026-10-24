@@ -36,7 +36,11 @@ export class DictationService {
     this.unregister = [
       registry.register('dictation.begin', { validate: p => beginSchema.safeParse(p).success, execute: async (p, context) => {
         const connection = ok(context);
-        if (this.clip) throw new ProtocolError('BUSY');
+        // A finished clip is only a retained insert offer: any device starting a new dictation abandons it (the transcript is dropped, never disclosed). An open or transcribing clip stays BUSY.
+        if (this.clip) {
+          if (this.clip.text === undefined || this.clip.busy) throw new ProtocolError('BUSY');
+          this.drop();
+        }
         const { language, format } = beginSchema.parse(p);
         if (format === 'm4a' && !this.decoder) throw new ProtocolError('COMMAND_FAILED'); // no ffmpeg configured on this computer
         const onClose = () => this.drop();
