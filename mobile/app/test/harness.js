@@ -30,7 +30,11 @@ Module._load = function (request, parent, isMain) {
         const empty = (!props.data || props.data.length === 0) && props.ListEmptyComponent ? (React.isValidElement(props.ListEmptyComponent) ? props.ListEmptyComponent : React.createElement(props.ListEmptyComponent)) : null;
         return React.createElement('View', { style: [props.style, props.contentContainerStyle] }, header, rows.length ? rows : empty);
       };
-      cachedReactNative = Object.assign({}, real, { FlatList: TestFlatList });
+      // RNW's TextInput touches the DOM (document is undefined in bare node). The shim is a faithful
+      // controlled component: every prop (value, onChangeText, accessibilityLabel, placeholder, maxLength)
+      // passes through so tests drive the screen's real state handlers; only the DOM rendering is absent.
+      const TestTextInput = props => React.createElement('TextInput', props, props.children);
+      cachedReactNative = Object.assign({}, real, { FlatList: TestFlatList, TextInput: TestTextInput });
     }
     return cachedReactNative;
   }
@@ -39,6 +43,7 @@ Module._load = function (request, parent, isMain) {
     NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' }, ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' } };
   if (request === 'expo-audio') return audioStub;
   if (request === 'expo-document-picker') return { getDocumentAsync: async () => ({ canceled: true, assets: [] }) };
+  if (request === 'expo-blur') return { BlurView: stubComponent() };
   if (request === 'expo-file-system') {
     // Minimal in-memory File serving one real 16 kHz mono 16-bit WAV (0.25s tone), so wavToPcm16k runs its real parse path.
     const wavBytes = () => {
