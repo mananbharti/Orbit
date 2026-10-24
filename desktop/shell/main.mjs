@@ -13,6 +13,7 @@ const { pickLanAddress, defaultRouteAddress } = await import(pathToFileURL(join(
 const { DEFAULT_PORT } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'config.js')).href);
 const { createClipboard } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-clipboard.js')).href);
 const { inputDeviceFactory } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'os-integration', 'create-input-device.js')).href);
+const { createDictationInsertion } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'create-insertion.js')).href);
 const { hostname } = await import('node:os');
 const { HermesRunner } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent', 'hermes-runner.js')).href);
 const { loadAgentConfig, saveAgentConfig, clearAgentConfig, validateAgentConfig } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'agent-config.js')).href);
@@ -95,7 +96,10 @@ async function boot() {
     const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
     const { focusProbeFor, focusActivatorFor } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
     dictationProbe = focusProbeFor(); dictationActivator = focusActivatorFor();
-    localDictation = new LocalDictation({ ...(dictationProbe ? { probe: dictationProbe } : {}),
+    // Linux/X11 inserts through the same allowlisted paste path as the phone-confirmed flow; its captureFocus only yields a target whose paste binding is known, so the Insert button never appears for an unknown window class.
+    dictationInsertion = process.platform === 'linux' ? createDictationInsertion() : undefined;
+    const captureProbe = dictationInsertion ? { current: dictationInsertion.captureFocus } : dictationProbe;
+    localDictation = new LocalDictation({ ...(captureProbe ? { probe: captureProbe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
       onPreview: dictationPreview, onState: dictationStatePush });
     dictationHotkeyApply(dictationHotkeyGet());
@@ -222,6 +226,15 @@ ipcMain.handle('orbit:dictation-type-now', async () => {
   if (!dictationPending) return { ok: false, reason: 'nothing pending' };
   const { text, target } = dictationPending;
   if (!target || !dictationProbe || !dictationActivator) return { ok: false, reason: 'no verified window target on this platform' };
+  if (dictationInsertion) {
+    // X11 paste path: one confirmed action, allowlisted targets only, single-use - the offer is consumed whatever the outcome, and there is no automatic retry after an ambiguous delivery.
+    const out = await dictationInsertion.insert(target, text);
+    if (out === 'paste-sent') { dictationPending = undefined; return { ok: true, via: 'paste' }; }
+    if (out === 'focus-lost') { dictationPending = undefined; dictationWin?.webContents.send('orbit:dictation-preview', { hide: true }); return { ok: false, reason: 'focus changed during the paste - it may have gone to another window, so Orbit did not keep or retry the text. Re-dictate if needed.' }; }
+    if (out === 'clipboard-unavailable') return { ok: false, reason: 'the clipboard holds something Orbit will not replace (a password, an image, or a very large item) - copy the text instead' };
+    if (out === 'unsupported-target') return { ok: false, reason: 'Orbit does not know how to paste into that window - copy the text instead' };
+    return { ok: false, reason: out === 'activation-failed' || out === 'focus-mismatch' ? 'that window is no longer focused - nothing was pasted' : 'the paste keystroke failed - nothing was sent' };
+  }
   const { confirmedInsert } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-insert.js')).href);
   let out;
   try { out = await confirmedInsert(target, text, dictationProbe, dictationActivator, dictationTypeChunk); }
@@ -348,7 +361,7 @@ function dictationStatePush(state) {
   tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
-let dictationDevice; let dictationProbe; let dictationActivator; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; // { text, target } awaiting the user's per-use choice
+let dictationDevice; let dictationProbe; let dictationActivator; let dictationInsertion; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; // { text, target } awaiting the user's per-use choice
 async function dictationTypeChunk(chunk) {
   if (!dictationDevice) { const factory = inputDeviceFactory(); if (!factory) throw new Error('no input adapter on this OS'); dictationDevice = factory(); }
   await dictationDevice.apply({ t: 'text', text: chunk }, new AbortController().signal);
@@ -357,7 +370,7 @@ async function dictationReleaseDevice() { try { await dictationDevice?.releaseAl
 // The transcript is never typed automatically: it goes to the preview card, and the user copies it or confirms typing into the captured window.
 function dictationPreview(text, target) {
   dictationPending = { text, target };
-  if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'Your dictated text is in Orbit. Nothing was typed - copy it, or confirm the window to type it into.' }).show();
+  if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'Your dictated text is in Orbit. Nothing was sent anywhere - copy it, or confirm the window to insert it into.' }).show();
   dictationWin?.show();
   dictationWin?.webContents.send('orbit:dictation-preview', { text, targetLabel: target?.label });
 }
@@ -422,7 +435,7 @@ if (process.env.ORBIT_SMOKE_SHOT) {
     const { writeFileSync } = await import('node:fs');
     if (!process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript("document.getElementById('pair').click()");
     if (process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript(`document.querySelector('.nav[data-tab="${process.env.ORBIT_SMOKE_TAB}"]').click()`);
-    if (process.env.ORBIT_SMOKE_DICTATION_PREVIEW) win.webContents.send('orbit:dictation-preview', { text: 'This is where your dictated text appears. Nothing was typed automatically - copy it, or confirm the window to type it into.', targetLabel: process.env.ORBIT_SMOKE_DICTATION_PREVIEW === 'target' ? 'Editor - notes.txt' : undefined });
+    if (process.env.ORBIT_SMOKE_DICTATION_PREVIEW) win.webContents.send('orbit:dictation-preview', { text: 'This is where your dictated text appears. Nothing was sent anywhere automatically - copy it, or confirm the window to insert it into.', targetLabel: process.env.ORBIT_SMOKE_DICTATION_PREVIEW === 'target' ? 'Editor - notes.txt' : undefined });
     await new Promise(r => setTimeout(r, 800));
     writeFileSync(process.env.ORBIT_SMOKE_SHOT, (await win.webContents.capturePage()).toPNG());
     console.log('SMOKE: frame written'); app.exit(0);

@@ -289,16 +289,17 @@ if (api.onDictationState) api.onDictationState(st => {
 });
 if (api.onDictationPreview) api.onDictationPreview(payload => {
   const card = $('dictation-preview-card'); if (!card) return;
-  $('dictation-preview-why').textContent = 'Nothing was typed. Copy the text, or confirm the window to type it into.';
+  if (payload.hide) { card.classList.remove('on'); return; }
+  $('dictation-preview-why').textContent = 'Nothing was sent anywhere. Copy the text, or confirm the window to insert it into.';
   $('dictation-preview-text').textContent = payload.text;
   const typeBtn = $('dictation-preview-type');
-  if (typeBtn) { if (payload.targetLabel) { typeBtn.textContent = 'Type into ' + payload.targetLabel; typeBtn.classList.add('on'); } else { typeBtn.classList.remove('on'); } }
+  if (typeBtn) { if (payload.targetLabel) { typeBtn.textContent = 'Insert into ' + payload.targetLabel; typeBtn.classList.add('on'); } else { typeBtn.classList.remove('on'); } }
   card.classList.add('on');
 });
 if ($('dictation-preview-type')) $('dictation-preview-type').onclick = async () => {
   const r = await api.dictationTypeNow();
-  if (r.ok) { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; toast('Typed into the window'); }
-  else toast(r.reason || 'Could not type into that window');
+  if (r.ok) { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; toast(r.via === 'paste' ? 'Paste sent to the window' : 'Typed into the window'); }
+  else toast(r.reason || 'Could not insert into that window');
 };
 if ($('dictation-preview-copy')) $('dictation-preview-copy').onclick = async () => { if (await api.copyText($('dictation-preview-text').textContent)) toast('Copied'); };
 if ($('dictation-preview-dismiss')) $('dictation-preview-dismiss').onclick = () => { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; };
