@@ -95,7 +95,9 @@ test('tabs commands map extension failures to the right protocol errors', async 
   stub.replies.push({ ok: false, error: 'not found' });
   await assert.rejects(run('tabs.activate', { tabId: 7 }), code('TABS_NOT_FOUND'), 'activate maps the same way');
   stub.replies.push({ ok: false, error: 'chrome exploded' });
-  await assert.rejects(run('tabs.close', { tabId: 7 }), code('TABS_EXTENSION_OFFLINE'), 'other failures stay OFFLINE');
+  await assert.rejects(run('tabs.close', { tabId: 7 }), code('TABS_ACTION_FAILED'), 'an answered failure is ACTION_FAILED, not offline');
+  stub.replies.push({ ok: false, error: 'timeout' });
+  await assert.rejects(run('tabs.close', { tabId: 7 }), code('TABS_EXTENSION_OFFLINE'), 'a transport failure is OFFLINE');
   stub.replies.push({ ok: true });
   assert.deepEqual(await run('tabs.open', { url: 'https://example.com' }), { opened: true });
 });

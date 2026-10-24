@@ -30,6 +30,7 @@ const BY_CODE: Partial<Record<string, string>> = {
   TERMINAL_UNAVAILABLE: 'The terminal is not available on this computer.',
   TABS_EXTENSION_OFFLINE: 'Connect the Orbit browser extension on your computer first.',
   TABS_NOT_FOUND: 'That tab is already gone.',
+  TABS_ACTION_FAILED: 'The browser could not do that. Try again from the computer.',
   TERMINAL_SESSION_REQUIRED: 'Start a terminal session first.',
   BIOMETRIC_REQUIRED: 'Confirm on the computer first, then try again.',
   INPUT_UNAVAILABLE: 'Remote control is not available on this computer.',

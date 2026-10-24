@@ -62,17 +62,22 @@ test('tabs.open validates the URL and passes it through; failures map to offline
     assert.equal(open.validate(bad), false, `rejects ${JSON.stringify(bad)}`);
   assert.deepEqual(await open.execute({ url: 'https://heyorbit.xyz' }, context), { opened: true });
   assert.deepEqual(calls[0], { type: 'open', payload: { url: 'https://heyorbit.xyz' } });
-  const offline = fixture(t, async () => ({ id: 'x', ok: false }));
+  const offline = fixture(t, async () => ({ id: 'x', ok: false, error: 'extension not connected' }));
   await assert.rejects(handler(offline.registry, 'tabs.open').execute({ url: 'https://heyorbit.xyz' }, context), /TABS_EXTENSION_OFFLINE/);
+  const denied = fixture(t, async () => ({ id: 'x', ok: false, error: 'tab was not created' }));
+  await assert.rejects(handler(denied.registry, 'tabs.open').execute({ url: 'https://heyorbit.xyz' }, context), /TABS_ACTION_FAILED/);
 });
 
 test('tabs.close and tabs.activate map "not found" distinctly from extension failures', async t => {
   const notFound = fixture(t, async () => ({ id: 'x', ok: false, error: 'not found' }));
   await assert.rejects(handler(notFound.registry, 'tabs.close').execute({ tabId: 7 }, context), /TABS_NOT_FOUND/);
   await assert.rejects(handler(notFound.registry, 'tabs.activate').execute({ tabId: 7 }, context), /TABS_NOT_FOUND/);
-  const offline = fixture(t, async () => ({ id: 'x', ok: false, error: 'socket gone' }));
+  const offline = fixture(t, async () => ({ id: 'x', ok: false, error: 'timeout' }));
   await assert.rejects(handler(offline.registry, 'tabs.close').execute({ tabId: 7 }, context), /TABS_EXTENSION_OFFLINE/);
   await assert.rejects(handler(offline.registry, 'tabs.activate').execute({ tabId: 7 }, context), /TABS_EXTENSION_OFFLINE/);
+  const denied = fixture(t, async () => ({ id: 'x', ok: false, error: 'Cannot access a chrome:// URL' }));
+  await assert.rejects(handler(denied.registry, 'tabs.close').execute({ tabId: 7 }, context), /TABS_ACTION_FAILED/);
+  await assert.rejects(handler(denied.registry, 'tabs.activate').execute({ tabId: 7 }, context), /TABS_ACTION_FAILED/);
   const ok = fixture(t, async () => ({ id: 'x', ok: true }));
   assert.deepEqual(await handler(ok.registry, 'tabs.close').execute({ tabId: 7 }, context), { closed: true });
   assert.deepEqual(await handler(ok.registry, 'tabs.activate').execute({ tabId: 7 }, context), { activated: true });

@@ -5,6 +5,13 @@ import { openTabSchema, tabIdSchema, tabListSchema } from '../protocol/tabs.js';
 import type { ExtensionServer } from './extension-server.js';
 
 // The 'tabs' family is deliberately absent from FAMILY_SCOPE: tab titles and URLs are private, so only full-access devices may read or control them.
+// Failure honesty: only a transport-level failure means the extension is offline; an extension that answered gets its real outcome.
+const TRANSPORT_FAILURES = new Set(['extension not connected', 'timeout', 'shutdown']);
+function tabsError(error: string | undefined): ProtocolError {
+  if (error === 'not found') return new ProtocolError('TABS_NOT_FOUND');
+  if (error && TRANSPORT_FAILURES.has(error)) return new ProtocolError('TABS_EXTENSION_OFFLINE');
+  return new ProtocolError('TABS_ACTION_FAILED');
+}
 export class TabsService {
   private readonly unregister: (() => void)[];
 
@@ -24,21 +31,21 @@ export class TabsService {
         execute: async p => {
           const { url } = openTabSchema.parse(p);
           const response = await this.server.request('open', { url });
-          if (!response.ok) throw new ProtocolError('TABS_EXTENSION_OFFLINE');
+          if (!response.ok) throw tabsError(response.error);
           return { opened: true };
         } }),
       registry.register('tabs.close', { validate: p => tabIdSchema.safeParse(p).success,
         execute: async p => {
           const { tabId } = tabIdSchema.parse(p);
           const response = await this.server.request('close', { tabId });
-          if (!response.ok) throw new ProtocolError(response.error === 'not found' ? 'TABS_NOT_FOUND' : 'TABS_EXTENSION_OFFLINE');
+          if (!response.ok) throw tabsError(response.error);
           return { closed: true };
         } }),
       registry.register('tabs.activate', { validate: p => tabIdSchema.safeParse(p).success,
         execute: async p => {
           const { tabId } = tabIdSchema.parse(p);
           const response = await this.server.request('activate', { tabId });
-          if (!response.ok) throw new ProtocolError(response.error === 'not found' ? 'TABS_NOT_FOUND' : 'TABS_EXTENSION_OFFLINE');
+          if (!response.ok) throw tabsError(response.error);
           return { activated: true };
         } }),
     ];
