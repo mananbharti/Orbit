@@ -27,6 +27,13 @@ class DemoRunner implements AgentRunner {
   }
 }
 
+/** The control identity of the task's latest approval request - what the phone would send. */
+async function controlOf(api: AgentApi, taskId: string): Promise<string> {
+  const ask = (await api.events(taskId)).filter(e => e.kind === 'approval-request').at(-1);
+  assert.ok(ask?.controlId, 'an approval request names its control');
+  return ask.controlId;
+}
+
 async function phone(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'orbit-phone-e2e-'));
   const service = await startDesktop({ directory: join(root, 'private'), host: '127.0.0.1', port: 0, displayName: 'Orbit Test',
@@ -62,12 +69,12 @@ test('an approval request waits for the phone and the decision is honoured', asy
   const approve = await api.submit('please approve this');
   await until(() => api.get(approve.taskId), s => s.state === 'awaiting-approval');
   assert.ok((await api.events(approve.taskId)).some(e => e.kind === 'approval-request'));
-  assert.equal(await api.approve(approve.taskId, true), 'approved');
+  assert.equal(await api.approve(approve.taskId, true, await controlOf(api, approve.taskId)), 'approved');
   assert.equal((await until(() => api.get(approve.taskId), s => TERMINAL_TASK_STATES.has(s.state))).state, 'completed');
 
   const deny = await api.submit('please approve this too');
   await until(() => api.get(deny.taskId), s => s.state === 'awaiting-approval');
-  assert.equal(await api.approve(deny.taskId, false), 'denied');
+  assert.equal(await api.approve(deny.taskId, false, await controlOf(api, deny.taskId)), 'denied');
   assert.equal((await until(() => api.get(deny.taskId), s => TERMINAL_TASK_STATES.has(s.state))).state, 'failed');
 });
 
@@ -116,7 +123,7 @@ test('the phone can read its audit trail after approving a task', async t => {
   const { api } = await phone(t);
   const task = await api.submit('please approve this');
   await until(() => api.get(task.taskId), s => s.state === 'awaiting-approval');
-  await api.approve(task.taskId, true);
+  await api.approve(task.taskId, true, await controlOf(api, task.taskId));
   await until(() => api.get(task.taskId), s => TERMINAL_TASK_STATES.has(s.state));
   const kinds = (await api.audit()).map(e => e.kind).reverse();
   assert.deepEqual(kinds, ['submitted', 'approval-requested', 'approved', 'finished']);
@@ -198,6 +205,6 @@ test('an approval left waiting while the phone disconnects can still be answered
   session.stop();
   await session.start();
   assert.equal((await api.get(task.taskId)).state, 'awaiting-approval', 'the desktop kept waiting for the owner, it did not auto-decide');
-  assert.equal(await api.approve(task.taskId, true), 'approved');
+  assert.equal(await api.approve(task.taskId, true, await controlOf(api, task.taskId)), 'approved');
   assert.equal((await until(() => api.get(task.taskId), s => TERMINAL_TASK_STATES.has(s.state))).state, 'completed');
 });
