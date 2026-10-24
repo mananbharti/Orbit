@@ -110,6 +110,8 @@ async function boot() {
     state = { phase: 'running', host, port: DEFAULT_PORT };
     if (agent) { void probeAgentGateway(hermes); void probeLaya(hermes); } else { agentGateway = 'unknown'; agentLaya = 'unknown'; }
   } catch (error) {
+    // Boot failures must be diagnosable from the log alone: message only, never paths, keys, or device data.
+    console.error('BOOT: failed -', String(error?.message ?? error).slice(0, 200));
     state = { phase: 'error', message: String(error?.message ?? error).slice(0, 200) };
   }
 }
