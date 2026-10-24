@@ -115,7 +115,7 @@ function render(s) {
   $('qrbox').classList.toggle('live', Boolean(qrSvg));
   $('pair').hidden = open || !ok; $('cancel').hidden = !open;
   if (!ok) { $('pair').hidden = false; $('pair').textContent = 'Try again'; $('pair').onclick = () => api.retry(); } else { $('pair').textContent = 'Show pairing code'; $('pair').onclick = async () => { const r = await api.pair(); if (r.svg) { qrSvg = r.svg; render(await api.state()); } }; }
-  $('hero-msg').textContent = open ? 'Scan with Orbit on your phone. This code works once.' : (s.devices.length ? s.pcName + ' is reachable by your phone.' : 'Codes work once and expire after two minutes.');
+  $('hero-msg').textContent = open ? 'Scan with Orbit on your phone. This code works once.' : (s.devices.length ? 'This computer appears on your Wi-Fi as ' + s.pcName + '.' : 'Codes work once and expire after two minutes.');
   $('meta').textContent = s.devices.length + (s.devices.length === 1 ? ' device paired' : ' devices paired');
 
   // Agent tasks (Hermes gateway)
