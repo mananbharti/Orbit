@@ -51,3 +51,20 @@ export function focusProbeFor(platform: string = process.platform, sessionType: 
   if (platform === 'linux' && sessionType === 'x11') return x11FocusProbe();
   return undefined;
 }
+
+/** Result of verified typing: fully typed, never started (preview), or cut short when focus changed mid-typing - the untyped remainder is returned so the caller can surface it honestly. */
+export type TypeOutcome = { action: 'typed' } | { action: 'preview'; reason: 'focus-changed' } | { action: 'aborted'; remaining: string };
+
+/** Types text in chunks, re-probing focus identity before every chunk. A mismatch before the first chunk means nothing was typed; a mismatch later bounds the leak to the chunks already sent and returns the rest. This narrows the check-then-type race to one chunk instead of the whole utterance. */
+export async function typeVerified(text: string, expected: FocusHandle, probe: FocusProbe, typeChunk: (chunk: string) => Promise<void>, chunkSize = 240): Promise<TypeOutcome> {
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += chunkSize) chunks.push(text.slice(i, i + chunkSize));
+  for (let i = 0; i < chunks.length; i++) {
+    const now = await probe.current();
+    if (!now || now.id !== expected.id || now.pid !== expected.pid) {
+      return i === 0 ? { action: 'preview', reason: 'focus-changed' } : { action: 'aborted', remaining: chunks.slice(i).join('') };
+    }
+    await typeChunk(chunks[i] as string);
+  }
+  return { action: 'typed' };
+}

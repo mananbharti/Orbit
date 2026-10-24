@@ -196,8 +196,17 @@ $('agent-test').onclick = async () => {
 api.state().then(render); api.onState(render);
 
 // --- Dictation hotkey: capture runs here (mic lives in the renderer); the main process owns the toggle, transcription and insertion. ---
-let dicStream, dicCtx, dicNode, dicChunks = [], dicCapTimer;
+let dicStream, dicCtx, dicNode, dicChunks = [], dicCapTimer, dicKey = 'the shortcut';
 function dictationStatus(text) { const el = $('dictation-status'); if (el) el.textContent = text; }
+function dictationCleanupMic() { // every exit path releases the mic: tracks stopped, context closed, chunks zeroed
+  clearTimeout(dicCapTimer);
+  try { dicNode && dicNode.disconnect(); } catch { /* already stopped */ }
+  if (dicCtx) { const c = dicCtx; dicCtx = undefined; c.close().catch(() => {}); }
+  if (dicStream) { dicStream.getTracks().forEach(t => t.stop()); dicStream = undefined; }
+  dicNode = undefined;
+  dicChunks.forEach(c => c.fill(0)); dicChunks = [];
+  const b = $('dictation-banner'); if (b) b.classList.remove('on');
+}
 async function dictationStartCapture() {
   try {
     dicChunks = [];
@@ -217,31 +226,59 @@ async function dictationStartCapture() {
       dicChunks.push(pcm);
     };
     src.connect(dicNode); dicNode.connect(dicCtx.destination);
-    dictationStatus('Recording... press the shortcut again to stop');
+    dictationStatus('Recording... press ' + dicKey + ' again to stop');
+    const b = $('dictation-banner');
+    if (b) { b.textContent = '\u25CF Recording - press ' + dicKey + ' again to stop'; b.classList.add('on'); }
     dicCapTimer = setTimeout(() => dictationStopCapture(), 60000);
-  } catch (e) { dictationStatus('Microphone unavailable: ' + (e && e.message ? e.message : e)); }
+  } catch (e) {
+    dictationCleanupMic(); // a partial setup must never leave the mic open
+    dictationStatus('Microphone unavailable: ' + (e && e.message ? e.message : e));
+  }
 }
 async function dictationStopCapture() {
   clearTimeout(dicCapTimer);
-  try { dicNode && dicNode.disconnect(); dicCtx && await dicCtx.close(); dicStream && dicStream.getTracks().forEach(t => t.stop()); } catch { /* already stopped */ }
-  dicNode = undefined; dicCtx = undefined; dicStream = undefined;
-  const total = dicChunks.reduce((n, c) => n + c.length, 0);
+  const chunks = dicChunks;
+  try { dicNode && dicNode.disconnect(); } catch { /* already stopped */ }
+  if (dicCtx) { const c = dicCtx; dicCtx = undefined; await c.close().catch(() => {}); }
+  if (dicStream) { dicStream.getTracks().forEach(t => t.stop()); dicStream = undefined; }
+  dicNode = undefined; dicChunks = [];
+  const b = $('dictation-banner'); if (b) b.classList.remove('on');
+  const total = chunks.reduce((n, c) => n + c.length, 0);
   const pcm = new Int16Array(total); let off = 0;
-  for (const c of dicChunks) { pcm.set(c, off); off += c.length; }
-  dicChunks = [];
+  for (const c of chunks) { pcm.set(c, off); off += c.length; c.fill(0); }
   dictationStatus('Transcribing...');
-  await api.dictationFinish(pcm.buffer);
+  try { await api.dictationFinish(pcm.buffer); } finally { pcm.fill(0); }
 }
-if (api.onDictationCapture) api.onDictationCapture(action => { if (action === 'start') void dictationStartCapture(); else void dictationStopCapture(); });
-if (api.onDictationState) api.onDictationState(st => { if (st === 'idle') dictationStatus('Dictation engine: ready'); if (st === 'working') dictationStatus('Transcribing...'); });
+function dictationAbortCapture() { // shortcut disabled or app quitting: drop everything, send nothing
+  dictationCleanupMic();
+  dictationStatus('Dictation engine: ready');
+}
+if (api.onDictationCapture) api.onDictationCapture(action => { if (action === 'start') void dictationStartCapture(); else if (action === 'abort') dictationAbortCapture(); else void dictationStopCapture(); });
+if (api.onDictationState) api.onDictationState(st => {
+  if (st === 'idle') dictationStatus('Dictation engine: ready');
+  if (st === 'working') { dictationStatus('Transcribing...'); const b = $('dictation-banner'); if (b) b.classList.remove('on'); }
+});
+if (api.onDictationPreview) api.onDictationPreview(payload => {
+  const card = $('dictation-preview-card'); if (!card) return;
+  $('dictation-preview-why').textContent = payload.reason === 'focus-changed-mid-type' ? 'The window changed while typing, so typing stopped. Part of this may already have been typed; the rest is here.'
+    : payload.reason === 'focus-changed' ? 'The window changed while you spoke, so nothing was typed.'
+    : 'Orbit could not confirm which window to type into, so nothing was typed.';
+  $('dictation-preview-text').textContent = payload.text;
+  card.classList.add('on');
+});
+if ($('dictation-preview-copy')) $('dictation-preview-copy').onclick = async () => { await navigator.clipboard.writeText($('dictation-preview-text').textContent); toast('Copied'); };
+if ($('dictation-preview-dismiss')) $('dictation-preview-dismiss').onclick = () => { $('dictation-preview-card').classList.remove('on'); $('dictation-preview-text').textContent = ''; };
 if (api.dictationGet) void (async () => {
   const cfg = await api.dictationGet();
   if ($('dictation-enable')) $('dictation-enable').checked = cfg.enabled;
   if ($('dictation-key')) $('dictation-key').value = cfg.accelerator;
+  if ($('dictation-fallback')) $('dictation-fallback').value = cfg.fallback || 'preview';
+  dicKey = cfg.accelerator || 'the shortcut';
   dictationStatus('Dictation engine: ' + (cfg.engine ? 'ready' : 'setting up (one-time download)'));
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
-    const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
+    const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim(), $('dictation-fallback') ? $('dictation-fallback').value : 'preview');
+    if (r.ok) dicKey = $('dictation-key').value.trim() || dicKey;
     toast(r.ok ? 'Dictation hotkey saved' : 'Could not save the hotkey');
   };
 })();

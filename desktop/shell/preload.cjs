@@ -22,8 +22,9 @@ contextBridge.exposeInMainWorld('orbit', {
   sendPaths: paths => ipcRenderer.invoke('orbit:send-files', paths),
   pathForFile: file => webUtils.getPathForFile(file),
   dictationGet: () => ipcRenderer.invoke('orbit:dictation-get'),
-  dictationSet: (enabled, accelerator) => ipcRenderer.invoke('orbit:dictation-set', enabled, accelerator),
+  dictationSet: (enabled, accelerator, fallback) => ipcRenderer.invoke('orbit:dictation-set', enabled, accelerator, fallback),
   dictationFinish: buffer => ipcRenderer.invoke('orbit:dictation-finish', buffer),
   onDictationCapture: cb => { const f = (_e, action) => cb(action); ipcRenderer.on('orbit:dictation-capture', f); return () => ipcRenderer.removeListener('orbit:dictation-capture', f); },
   onDictationState: cb => { const f = (_e, s) => cb(s); ipcRenderer.on('orbit:dictation-state', f); return () => ipcRenderer.removeListener('orbit:dictation-state', f); },
+  onDictationPreview: cb => { const f = (_e, payload) => cb(payload); ipcRenderer.on('orbit:dictation-preview', f); return () => ipcRenderer.removeListener('orbit:dictation-preview', f); },
 });

@@ -191,3 +191,9 @@ progress.fail::-webkit-progress-value { background: var(--bad); }
 .field { display: block; width: 100%; box-sizing: border-box; padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13.5px; }
 .field:focus { outline: 2px solid var(--accent, #0a84ff); outline-offset: 0; }
 .field:last-child { margin-bottom: 0; }
+/* Dictation hotkey surfaces: class-toggled because the page CSP blocks inline style attributes. */
+#dictation-banner { display: none; background: #b3261e; color: #fff; padding: 10px 16px; border-radius: 10px; margin: 12px 24px 0; font-weight: 600; }
+#dictation-banner.on { display: block; }
+#dictation-preview-card { display: none; margin: 12px 24px 0; }
+#dictation-preview-card.on { display: block; }
+#dictation-preview-text { white-space: pre-wrap; }

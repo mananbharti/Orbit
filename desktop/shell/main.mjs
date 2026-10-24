@@ -94,7 +94,7 @@ async function boot() {
     const probe = focusProbeFor();
     localDictation = new LocalDictation({ ...(probe ? { probe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
-      typeText: dictationType, onPreview: dictationPreview, onState: dictationStatePush });
+      typeChunk: dictationTypeChunk, onPreview: dictationPreview, onState: dictationStatePush });
     dictationHotkeyApply(dictationHotkeyGet());
     const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log);
     if (process.env.ORBIT_WHISPER_BIN && process.env.ORBIT_WHISPER_MODEL) {
@@ -186,12 +186,17 @@ function knownPath(candidate) {
 
 ipcMain.handle('orbit:state', () => snapshot());
 ipcMain.handle('orbit:dictation-get', () => ({ ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine) }));
-ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => { const cfg = dictationHotkeySave(enabled, accelerator); dictationHotkeyApply(cfg); return { ok: true, ...cfg }; });
+ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator, fallback) => {
+  const cfg = dictationHotkeySave(enabled, accelerator, fallback);
+  if (!cfg.enabled && localDictation?.cancel()) dictationWin?.webContents.send('orbit:dictation-capture', 'abort'); // stopping the shortcut stops any recording immediately
+  dictationHotkeyApply(cfg);
+  return { ok: true, ...cfg };
+});
 ipcMain.handle('orbit:dictation-finish', async (_e, buffer) => {
   if (!localDictation || localDictation.current !== 'recording') return { ok: false };
   // An empty or malformed clip still completes the toggle so the state machine returns to idle.
   const pcm = buffer instanceof ArrayBuffer && buffer.byteLength > 0 && buffer.byteLength % 2 === 0 ? new Int16Array(buffer.slice(0)) : undefined;
-  await localDictation.toggle(async () => pcm);
+  try { await localDictation.toggle(async () => pcm); } finally { await dictationReleaseDevice(); }
   return { ok: true };
 });
 ipcMain.handle('orbit:pair', async () => {
@@ -288,11 +293,11 @@ function createWindow() {
 // --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
 const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
 function dictationHotkeyGet() {
-  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D' }; }
-  catch { return { enabled: false, accelerator: 'Control+Shift+D' }; }
+  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', fallback: c.fallback === 'clipboard' ? 'clipboard' : 'preview' }; }
+  catch { return { enabled: false, accelerator: 'Control+Shift+D', fallback: 'preview' }; }
 }
-function dictationHotkeySave(enabled, accelerator) {
-  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D' };
+function dictationHotkeySave(enabled, accelerator, fallback) {
+  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D', fallback: fallback === 'clipboard' ? 'clipboard' : 'preview' };
   writeFileSync(dictationHotkeyPath(), JSON.stringify(cfg), { mode: 0o600 });
   return cfg;
 }
@@ -301,16 +306,26 @@ function dictationStatePush(state) {
   tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
-async function dictationType(text) {
-  const factory = inputDeviceFactory();
-  if (!factory) throw new Error('no input adapter on this OS');
-  const device = factory();
-  await device.apply({ t: 'text', text }, new AbortController().signal);
-  await device.releaseAll();
+let dictationDevice; // one input adapter per stop, shared across verified chunks
+async function dictationTypeChunk(chunk) {
+  if (!dictationDevice) { const factory = inputDeviceFactory(); if (!factory) throw new Error('no input adapter on this OS'); dictationDevice = factory(); }
+  await dictationDevice.apply({ t: 'text', text: chunk }, new AbortController().signal);
 }
+async function dictationReleaseDevice() { try { await dictationDevice?.releaseAll(); } catch { /* already released */ } dictationDevice = undefined; }
+// Preview-first: nothing touches the clipboard unless the user explicitly chose the clipboard fallback.
 function dictationPreview(text, reason) {
-  electronClipboard.writeText(text);
-  if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: (reason === 'focus-changed' ? 'The focused window changed while you spoke, so nothing was typed. The text is on your clipboard.' : 'Orbit could not confirm which window to type into, so nothing was typed. The text is on your clipboard.') + '\n\n' + text.slice(0, 180) }).show();
+  const midType = reason === 'focus-changed-mid-type';
+  const why = midType ? 'The focused window changed while text was being typed, so typing stopped - part of the text may already have landed there. The rest is below.'
+    : reason === 'focus-changed' ? 'The focused window changed while you spoke, so nothing was typed.'
+    : 'Orbit could not confirm which window to type into, so nothing was typed.';
+  if (dictationHotkeyGet().fallback === 'clipboard') {
+    electronClipboard.writeText(text);
+    if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: why + ' The text is on your clipboard.' }).show();
+  } else {
+    if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: why + ' Open Orbit to copy it.' }).show();
+  }
+  dictationWin?.show();
+  dictationWin?.webContents.send('orbit:dictation-preview', { text, reason });
 }
 async function dictationToggleKey() {
   if (!localDictation) return;
@@ -341,7 +356,7 @@ function createTray() {
 
 app.on('second-instance', () => { win?.show(); win?.focus(); });
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', e => { globalShortcut.unregisterAll(); if (service) { e.preventDefault(); const s = service; service = undefined; console.log('QUIT: stopping'); s.stop().then(() => console.log('QUIT: stopped'), er => console.log('QUIT: stop err ' + er)).finally(() => app.exit(0)); } });
+app.on('will-quit', e => { localDictation?.cancel(); globalShortcut.unregisterAll(); if (service) { e.preventDefault(); const s = service; service = undefined; console.log('QUIT: stopping'); s.stop().then(() => console.log('QUIT: stopped'), er => console.log('QUIT: stop err ' + er)).finally(() => app.exit(0)); } });
 nativeTheme.on('updated', push);
 setInterval(push, 2000);
 
@@ -373,6 +388,7 @@ if (process.env.ORBIT_SMOKE_SHOT) {
     const { writeFileSync } = await import('node:fs');
     if (!process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript("document.getElementById('pair').click()");
     if (process.env.ORBIT_SMOKE_TAB) await win.webContents.executeJavaScript(`document.querySelector('.nav[data-tab="${process.env.ORBIT_SMOKE_TAB}"]').click()`);
+    if (process.env.ORBIT_SMOKE_DICTATION_PREVIEW) win.webContents.send('orbit:dictation-preview', { text: 'This is where your dictated text appears when Orbit cannot verify the window to type into. Nothing was typed and nothing was copied.', reason: process.env.ORBIT_SMOKE_DICTATION_PREVIEW });
     await new Promise(r => setTimeout(r, 800));
     writeFileSync(process.env.ORBIT_SMOKE_SHOT, (await win.webContents.capturePage()).toPNG());
     console.log('SMOKE: frame written'); app.exit(0);

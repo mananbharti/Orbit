@@ -1,7 +1,7 @@
 /** Desktop push-to-talk: the toggle state machine and the fail-closed insertion rule (window identity, never title); depends on fakes only; performs no OS calls. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideInsertion, windowsFocusProbe, x11FocusProbe, focusProbeFor } from '../src/dictation/local-insert.js';
+import { decideInsertion, typeVerified, windowsFocusProbe, x11FocusProbe, focusProbeFor } from '../src/dictation/local-insert.js';
 import { LocalDictation } from '../src/dictation/local-dictation.js';
 
 const clip = () => new Int16Array(16000).fill(100);
@@ -34,7 +34,7 @@ test('x11 probe reads window id + pid; wayland gets no probe and fails closed', 
 test('toggle: start captures focus, stop transcribes and types only into the same window', async () => {
   const typed: string[] = []; const states: string[] = [];
   const d = new LocalDictation({ probe: { current: async () => ({ id: '5', pid: 1 }) }, transcribe: async () => 'hello orbit',
-    typeText: async t => { typed.push(t); }, onPreview: () => { throw new Error('must not preview'); }, onState: s => states.push(s) });
+    typeChunk: async t => { typed.push(t); }, onPreview: () => { throw new Error('must not preview'); }, onState: s => states.push(s) });
   assert.equal(await d.toggle(async () => clip()), 'started');
   assert.equal(d.current, 'recording');
   assert.equal(await d.toggle(async () => clip()), 'stopped');
@@ -46,7 +46,7 @@ test('focus change mid-dictation fails closed to preview with the text preserved
   const previews: { text: string; reason: string }[] = [];
   let focus = { id: '5', pid: 1 };
   const d = new LocalDictation({ probe: { current: async () => focus }, transcribe: async () => 'secret draft',
-    typeText: async () => { throw new Error('must never type into the wrong window'); }, onPreview: (t, r) => previews.push({ text: t, reason: r }) });
+    typeChunk: async () => { throw new Error('must never type into the wrong window'); }, onPreview: (t, r) => previews.push({ text: t, reason: r }) });
   await d.toggle(async () => clip());
   focus = { id: '6', pid: 1 }; // user alt-tabbed while speaking
   await d.toggle(async () => clip());
@@ -56,7 +56,7 @@ test('focus change mid-dictation fails closed to preview with the text preserved
 test('no probe (wayland) means every dictation lands in preview, never typed blind', async () => {
   const previews: string[] = [];
   const d = new LocalDictation({ probe: undefined, transcribe: async () => 'text',
-    typeText: async () => { throw new Error('must not type'); }, onPreview: t => previews.push(t) });
+    typeChunk: async () => { throw new Error('must not type'); }, onPreview: t => previews.push(t) });
   await d.toggle(async () => clip());
   await d.toggle(async () => clip());
   assert.deepEqual(previews, ['text']);
@@ -65,9 +65,55 @@ test('no probe (wayland) means every dictation lands in preview, never typed bli
 test('silence and engine failure stop cleanly without typing; working state ignores re-entry', async () => {
   let typed = 0;
   const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => undefined,
-    typeText: async () => { typed++; }, onPreview: () => undefined });
+    typeChunk: async () => { typed++; }, onPreview: () => undefined });
   await d.toggle(async () => clip());
   assert.equal(await d.toggle(async () => clip()), 'stopped');
   assert.equal(typed, 0);
   assert.equal(d.current, 'idle');
+});
+
+test('verified typing: probe re-checked before every chunk; mid-type focus change bounds the leak and previews the remainder', async () => {
+  const typed: string[] = []; const previews: { text: string; reason: string }[] = [];
+  let focus = { id: '5', pid: 1 }; let probes = 0;
+  const probe = { current: async () => { probes++; return focus; } };
+  const long = 'x'.repeat(500); // 3 chunks at 240
+  const d = new LocalDictation({ probe, transcribe: async () => long,
+    typeChunk: async c => { typed.push(c); if (typed.length === 2) focus = { id: '6', pid: 1 }; }, // focus flips while chunk 2 lands
+    onPreview: (t, r) => previews.push({ text: t, reason: r }) });
+  await d.toggle(async () => clip());
+  await d.toggle(async () => clip());
+  assert.equal(typed.length, 2); // only the chunks before the flip were typed
+  assert.deepEqual(previews, [{ text: 'x'.repeat(500 - 480), reason: 'focus-changed-mid-type' }]);
+  assert.ok(probes >= 4); // start, end, and per-chunk re-checks
+});
+
+test('typeVerified: first-chunk mismatch types nothing at all', async () => {
+  const typed: string[] = [];
+  const out = await typeVerified('hello', { id: '1', pid: 1 }, { current: async () => ({ id: '2', pid: 1 }) }, async c => { typed.push(c); });
+  assert.deepEqual(out, { action: 'preview', reason: 'focus-changed' });
+  assert.deepEqual(typed, []);
+  const typed2: string[] = [];
+  const ok = await typeVerified('hello', { id: '1', pid: 1 }, { current: async () => ({ id: '1', pid: 1 }) }, async c => { typed2.push(c); });
+  assert.deepEqual(ok, { action: 'typed' });
+  assert.deepEqual(typed2, ['hello']);
+});
+
+test('cancel while recording drops the capture; cancel while working skips insertion', async () => {
+  let typed = 0; let previewed = 0;
+  const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => 'text',
+    typeChunk: async () => { typed++; }, onPreview: () => { previewed++; } });
+  await d.toggle(async () => clip());
+  assert.equal(d.current, 'recording');
+  assert.equal(d.cancel(), true);
+  assert.equal(d.current, 'idle');
+  // cancel during working: transcription already in flight must not type
+  await d.toggle(async () => clip());
+  const stop = d.toggle(async () => clip());
+  assert.equal(d.current, 'working');
+  assert.equal(d.cancel(), true);
+  await stop;
+  assert.equal(typed, 0);
+  assert.equal(previewed, 0);
+  assert.equal(d.current, 'idle');
+  assert.equal(d.cancel(), false); // nothing left to cancel
 });

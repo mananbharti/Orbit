@@ -22,6 +22,12 @@
   <div class="status"><span id="dot" class="dot"></span><div class="status-text"><span id="status-text">Starting</span><small id="status-sub"></small></div></div>
 </aside>
 <main>
+    <div id="dictation-banner">&#9679; Recording - press the shortcut again to stop</div>
+    <div id="dictation-preview-card" class="card">
+      <div class="row"><span><b>Dictation - not typed</b><small id="dictation-preview-why"></small></span></div>
+      <div class="row"><span class="grow"><small id="dictation-preview-text"></small></span></div>
+      <div class="row"><button class="ghost small" id="dictation-preview-copy">Copy</button><button class="ghost small" id="dictation-preview-dismiss">Dismiss</button></div>
+    </div>
   <section id="home" class="tab on">
     <h1 id="title">Connect your phone</h1>
     <p class="sub" id="subtitle">Open Orbit on your phone, tap Pair, and scan the code. Both devices must be on the same Wi-Fi.</p>
@@ -74,6 +80,7 @@
     <div class="card list" id="dictation-card">
       <div class="row"><span><b>Dictation hotkey</b><small>Press the shortcut to start talking, press it again to stop. Your words are transcribed on this computer (nothing leaves it) and typed into the window you were using. Off by default.</small></span><input type="checkbox" id="dictation-enable" class="switch"></div>
       <div class="row"><span class="grow"><input type="text" id="dictation-key" class="field" placeholder="Control+Shift+D" autocomplete="off"></span><button class="ghost small" id="dictation-save">Save</button></div>
+      <div class="row"><span class="grow"><small>When the window to type into can't be verified</small><select id="dictation-fallback" class="field"><option value="preview">Show the text in Orbit (nothing is copied)</option><option value="clipboard">Copy the text to my clipboard</option></select></span></div>
       <div class="row"><span><small id="dictation-status">Dictation engine: checking...</small></span></div>
     </div>
     <div class="card list" id="agent-card">
