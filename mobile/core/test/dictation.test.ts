@@ -138,3 +138,38 @@ test('setupState rejects a malformed reply and retrySetup returns the new state'
   good.s.stop();
   bad.s.stop();
 });
+
+test('legacy transcribe strips the insert offer fields; transcribeForInsert keeps the offer and confirmInsert sends it', async () => {
+  const offerHandler = (type: string, payload: any) =>
+    type === 'dictation.begin' ? { dictationId: CLIP }
+    : type === 'dictation.chunk' ? { nextOffset: payload.offset + bytesOf(payload) / 2 }
+    : type === 'dictation.insert' ? { outcome: 'paste-sent' }
+    : { status: 'text', text: 'Hello orbit', insertOffered: true, insertTarget: 'OrbitDictationTarget' };
+  const { s, api, calls } = await setup(offerHandler);
+  const legacy = await api.transcribe(new Int16Array(10).fill(1));
+  assert.deepEqual(legacy, { status: 'text', text: 'Hello orbit' }, 'legacy callers see exactly the old shape');
+
+  const offered = await api.transcribeForInsert(new Int16Array(10).fill(1));
+  assert.equal(offered.dictationId, CLIP);
+  assert.deepEqual(offered.result, { status: 'text', text: 'Hello orbit', insertOffered: true, insertTarget: 'OrbitDictationTarget' });
+  const outcome = await api.confirmInsert(CLIP);
+  assert.equal(outcome, 'paste-sent');
+  assert.deepEqual(calls[calls.length - 1]!.payload, { dictationId: CLIP });
+  s.stop();
+});
+
+test('transcribeForInsert returns no id when insertion is not offered', async () => {
+  const { s, api } = await setup(okHandler);
+  const offered = await api.transcribeForInsert(new Int16Array(10).fill(1));
+  assert.equal(offered.dictationId, undefined);
+  assert.deepEqual(offered.result, { status: 'text', text: 'Hello orbit' });
+  s.stop();
+});
+
+test('confirmInsert rejects a malformed desktop reply and discard is best-effort', async () => {
+  const bad = (type: string) => type === 'dictation.insert' ? { nonsense: true } : { cancelled: true };
+  const { s, api } = await setup(bad);
+  await assert.rejects(api.confirmInsert(CLIP), (e: any) => e instanceof InvalidDesktopReply);
+  await api.discard(CLIP); // must not throw even though this desktop answers oddly
+  s.stop();
+});

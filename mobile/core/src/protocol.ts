@@ -217,7 +217,7 @@ export const dictationBeginSchema = z.strictObject({ dictationId: z.string().uui
 export const MAX_COMPRESSED_BYTES = 3 * 1_024 * 1_024; // mirrors the desktop limit
 export const dictationChunkSchema = z.strictObject({ nextOffset: z.number().int().min(1).max(MAX_COMPRESSED_BYTES) });
 export const dictationResultSchema = z.discriminatedUnion('status', [
-  z.strictObject({ status: z.literal('text'), text: z.string().min(1).max(20_000), insertOffered: z.boolean().optional() }),
+  z.strictObject({ status: z.literal('text'), text: z.string().min(1).max(20_000), insertOffered: z.boolean().optional(), insertTarget: z.string().max(120).optional() }),
   z.strictObject({ status: z.literal('no-speech') })]);
 export type DictationResult = z.infer<typeof dictationResultSchema>;
 export const dictationInsertOutcomeSchema = z.strictObject({ outcome: z.enum(['paste-sent', 'activation-failed', 'focus-mismatch', 'focus-lost', 'paste-failed', 'clipboard-unavailable', 'unsupported-target', 'unavailable']) });

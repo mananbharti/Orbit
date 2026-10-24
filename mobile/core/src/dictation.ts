@@ -11,34 +11,10 @@ export class DictationApi {
   private busy = false;
   constructor(private readonly session: OrbitSession) {}
 
-  /** `pcm` must be 16 kHz mono signed 16-bit samples. It is zeroed when the call ends, whatever the outcome. */
+  /** `pcm` must be 16 kHz mono signed 16-bit samples. It is zeroed when the call ends, whatever the outcome. Any insert offer the computer makes is abandoned here; use transcribeForInsert to act on it. */
   async transcribe(pcm: Int16Array, language?: string): Promise<DictationResult> {
-    if (this.busy) { throw new NotSent('Already transcribing'); }
-    if (pcm.length === 0) throw new NotSent('Nothing was recorded');
-    if (pcm.length > MAX_DICTATION_SAMPLES) throw new NotSent('That recording is too long (limit 2 minutes)');
-    this.busy = true;
-    let id: string | undefined;
-    try {
-      const begun = dictationBeginSchema.safeParse(await this.session.command('dictation.begin', language ? { language } : {}));
-      if (!begun.success) throw new InvalidDesktopReply();
-      id = begun.data.dictationId;
-      for (let offset = 0; offset < pcm.length; offset += DICTATION_CHUNK_SAMPLES) {
-        const part = pcm.subarray(offset, Math.min(pcm.length, offset + DICTATION_CHUNK_SAMPLES));
-        const bytes = new Uint8Array(part.length * 2);
-        const view = new DataView(bytes.buffer);
-        part.forEach((s, i) => view.setInt16(i * 2, s, true));
-        const ack = dictationChunkSchema.safeParse(await this.session.command('dictation.chunk', { dictationId: id, offset, dataBase64: toBase64(bytes) }));
-        bytes.fill(0);
-        if (!ack.success || ack.data.nextOffset !== offset + part.length) throw new InvalidDesktopReply();
-      }
-      const result = dictationResultSchema.safeParse(await this.session.command('dictation.finish', { dictationId: id }, { timeoutMs: 120_000 }));
-      if (!result.success) throw new InvalidDesktopReply();
-      id = undefined; // any insert offer is abandoned here; the next begin or the retention window drops it
-      return legacyResult(result.data);
-    } catch (error) {
-      if (id) { try { await this.session.command('dictation.cancel', { dictationId: id }); } catch { /* the computer drops it on timeout or disconnect */ } }
-      throw error;
-    } finally { pcm.fill(0); this.busy = false; }
+    const { result } = await this.transcribeForInsert(pcm, language);
+    return legacyResult(result);
   }
 
   /** Like transcribe, but keeps the computer's confirm-to-insert offer open: when result.insertOffered is true, confirmInsert(dictationId) pastes the transcript into the window that was focused when the recording began. The offer expires with the computer's retention window or when any device dictates again. */
@@ -102,8 +78,19 @@ export class DictationApi {
     return parsed.data;
   }
 
+  /** Releases a retained insert offer without inserting (the user dismissed it). Best-effort; the computer also drops it on timeout or the next dictation. */
+  async discard(dictationId: string): Promise<void> {
+    try { await this.session.command('dictation.cancel', { dictationId }); } catch { /* already gone */ }
+  }
+
   /** Android path: sends a compressed m4a recording; the computer decodes it with ffmpeg (ORBIT_FFMPEG). The bytes are zeroed when the call ends. */
   async transcribeCompressed(audio: Uint8Array, language?: string): Promise<DictationResult> {
+    const { result } = await this.transcribeCompressedForInsert(audio, language);
+    return legacyResult(result);
+  }
+
+  /** Android counterpart of transcribeForInsert for compressed recordings. */
+  async transcribeCompressedForInsert(audio: Uint8Array, language?: string): Promise<{ result: DictationResult; dictationId?: string }> {
     if (this.busy) { throw new NotSent('Already transcribing'); }
     if (audio.length === 0) throw new NotSent('Nothing was recorded');
     if (audio.length > MAX_COMPRESSED_BYTES) throw new NotSent('That recording is too long');
@@ -121,8 +108,11 @@ export class DictationApi {
       }
       const result = dictationResultSchema.safeParse(await this.session.command('dictation.finish', { dictationId: id }, { timeoutMs: 120_000 }));
       if (!result.success) throw new InvalidDesktopReply();
+      const data = result.data;
+      const offered = data.status === 'text' && data.insertOffered === true;
+      if (offered) return { result: data, dictationId: id };
       id = undefined;
-      return legacyResult(result.data);
+      return { result: data };
     } catch (error) {
       if (id) { try { await this.session.command('dictation.cancel', { dictationId: id }); } catch { /* the computer drops it on timeout or disconnect */ } }
       throw error;

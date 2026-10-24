@@ -19,8 +19,10 @@ beforeEach(() => {
     setupState: async () => api.state,
     retrySetup: async () => { api.calls.push('retry'); return (api.state = { state: 'downloading' }); },
     cancelSetup: async () => { api.calls.push('cancel'); return (api.state = { state: 'failed', reason: 'cancelled' }); },
-    transcribe: async () => { api.calls.push('transcribe'); return { status: 'text', text: 'hello' }; },
-    transcribeCompressed: async () => { api.calls.push('transcribeCompressed'); return { status: 'text', text: 'hello' }; },
+    transcribeForInsert: async () => { api.calls.push('transcribe'); return { result: { status: 'text', text: 'hello' } }; },
+    transcribeCompressedForInsert: async () => { api.calls.push('transcribeCompressed'); return { result: { status: 'text', text: 'hello' } }; },
+    confirmInsert: async id => { api.calls.push('insert:' + id); return 'paste-sent'; },
+    discard: async id => { api.calls.push('discard:' + id); },
     calls: [],
   };
   texts = []; errors = [];
@@ -80,7 +82,7 @@ test('tap records, second tap stops and lands transcribed text in the task box',
 });
 
 test('silence and unreadable recordings surface honest errors, never fake text', async () => {
-  api.transcribe = async () => ({ status: 'no-speech' });
+  api.transcribeForInsert = async () => ({ result: { status: 'no-speech' } });
   const r = await mount();
   await act(async () => { mic(r).props.onPress(); });
   await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
@@ -90,4 +92,33 @@ test('silence and unreadable recordings surface honest errors, never fake text',
   await act(async () => { mic(r).props.onPress(); });
   await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
   assert.deepEqual(errors, ['That recording could not be read.']);
+});
+
+test('an insert offer renders the target, Insert confirms and shows the honest outcome, Not now discards', async () => {
+  api.transcribeForInsert = async () => ({ result: { status: 'text', text: 'hello', insertOffered: true, insertTarget: 'Terminal' }, dictationId: 'clip-1' });
+  const r = await mount();
+  await act(async () => { mic(r).props.onPress(); });   // start
+  await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); }); // stop
+  assert.deepEqual(texts, ['hello']);
+  const textOf = node => [node.props && node.props.children].flat(Infinity).join('');
+  const offer = r.root.findAll(node => /Also insert into Terminal\?/.test(textOf(node)));
+  assert.ok(offer.length >= 1, 'the offer names the captured window');
+  await act(async () => { byLabel(r, 'Insert dictated text into the computer window').props.onPress(); });
+  assert.deepEqual(api.calls.filter(c => c.startsWith('insert:')), ['insert:clip-1']);
+  const notice = r.root.findAll(node => /check that it landed/i.test(textOf(node)));
+  assert.ok(notice.length >= 1, 'paste-sent is reported as unverified, not delivered');
+
+  api.transcribeForInsert = async () => ({ result: { status: 'text', text: 'again', insertOffered: true }, dictationId: 'clip-2' });
+  await act(async () => { mic(r).props.onPress(); });
+  await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
+  await act(async () => { byLabel(r, 'Dismiss insert offer').props.onPress(); });
+  assert.deepEqual(api.calls.filter(c => c.startsWith('discard:')), ['discard:clip-2']);
+});
+
+test('no insert offer renders no insert row', async () => {
+  const r = await mount();
+  await act(async () => { mic(r).props.onPress(); });
+  await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
+  assert.deepEqual(texts, ['hello']);
+  assert.equal(r.root.findAllByProps({ accessibilityLabel: 'Insert dictated text into the computer window' }).length, 0);
 });

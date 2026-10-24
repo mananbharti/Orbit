@@ -95,7 +95,8 @@ export class DictationService {
             clip.timer = setTimeout(() => this.drop(), this.ttlMs);
             clip.timer.unref();
             keepForInsert = true;
-            return { status: 'text', text: result.text, insertOffered: !!(this.insertion && clip.focusHandle) };
+            return { status: 'text', text: result.text, insertOffered: !!(this.insertion && clip.focusHandle),
+              ...(clip.focusHandle?.label ? { insertTarget: clip.focusHandle.label } : {}) };
           }
           return { status: 'no-speech' };
         } catch (error) {
