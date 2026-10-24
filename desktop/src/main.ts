@@ -24,6 +24,7 @@ async function main(): Promise<void> {
   // Remote terminal: opt-in, Windows only, every session needs a Yes at the PC. Untested on a real PC.
   const terminal = process.platform === 'win32' && process.env.ORBIT_ENABLE_TERMINAL === '1'
     ? { confirmation: windowsApproval(undefined, undefined, 'terminal') } : undefined;
+  // Power actions are sensitive on every platform: on Windows a PowerShell prompt confirms; elsewhere the CLI stays deny-all (BIOMETRIC_REQUIRED) - the desktop app supplies the consent UI.
   // Dictation: an env-named engine wins; otherwise the pinned whisper.cpp build + model are provisioned once into the data directory in the background and dictation.* registers as soon as they are verified. ORBIT_FFMPEG additionally lets Android phones send compressed audio.
   const whisperBin = process.env.ORBIT_WHISPER_BIN; const whisperModel = process.env.ORBIT_WHISPER_MODEL; const ffmpeg = process.env.ORBIT_FFMPEG;
   const decoder = ffmpeg ? ffmpegDecoder(ffmpeg) : undefined;
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
     ? { engine: new WhisperCpp({ binary: whisperBin, model: whisperModel }), ...(decoder ? { decoder } : {}), ...(insertion ? { insertion } : {}) } : undefined;
   const registry = new CommandRegistry();
   const config = readConfig();
-  const service = await startDesktop({ ...config, agent, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}), registry });
+  const service = await startDesktop({ ...config, agent, biometric: process.platform === 'win32' ? windowsApproval(undefined, undefined, 'power') : undefined, ...(remoteInput ? { input: remoteInput } : {}), ...(dictation ? { dictation } : {}), ...(terminal ? { terminal } : {}), registry });
   // Dictation availability stays visible and honest: dictation.status always answers, retry ignores the 24h auto-attempt backoff, setup.cancel aborts an in-flight download.
   const setup = new DictationSetup(registry, config.directory,
     paths => { new DictationService(registry, new WhisperCpp(paths), service.log, undefined, undefined, decoder, insertion); }, service.log);

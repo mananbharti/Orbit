@@ -83,7 +83,7 @@ async function boot() {
     const dataDir = join(app.getPath('userData'), 'orbit-data');
     dictationDataDir = dataDir;
     service = await startDesktop({ directory: dataDir, host, port: DEFAULT_PORT,
-      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), registry, onExtensionConnection: () => push() });
+      displayName: hostname().slice(0, 64), ...(remoteInput ? { input: remoteInput } : {}), ...(terminal ? { terminal } : {}), ...(agent ? { agent } : {}), biometric: electronApproval, registry, onExtensionConnection: () => push() });
     service.log.onRecord = () => queueStatePush();
     // Dictation: one visible setup machine - status always answers, retry is user-triggered, cancel aborts the download; the engine registers when verified.
     const { DictationSetup } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
@@ -144,13 +144,16 @@ function notifyNewTransfers(rows) {
 const electronApproval = { verify: async (message, context) => {
   const isInput = message.type.startsWith('input.');
   const isTerminal = message.type === 'terminal.begin';
-  if (!isInput && !isTerminal) return false;
+  const isPower = message.type === 'system.power';
+  if (!isInput && !isTerminal && !isPower) return false;
   if (!win || win.isDestroyed()) return false;
   const device = String(context?.session?.deviceId ?? 'unknown').slice(0, 8);
   win.show(); win.focus();
   const { response } = await dialog.showMessageBox(win, { type: 'warning', title: 'Orbit',
-    message: isTerminal ? 'Allow terminal access?' : 'Allow remote control?',
-    detail: isTerminal
+    message: isPower ? 'Allow power action?' : isTerminal ? 'Allow terminal access?' : 'Allow remote control?',
+    detail: isPower
+      ? `Your phone (device ${device}) wants to ${message.payload?.action ?? 'change the power state of'} this computer.\n\nChoose Deny unless you just started this on your phone.`
+      : isTerminal
       ? `Your phone (device ${device}) wants to run commands on this computer. Commands can change or delete anything.\n\nChoose Deny unless you just started this on your phone.`
       : `Your phone (device ${device}) wants to move the mouse and type on this computer.\n\nChoose Deny unless you just started this on your phone.`,
     buttons: ['Allow', 'Deny'], defaultId: 1, cancelId: 1, noLink: true,

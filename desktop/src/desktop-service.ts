@@ -92,7 +92,9 @@ export async function startDesktop(options: { directory: string; host: string; p
   audioMixer?: { createAdapter: () => AudioMixerAdapter } | false;
   /** Remote terminal: off unless a spawner is supplied; every session needs the computer owner's approval. */
   terminal?: { confirmation?: BiometricConfirmation; spawnShell?: SpawnShell };
+  /** Desktop-owner confirmation for sensitive commands (power); without one they stay denied (BIOMETRIC_REQUIRED). */
   input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation };
+  biometric?: BiometricConfirmation;
   /** Called when the browser extension connects or drops; lets the shell refresh its settings surface. */
   onExtensionConnection?: (connected: boolean) => void }) {
   const directory = privateDirectory(options.directory);
@@ -136,7 +138,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (systemFactory) system = new SystemControl(registry, systemFactory, log, options.input?.createDevice ?? inputDeviceFactory());
     panic = new PanicLock(registry, store, systemFactory, log, () => transport?.closeUnauthenticated());
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
-    const router = new CommandRouter(registry, auth, log);
+    const router = new CommandRouter(registry, auth, log, options.biometric);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
     transport = createWebSocketTransport(transportOptions);

@@ -15,9 +15,9 @@ const defaultSpawn: PromptSpawn = text => spawn('powershell.exe', ['-NoProfile',
   { windowsHide: false, stdio: 'pipe', env: windowsPowerShellEnv({ ORBIT_PROMPT_TEXT: text }) });
 
 export function windowsApproval(spawnPrompt: PromptSpawn = defaultSpawn, timeoutMs = APPROVAL_TIMEOUT_MS,
-  family: 'input' | 'terminal' = 'input'): BiometricConfirmation {
+  family: 'input' | 'terminal' | 'power' = 'input'): BiometricConfirmation {
   return { verify: (message, context) => new Promise<boolean>(resolve => {
-    if (!message.type.startsWith(family + '.')) { resolve(false); return; } // one prompt approves exactly one family
+    if (family === 'power' ? message.type !== 'system.power' : !message.type.startsWith(family + '.')) { resolve(false); return; } // one prompt approves exactly one family
     const device = context.session.deviceId.slice(0, 8);
     let child: ChildProcessWithoutNullStreams;
     let out = ''; let done = false;

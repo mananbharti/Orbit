@@ -40,10 +40,10 @@ test('unknown commands and thrown handler errors remain safe wire errors', async
   assert.equal(fixture.log.snapshot().at(-1)?.outcome, 'failed');
 });
 
-test('power commands require verified biometrics, never a payload boolean (input is confirmed once per control session)', async () => {
+test('power commands (the real wire name system.power) require verified biometrics, never a payload boolean (input is confirmed once per control session)', async () => {
   const fixture = core();
   let calls = 0;
-  for (const type of ['power.lock']) {
+  for (const type of ['system.power']) {
     fixture.registry.register(type, { validate: () => true, execute: async () => { calls++; return null; } });
     assert.deepEqual((await fixture.router.dispatch(command(type, { biometricConfirmed: true }),
       fixture.auth.issue(fixture.credential)!.sessionToken)).payload,
@@ -58,16 +58,16 @@ test('biometric hook gets verified identity and rechecks expiry after awaiting c
   let verified = false;
   const fixture = core({ now: () => now, ttlMs: 100,
     biometric: { verify: async (message, context) => {
-      assert.equal(message.type, 'power.lock');
+      assert.equal(message.type, 'system.power');
       assert.equal(context.session.deviceId, fixture.deviceId);
       if (verified) now += 101;
       verified = true;
       return true;
     } } });
-  fixture.registry.register('power.lock', { validate: () => true, execute: async () => { calls++; return null; } });
+  fixture.registry.register('system.power', { validate: () => true, execute: async () => { calls++; return null; } });
   const token = fixture.auth.issue(fixture.credential)!.sessionToken;
-  assert.equal((await fixture.router.dispatch(command('power.lock'), token)).payload.ok, true);
-  assert.deepEqual((await fixture.router.dispatch(command('power.lock'), token)).payload,
+  assert.equal((await fixture.router.dispatch(command('system.power'), token)).payload.ok, true);
+  assert.deepEqual((await fixture.router.dispatch(command('system.power'), token)).payload,
     { ok: false, error: { code: 'UNAUTHENTICATED' } });
   assert.equal(calls, 1);
 });

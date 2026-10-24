@@ -22,3 +22,9 @@ Status: protocol, session guard, phone API and screen are built and tested with 
 - Requires python3 (standard library only) on the PATH; without device access or python3 the availability probe fails and the phone sees remote input as unavailable - nothing falls back silently to X11.
 - Pointer move, buttons, wheel and named keys (the protocol's fixed key list) go through the helper. Free-text typing additionally needs ydotool installed (it reuses the same uinput access); without it, typing reports unavailable while everything else keeps working.
 - Real Wayland-compositor verification is pending, same as the other native drivers.
+
+## Teardown guarantees and residual limitation
+
+On session end, revoke, or abrupt disconnect, the desktop releases every key, modifier, and pointer button tracked as held before the input workers stop: the workers drain (stdin closed, up to 2 seconds), then are killed. Verified live on X11: a connection dropped mid laser-drag (ctrl+v and the left button held, no release events sent) ended with all held inputs released and no further input applied.
+
+Residual limitation: if an input worker hangs beyond the 2-second drain window it is killed, and a key held at that exact instant can remain logically held until the user presses and releases it once. The drain makes this window small; it cannot remove it entirely.
