@@ -16,6 +16,7 @@ const stubComponent = () => {
 };
 const CORE_DIST = path.join(__dirname, '..', 'dist-test', 'core', 'src', 'index.js');
 let cachedReactNative;
+let cachedClipboard;
 Module._load = function (request, parent, isMain) {
   if (request === 'react-native') {
     // react-native-web's VirtualizedList never lets a bare node process exit (solo FlatList mount leaves the
@@ -44,6 +45,10 @@ Module._load = function (request, parent, isMain) {
   if (request === 'expo-audio') return audioStub;
   if (request === 'expo-document-picker') return { getDocumentAsync: async () => ({ canceled: true, assets: [] }) };
   if (request === 'expo-blur') return { BlurView: stubComponent() };
+  if (request === 'expo-clipboard') { // Cached so tests observe and re-point the same object the screen bound to.
+    if (!cachedClipboard) cachedClipboard = { clipboardText: '', getStringAsync: async () => cachedClipboard.clipboardText, setStringAsync: async t => { cachedClipboard.clipboardText = t; } };
+    return cachedClipboard;
+  }
   if (request === 'expo-file-system') {
     // Minimal in-memory File serving one real 16 kHz mono 16-bit WAV (0.25s tone), so wavToPcm16k runs its real parse path.
     const wavBytes = () => {
