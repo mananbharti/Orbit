@@ -118,7 +118,7 @@ export const approvalResultSchema = z.strictObject({ status: z.enum(['approved',
 export const MAX_TASK_PROMPT_BYTES = 8 * 1024;
 
 export const auditEntrySchema = z.strictObject({ at: z.number().int().min(0), taskId: z.string().uuid().optional(), deviceId: z.string().uuid(),
-  kind: z.enum(['submitted', 'approval-requested', 'approved', 'denied', 'approval-timeout', 'cancelled-by-user', 'finished', 'paused', 'resumed']),
+  kind: z.enum(['submitted', 'approval-requested', 'approved', 'denied', 'approval-timeout', 'cancelled-by-user', 'finished', 'paused', 'resumed', 'approval-stacked-refused']),
   outcome: z.string().max(32).optional() });
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export const auditPageSchema = z.strictObject({ entries: z.array(auditEntrySchema).max(50) });

@@ -8,6 +8,7 @@ import { radius, space, useTheme } from '../theme';
 
 const label: Record<AuditEntry['kind'], string> = { submitted: 'You asked the agent to run a task', 'approval-requested': 'The agent asked for permission',
   approved: 'You approved', denied: 'You denied', 'approval-timeout': 'Permission request timed out and was denied',
+  'approval-stacked-refused': 'A second permission request on the same task was refused',
   'cancelled-by-user': 'You cancelled a task', finished: 'Task ended', paused: 'You stopped the agent', resumed: 'You resumed the agent' };
 
 export function ActivityScreen({ api, onBack }: { api: AgentApi; onBack: () => void }) {

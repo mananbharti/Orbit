@@ -118,7 +118,7 @@ export class HermesRunner implements AgentRunner {
           // destructive - command, so Orbit never answers identity-less approvals from the phone.
           // The control stays pending gateway-side; approving or denying on the computer resumes the
           // run and Orbit keeps streaming. Cancelling the task from the phone still stops the run.
-          context.step('This Hermes version cannot verify a phone approval safely. Approve or deny this action on the computer to continue; Orbit will not answer it from the phone.');
+          context.step('This Hermes version (0.19.0) cannot verify a phone approval safely, so Orbit will not answer it. To run this action: stop the task and run it in Hermes on the computer, where approvals appear natively - or upgrade Hermes when a release with approval identity ships.');
           break;
         }
         const approved = await context.requestApproval(detail);
