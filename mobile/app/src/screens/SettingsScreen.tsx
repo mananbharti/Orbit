@@ -41,7 +41,7 @@ export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, a
           );
         })}
       </View>
-      <Text style={{ color: t.sub, fontSize: 13 }}>Pick Hindi if you dictate in Hindi or Hinglish - Auto often transcribes Hindi as romanized text on smaller models.</Text>
+      <Text style={{ color: t.sub, fontSize: 13 }}>Auto detects the language. Force Hindi or English only if Auto picks the wrong language entirely - on current models this does not improve accuracy (measured 2026-10-25).</Text>
       <Text style={[styles.section, { color: t.sub }]}>CLIPBOARD</Text>
       <View style={[styles.card, { backgroundColor: t.card }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>
