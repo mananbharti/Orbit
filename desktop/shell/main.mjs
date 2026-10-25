@@ -313,7 +313,12 @@ ipcMain.handle('orbit:file-retry', async (_e, id) => {
   if (!record || record.manifest.direction !== 'to-client' || record.state !== 'failed' || !record.sourcePath) return { error: 'That transfer cannot be retried.' };
   if (!existsSync(record.sourcePath)) return { error: 'The original file is no longer there.' };
   try { await service.files.offerLocal(record.sourcePath, record.owner); push(); return { offered: [basename(record.sourcePath)] }; }
-  catch (error) { return { error: String(error?.message ?? error).slice(0, 120) }; }
+  catch (error) {
+    // Only Orbit's own coded failures reach the UI; raw errno codes (EACCES, EPERM...) fold into FILE_IO.
+    const raw = typeof error?.code === 'string' ? error.code : '';
+    const code = /^(FILE_[A-Z_]+|UNAUTHENTICATED)$/.test(raw) ? raw : 'FILE_IO';
+    return { error: 'The file could not be sent again.', code };
+  }
 });
 // Renderer clipboard writes can silently no-op when the window lacks OS focus; the main-process clipboard always lands.
 ipcMain.handle('orbit:copy-text', (_e, text) => { if (typeof text !== 'string' || !text || text.length > 64 * 1024) return false; electronClipboard.writeText(text); return true; });
@@ -332,7 +337,10 @@ async function offerToPhones(paths) {
     let offered = false;
     for (const device of devices) {
       try { await service.files.offerLocal(path, device.deviceId); offered = true; }
-      catch (error) { errors.push({ name, code: typeof error?.code === 'string' ? error.code : 'FILE_IO' }); }
+      catch (error) {
+        const raw = typeof error?.code === 'string' ? error.code : '';
+        errors.push({ name, code: /^(FILE_[A-Z_]+|UNAUTHENTICATED)$/.test(raw) ? raw : 'FILE_IO' });
+      }
     }
     if (offered) names.push(name);
   }

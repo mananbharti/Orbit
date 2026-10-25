@@ -93,7 +93,7 @@ setInterval(() => { if ($('clipboard').classList.contains('on')) readClipboard()
 const EVT_LABELS = { 'session.opened': 'Phone connected', 'session.closed': 'Phone disconnected', 'clipboard.sync': 'Clipboard synced', 'clipboard.changed': 'Clipboard synced', 'clipboard.ignored': 'Clipboard skipped', 'clipboard.conflict': 'Clipboard conflict avoided', 'file.state': 'File transfer updated', 'file.offered': 'File offered', 'pairing.opened': 'Pairing opened', 'pairing.completed': 'Phone paired', 'pairing.failed': 'Pairing failed', 'system.mode': 'Display mode changed', 'input.session': 'Remote control session', 'app.launch': 'App launched', 'agent.task': 'Agent task', 'discovery.error': 'Discovery issue', 'session.issued': 'Phone connected', 'session.refreshed': 'Session refreshed', 'connection.opened': 'Connection opened', 'connection.closed': 'Connection closed', 'connection.timeout': 'Connection timed out', 'authentication.rejected': 'Authentication rejected', 'pairing.revoked': 'Device removed', 'clipboard.unavailable': 'Clipboard unavailable', 'service.started': 'Service started', 'service.stopped': 'Service stopped', 'service.error': 'Service problem', 'message.rejected': 'Request blocked', 'command.completed': 'Command finished' };
 const evtLabel = e => { const raw = EVT_LABELS[e.eventType] || e.eventType.replace(/\./g, ' '); return raw.charAt(0).toUpperCase() + raw.slice(1); };
 const TRANSFER_LABEL = { offered: 'Waiting for phone', transferring: 'Transferring', paused: 'Paused', verifying: 'Verifying', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', expired: 'Expired' };
-const FILE_ERROR_LABEL = { FILE_IO: 'the file could not be read', FILE_BYTES: 'the file could not be read', FILE_INTEGRITY: 'the copy failed a safety check', FILE_SOURCE_CHANGED: 'the file changed while sending', FILE_QUOTA: 'the phone was busy with another transfer', FILE_NOT_FOUND: 'the file was not found', IS_DIRECTORY: 'that is a folder - pick the files inside it' };
+const FILE_ERROR_LABEL = { FILE_IO: 'the file could not be read', FILE_BYTES: 'the file could not be read', FILE_INTEGRITY: 'the copy failed a safety check', FILE_SOURCE_CHANGED: 'the file changed while sending', FILE_QUOTA: 'the phone was busy with another transfer', FILE_NOT_FOUND: 'the file was not found', IS_DIRECTORY: 'that is a folder - pick the files inside it', UNAUTHENTICATED: 'your phone is not connected' };
 function fileErrorLabel(code) { return FILE_ERROR_LABEL[code] || 'the transfer broke mid-way'; }
 function sendErrorText(e) { return (typeof e === 'string' ? e : esc(e.name) + ': ' + fileErrorLabel(e.code)); }
 
@@ -165,7 +165,7 @@ function render(s) {
   }).join('') : '<div class="empty">Nothing sent yet. Drop files above.</div>';
   document.querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => {
     const r = await api.retryTransfer(b.dataset.retry);
-    if (r && r.error) { toast(r.error); return; }
+    if (r && r.error) { toast(r.code ? fileErrorLabel(r.code) : r.error); return; }
     toast('Offered to your phone again');
     render(await api.state());
   });
