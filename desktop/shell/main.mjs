@@ -376,7 +376,19 @@ function dictationPreview(text, target) {
 async function dictationToggleKey() {
   if (!localDictation) return;
   if (localDictation.current === 'idle') {
-    if (!localDictationEngine) { if (Notification.isSupported()) new Notification({ title: 'Orbit dictation', body: 'The dictation engine is still setting up. Try again in a minute.' }).show(); return; }
+    if (!localDictationEngine) {
+      if (Notification.isSupported()) {
+        const st = dictationSetupRef?.state; // { state, reason? } - a failed/cancelled setup never finishes on its own; pressing the hotkey is user intent, so retry the download right away (same path as the phone's Retry) and say what is happening
+        let body = 'The dictation engine is still setting up. Try again in a minute.';
+        if (st?.state === 'failed') {
+          body = (st?.reason === 'cancelled' ? 'Dictation setup was cancelled. ' : 'Dictation setup did not finish. ')
+            + 'Retrying the one-time download now - try dictating again when it completes.';
+          void dictationSetupRef?.start(true);
+        }
+        new Notification({ title: 'Orbit dictation', body }).show();
+      }
+      return;
+    }
     if (process.env.ORBIT_DICTATION_FAKE_CLIP) {
       // TEST HOOK ONLY - injected audio, NOT microphone capture. When this env var names a raw s16le 16 kHz mono PCM file,
       // one shortcut press runs the whole toggle through with that fixed clip, so the X11 flow (focus capture, transcription,
