@@ -69,8 +69,9 @@ export function ControlScreen({ api, nl, onBack, onPanic }: { api: SystemApi; nl
       : out.status === 'unclear' ? out.hint
       : "Didn't understand - try 'volume 50' or 'agla gana'";
     void nl.say(text).then(out => {
-      setNote(describe(out));
-      if (out.status === 'executed') { setPhrase(''); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+      // Only 'executed' is success: rejected/unclear/unknown all mean nothing happened - show them as errors, not green notes.
+      if (out.status === 'executed') { setNote(describe(out)); setPhrase(''); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+      else setError(describe(out));
     }, e => setError(friendlyError(e))).finally(() => setBusy(false));
   };
 
@@ -111,6 +112,8 @@ export function ControlScreen({ api, nl, onBack, onPanic }: { api: SystemApi; nl
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Control</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Power, sound and display on your computer.</Text>
+      {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
       <Text style={[styles.section, { color: t.sub }]}>SAY IT</Text>
       <View style={[styles.card, styles.sayRow, { backgroundColor: t.card }]}>
         <TextInput
@@ -256,8 +259,6 @@ export function ControlScreen({ api, nl, onBack, onPanic }: { api: SystemApi; nl
           </Pressable>
         </>
       ) : null}
-      {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
-      {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}
     </ScrollView>
   );
 }

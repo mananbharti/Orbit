@@ -69,6 +69,27 @@ export const NL_INTENTS: readonly NlIntent[] = [
       return level === undefined ? undefined : level === 'needs-params' ? 'needs-params' : { level };
     },
   },
+  {
+    id: 'brightness.get', command: 'system.brightness.get', describe: 'Report the current brightness',
+    build: t => (/^(?:(?:what'?s|what is|bata(?:o|o na)|kitni)\s+)?(?:the\s+)?(?:current\s+)?(?:screen\s+)?brightness(?:\s+(?:kitni|kya)\s+(?:hai|he))?[\s?]*$/i.test(t)) ? {} : undefined,
+  },
+  {
+    id: 'volume.up', command: 'system.volume.set', describe: 'Turn the volume up',
+    // { delta } is a marker: the service reads the real level through the same dispatch path and sends the absolute value.
+    build: t => (/^(?:(?:volume|awa?az)\s+)?(?:badha|badhao|bada|badha do|badhao na|up|louder|tez)(?:\s+(?:karo|kar do|kar|volume|awa?az|thoda|thodi))*$/i.test(t)) ? { delta: 10 } : undefined,
+  },
+  {
+    id: 'volume.down', command: 'system.volume.set', describe: 'Turn the volume down',
+    build: t => (/^(?:(?:volume|awa?az)\s+)?(?:kam|ghata|ghatao|ghata do|down|quieter|dheere)(?:\s+(?:karo|kar do|kar|volume|awa?az|thoda|thodi))*$/i.test(t)) ? { delta: -10 } : undefined,
+  },
+  {
+    id: 'brightness.up', command: 'system.brightness.set', describe: 'Turn the brightness up',
+    build: t => (/^brightness\s+(?:badha|badhao|up|badha do)$/i.test(t) || /^(?:badha|badhao)\s+brightness(?:\s+(?:karo|kar do))?$/i.test(t)) ? { delta: 10 } : undefined,
+  },
+  {
+    id: 'brightness.down', command: 'system.brightness.set', describe: 'Turn the brightness down',
+    build: t => (/^brightness\s+(?:kam|ghata|down|kam karo)$/i.test(t) || /^kam\s+brightness(?:\s+(?:karo|kar do))?$/i.test(t)) ? { delta: -10 } : undefined,
+  },
 ];
 
 /** Deterministic match: normalized text (lowercased, collapsed spaces) against the catalog, first hit wins. */

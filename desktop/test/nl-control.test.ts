@@ -174,4 +174,51 @@ describe('nl.control service', () => {
     assert.deepEqual(await say('open itunes'), { status: 'unknown' });
     assert.equal(executed.length, 0);
   });
+
+  it('relative volume: "volume badha do" reads the real level and sets level+10 through the same gates', async () => {
+    const c = core();
+    const calls: { type: string; payload: JsonValue }[] = [];
+    c.registry.register('system.volume.get', { validate: () => true, execute: async () => { calls.push({ type: 'system.volume.get', payload: {} }); return { level: 42, muted: false }; } });
+    c.registry.register('system.volume.set', { validate: () => true, execute: async payload => { calls.push({ type: 'system.volume.set', payload }); return { applied: true }; } });
+    new NlControlService(c.registry, c.router, c.log);
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    assert.deepEqual(await say('volume badha do'), { status: 'executed', command: 'system.volume.set', result: { applied: true } });
+    assert.deepEqual(calls, [{ type: 'system.volume.get', payload: {} }, { type: 'system.volume.set', payload: { level: 52 } }]);
+  });
+
+  it('relative volume clamps at 100 and fails honestly when the read is denied', async () => {
+    const c = core();
+    c.registry.register('system.volume.get', { validate: () => true, execute: async () => ({ level: 96, muted: false }) });
+    c.registry.register('system.volume.set', { validate: () => true, execute: async payload => payload });
+    new NlControlService(c.registry, c.router, c.log);
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    assert.deepEqual(await say('awaz tez karo'), { status: 'executed', command: 'system.volume.set', result: { level: 100 } });
+    // no volume.get registered on a fresh service -> the read itself is UNKNOWN_COMMAND, nothing is set
+    const c2 = core();
+    c2.registry.register('system.volume.set', { validate: () => true, execute: async payload => payload });
+    new NlControlService(c2.registry, c2.router, c2.log);
+    const { session: s2 } = c2.auth.issue(c2.credential)!;
+    const out = await c2.registry.get('nl.control')!.execute({ text: 'volume down' }, { session: s2, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    assert.deepEqual(out, { status: 'rejected', command: 'system.volume.get', error: 'UNKNOWN_COMMAND' });
+  });
+
+  it('brightness read-back and relative brightness map too', async () => {
+    assert.deepEqual(matched('brightness kitni hai'), { id: 'brightness.get', command: 'system.brightness.get', payload: {} });
+    assert.deepEqual(matched('brightness badha'), { id: 'brightness.up', command: 'system.brightness.set', payload: { delta: 10 } });
+    assert.deepEqual(matched('brightness kam karo'), { id: 'brightness.down', command: 'system.brightness.set', payload: { delta: -10 } });
+  });
+
+  it('Laya decider adapter: maps a server decision into intent choice, junk shapes throw', async () => {
+    const { LayaNlDecider } = await import('../src/nl-control/laya-decider.js');
+    const seen: string[] = [];
+    const good = new LayaNlDecider('http://127.0.0.1:1');
+    (good as never as { client: unknown }).client = { decide: async (q: { state: string }) => { seen.push(q.state); return { choice: 'media.next', probability: 0.8, probabilities: {} }; } };
+    assert.deepEqual(await good.decide('agla chala do', ['media.next', 'volume.set']), { choice: 'media.next', probability: 0.8 });
+    assert.ok(seen[0]!.includes('agla chala do'));
+    const bad = new LayaNlDecider('http://127.0.0.1:1');
+    (bad as never as { client: unknown }).client = { decide: async () => { throw new Error('down'); } };
+    await assert.rejects(bad.decide('x', ['media.next']));
+  });
 });

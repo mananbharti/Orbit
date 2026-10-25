@@ -83,6 +83,18 @@ export class NlControlService {
       return { status: 'unknown' };
     }
     if ('missing' in matched) return { status: 'unclear', hint: `${matched.intent.describe} - say a number from 0 to 100` };
+    // Relative intents ("volume badha do") read the real level first - same gates, same dispatch path -
+    // then send the absolute value; a failed read fails the whole phrase honestly.
+    if (typeof (matched.payload as { delta?: unknown }).delta === 'number') {
+      const getCommand = matched.intent.command.replace(/\.set$/, '.get');
+      const current = await this.router.dispatchAuthorized(
+        { version: 1, type: getCommand, requestId: randomUUID(), payload: {} }, session, connection);
+      if (!current.payload.ok) return { status: 'rejected', command: getCommand, error: current.payload.error.code };
+      const level = (current.payload.result as { level?: unknown }).level;
+      if (typeof level !== 'number') return { status: 'rejected', command: getCommand, error: 'COMMAND_FAILED' };
+      const delta = (matched.payload as { delta: number }).delta;
+      matched = { ...matched, payload: { level: Math.max(0, Math.min(100, level + delta)) } };
+    }
     const inner = await this.router.dispatchAuthorized(
       { version: 1, type: matched.intent.command, requestId: randomUUID(), payload: matched.payload }, session, connection);
     return inner.payload.ok

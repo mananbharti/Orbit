@@ -86,7 +86,12 @@ export const mockInputMacros = (): InputApi => ({ ...store({ status: 'active' })
   ],
   saveMacro: async () => [], deleteMacro: async () => [], runMacro: async () => {} }) as unknown as InputApi;
 export const mockNl = {
-  say: async (text: string) => text.includes('volume')
+  // Preview stand-in for the desktop: each phrase class shows one outcome state.
+  say: async (text: string) => text.includes('denied')
+    ? { status: 'rejected' as const, command: 'system.volume.set', error: 'SCOPE_DENIED' }
+    : text.includes('big')
+    ? { status: 'unclear' as const, hint: 'Set the volume to a percent - say a number from 0 to 100' }
+    : text.includes('volume')
     ? { status: 'executed' as const, command: 'system.volume.set', result: { applied: true } }
     : { status: 'unknown' as const },
 } as never;

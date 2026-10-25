@@ -38,6 +38,7 @@ import { SystemControl } from './system-control/system-control.js';
 import { AudioMixer } from './system-control/audio-mixer.js';
 import { PanicLock } from './security-pairing/panic-lock.js';
 import { NlControlService, type NlDecider } from './nl-control/nl-service.js';
+import { LayaNlDecider } from './nl-control/laya-decider.js';
 import { createSystemControl } from './os-integration/create-system-control.js';
 import { inputDeviceFactory } from './os-integration/create-input-device.js';
 import { createAudioMixer } from './os-integration/create-audio-mixer.js';
@@ -144,7 +145,9 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log, options.biometric);
     // Natural-language control routes through the same registry/router.
-    nl = new NlControlService(registry, router, log, options.nl?.decider, undefined, () => launcher!.catalogSnapshot());
+    nl = new NlControlService(registry, router, log,
+      options.nl?.decider ?? (options.agent?.layaUrl !== undefined || process.env.ORBIT_LAYA_URL ? new LayaNlDecider(options.agent?.layaUrl ?? process.env.ORBIT_LAYA_URL) : undefined),
+      undefined, () => launcher!.catalogSnapshot());
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
     transport = createWebSocketTransport(transportOptions);
