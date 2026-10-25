@@ -303,7 +303,7 @@ The planned experience includes:
 | Automation / scheduled actions                    | Yes    | Yes     |
 | Multi-PC support                                  | Yes    | N/A     |
 | Developer/terminal remote access                  | Yes    | Yes     |
-| AI-driven natural-language PC control *(planned)* | —      | —       |
+| AI-driven natural-language PC control (first slice: volume, brightness, media, dark/light, app and scene launch - typed or dictated) | Yes | Yes |
 
 Brightness is get/set level end-to-end and returns null on desktops without a controllable backlight (most desktops). Mode control switches the dark/light app theme (Windows registry, apps + taskbar; GNOME color-scheme on Linux); night light is deliberately not toggled programmatically - its state is an undocumented binary blob and writing it could corrupt Windows Settings. Per-feature status: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
@@ -335,7 +335,7 @@ The extension talks only to the Orbit app on the same computer (loopback-only, t
 | Background AI workers             | Planned |
 | Personal memory                   | Planned |
 | Context-aware assistance          | Planned |
-| Natural-language computer control | Planned |
+| Natural-language computer control | First slice done (deterministic en/Hindi patterns onto the real command surface; wider coverage planned) |
 | Voice assistant                   | Planned |
 | Streaming voice interaction       | Planned |
 | Task management                   | Planned |
