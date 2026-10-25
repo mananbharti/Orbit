@@ -2,11 +2,16 @@
 import { execFile } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, openSync, writeSync, closeSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { Transcriber } from './pipeline.js';
 import { SAMPLE_RATE, DictationError } from './pipeline.js';
 
 export interface WhisperCppOptions { binary: string; model: string; threads?: number; timeoutMs?: number }
+
+/** Per-clip engine timeout when none is given. Large/turbo models get 115 s: auto language detection roughly doubles their work, and on a slow machine that can exceed a minute; the cap still fails honestly just inside the phone's own 120 s wait (mobile/core dictation.finish) instead of hanging past it. */
+export function defaultEngineTimeoutMs(modelPath: string): number {
+  return /large/.test(basename(modelPath)) ? 115_000 : 60_000;
+}
 
 export function wavBytes(pcm: Int16Array, rate = SAMPLE_RATE): Buffer {
   const data = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength);
@@ -30,7 +35,7 @@ export class WhisperCpp implements Transcriber {
       writeFileSync(file, wav, { mode: 0o600 });
       const args = ['-m', this.options.model, '-f', file, '-nt', '-np', '-t', String(this.options.threads ?? 4), '-l', language ?? 'auto'];
       return await new Promise<string>((resolve, reject) => {
-        execFile(this.options.binary, args, { timeout: this.options.timeoutMs ?? 60_000, maxBuffer: 1 << 20, signal, windowsHide: true },
+        execFile(this.options.binary, args, { timeout: this.options.timeoutMs ?? defaultEngineTimeoutMs(this.options.model), maxBuffer: 1 << 20, signal, windowsHide: true },
           (error, stdout) => (error ? reject(error) : resolve(String(stdout).trim())));
       });
     } finally {

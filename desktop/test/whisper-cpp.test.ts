@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { DictationError } from '../src/dictation/pipeline.js';
-import { WhisperCpp, wavBytes } from '../src/dictation/whisper-cpp.js';
+import { WhisperCpp, wavBytes, defaultEngineTimeoutMs } from '../src/dictation/whisper-cpp.js';
 
 const fake = (script: string): { binary: string; model: string; dir: string } => {
   const dir = mkdtempSync(join(tmpdir(), 'fake-whisper-'));
@@ -15,6 +15,12 @@ const fake = (script: string): { binary: string; model: string; dir: string } =>
 // The fake engine is a #!/bin/sh script, which Windows cannot run. Real whisper.cpp on Windows is still untested.
 const posixOnly = { skip: process.platform === 'win32' ? 'needs a POSIX shell for the fake engine' : false };
 const leftovers = (): string[] => readdirSync(tmpdir()).filter(n => n.startsWith('orbit-dictation-'));
+
+test('default engine timeout scales for large/turbo models and respects an explicit override', () => {
+  assert.equal(defaultEngineTimeoutMs('/data/dictation/ggml-tiny.bin'), 60_000);
+  assert.equal(defaultEngineTimeoutMs('/data/dictation/ggml-small.bin'), 60_000);
+  assert.equal(defaultEngineTimeoutMs('/data/dictation/ggml-large-v3-turbo-q5_0.bin'), 115_000);
+});
 
 test('wav header is a valid 16 kHz mono PCM header', () => {
   const w = wavBytes(Int16Array.from([1, 2, 3]));
