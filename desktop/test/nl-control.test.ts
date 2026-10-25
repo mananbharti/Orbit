@@ -179,6 +179,40 @@ describe('nl.control service', () => {
     assert.equal(executed.length, 0);
   });
 
+  it('scene intent: starts a saved scene by name (exact, substring, Hindi) through launcher.scene.launch', async () => {
+    const c = core();
+    const executed: { type: string; payload: JsonValue }[] = [];
+    c.registry.register('launcher.scene.launch', { validate: () => true, execute: async payload => { executed.push({ type: 'launcher.scene.launch', payload }); return { launched: 3, failed: [] }; } });
+    new NlControlService(c.registry, c.router, c.log, undefined, 0.6,
+      () => ({ revision: 'r', apps: [] }),
+      () => [{ id: 's1', name: 'Movie Mode' }, { id: 's2', name: 'Work' }]);
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    assert.deepEqual(await say('launch scene movie mode'), { status: 'executed', command: 'launcher.scene.launch', result: { launched: 3, failed: [] } });
+    assert.deepEqual(executed[0], { type: 'launcher.scene.launch', payload: { id: 's1' } });
+    assert.equal((await say('work scene chalu karo') as { status: string }).status, 'executed');
+    assert.deepEqual(executed[1], { type: 'launcher.scene.launch', payload: { id: 's2' } });
+    assert.equal((await say('movie chalu karo') as { status: string }).status, 'executed');
+  });
+
+  it('scene intent: ambiguous scenes ask which one, app names win over scene names', async () => {
+    const c = core();
+    const executed: string[] = [];
+    c.registry.register('launcher.scene.launch', { validate: () => true, execute: async () => { executed.push('scene'); return { launched: 0, failed: [] }; } });
+    c.registry.register('launcher.launch', { validate: () => true, execute: async () => { executed.push('app'); return { launched: true }; } });
+    new NlControlService(c.registry, c.router, c.log, undefined, 0.6,
+      () => ({ revision: 'r', apps: [{ appId: 'chrome', name: 'Google Chrome' }] }),
+      () => [{ id: 's1', name: 'Movie Night' }, { id: 's2', name: 'Movie Morning' }, { id: 's3', name: 'Chrome' }]);
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    const amb = await say('start scene movie') as { status: string; hint?: string };
+    assert.equal(amb.status, 'unclear');
+    assert.match(amb.hint!, /Movie Night/);
+    // An app with the same name wins: "open chrome" launches the app, not the scene named Chrome.
+    assert.equal((await say('open chrome') as { status: string }).status, 'executed');
+    assert.deepEqual(executed, ['app']);
+  });
+
   it('relative volume: "volume badha do" reads the real level and sets level+10 through the same gates', async () => {
     const c = core();
     const calls: { type: string; payload: JsonValue }[] = [];

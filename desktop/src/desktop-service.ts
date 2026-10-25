@@ -147,7 +147,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     // Natural-language control routes through the same registry/router.
     nl = new NlControlService(registry, router, log,
       options.nl?.decider ?? (options.agent?.layaUrl !== undefined || process.env.ORBIT_LAYA_URL ? new LayaNlDecider(options.agent?.layaUrl ?? process.env.ORBIT_LAYA_URL) : undefined),
-      undefined, () => launcher!.catalogSnapshot());
+      undefined, () => launcher!.catalogSnapshot(), () => launcher!.scenesSnapshot());
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
     transport = createWebSocketTransport(transportOptions);

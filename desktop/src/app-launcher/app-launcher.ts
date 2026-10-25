@@ -36,6 +36,9 @@ export class AppLauncher {
   catalogSnapshot(): { revision: string; apps: { appId: string; name: string }[] } {
     return { revision: this.revision, apps: [...this.catalog].map(([appId, app]) => ({ appId, name: app.name })) };
   }
+  scenesSnapshot(): { id: string; name: string }[] {
+    return this.scenes?.list().map(scene => ({ id: scene.id, name: scene.name })) ?? [];
+  }
   private busy = false;
   private adapter?: AppLauncherAdapter;
 
