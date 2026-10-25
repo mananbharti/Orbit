@@ -80,7 +80,7 @@ test('freshTerminalTransfers: an in-flight transfer still notifies when it later
   assert.deepEqual(later.fresh.map((r: ShellFileRow) => r.id), ['a']);
   assert.deepEqual(freshTerminalTransfers([row('completed')], seen, true).fresh, []); // and never twice
 });
-test('notificationFor: only received, delivered, and failed-incoming transfers notify', () => {
+test('notificationFor: received, delivered, and failed transfers notify', () => {
   const row = (state: string, direction: 'to-desktop' | 'to-client', path?: string): ShellFileRow =>
     ({ id: 'a', name: 'photo.jpg', size: 1, direction, state, progress: 1, updatedAt: 1, device: 'd', ...(path ? { path } : {}) });
   assert.deepEqual(notificationFor(row('completed', 'to-desktop', '/inbox/photo.jpg')),
@@ -89,7 +89,8 @@ test('notificationFor: only received, delivered, and failed-incoming transfers n
     { title: 'File delivered', body: 'Your phone received photo.jpg.', reveal: false });
   assert.deepEqual(notificationFor(row('failed', 'to-desktop')),
     { title: 'File transfer failed', body: 'photo.jpg could not be received.', reveal: false });
-  assert.equal(notificationFor(row('failed', 'to-client')), undefined); // sender already sees it on the phone
+  assert.deepEqual(notificationFor(row('failed', 'to-client')),
+    { title: 'File not sent', body: 'photo.jpg could not be sent to your phone. Open Orbit to retry.', reveal: false }); // the desktop user is the sender; a mid-transfer failure surfaces only here
   assert.equal(notificationFor(row('cancelled', 'to-desktop')), undefined);
   assert.equal(notificationFor(row('expired', 'to-desktop')), undefined);
   assert.equal(notificationFor(row('receiving', 'to-desktop')), undefined);

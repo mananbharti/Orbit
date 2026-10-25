@@ -74,5 +74,8 @@ export function notificationFor(row: ShellFileRow): { title: string; body: strin
   if (row.state === 'failed' && row.direction === 'to-desktop') {
     return { title: 'File transfer failed', body: `${row.name} could not be received.`, reveal: false };
   }
+  if (row.state === 'failed' && row.direction === 'to-client') {
+    return { title: 'File not sent', body: `${row.name} could not be sent to your phone. Open Orbit to retry.`, reveal: false };
+  }
   return undefined;
 }
