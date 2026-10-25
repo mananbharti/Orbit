@@ -14,6 +14,7 @@ export interface ShellTransferRecord {
 export interface ShellFileRow {
   id: string; name: string; size: number; direction: 'to-desktop' | 'to-client'; state: string;
   progress: number; updatedAt: number; device: string; error?: string; path?: string;
+  retryable?: boolean; // failed outgoing transfer whose original file path is still on record
 }
 
 // Builds the file list the window shows: newest first, capped, with a progress fraction and a
@@ -30,6 +31,7 @@ export function transferRows(records: Iterable<ShellTransferRecord>,
       const path = destinationOf(record);
       if (path) row.path = path;
     }
+    if (record.state === 'failed' && m.direction === 'to-client' && record.sourcePath) row.retryable = true;
     rows.push(row);
   }
   rows.sort((a, b) => b.updatedAt - a.updatedAt);

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('orbit', {
   sendFiles: () => ipcRenderer.invoke('orbit:send-files'),
   openInbox: () => ipcRenderer.invoke('orbit:open-inbox'),
   sendPaths: paths => ipcRenderer.invoke('orbit:send-files', paths),
+  retryTransfer: id => ipcRenderer.invoke('orbit:file-retry', id),
   pathForFile: file => webUtils.getPathForFile(file),
   dictationGet: () => ipcRenderer.invoke('orbit:dictation-get'),
   dictationSet: (enabled, accelerator) => ipcRenderer.invoke('orbit:dictation-set', enabled, accelerator),

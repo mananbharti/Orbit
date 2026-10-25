@@ -36,6 +36,13 @@ test('shell rows: a local path appears only for transfers completed onto this co
   assert.equal(transferRows([rec({ manifest: { transferId: 'done' } })], destinationOf)[0]!.path, undefined); // still receiving
   assert.equal(transferRows([rec({ state: 'completed', manifest: { direction: 'to-client' } })], () => '/sent/photo.jpg')[0]!.path, undefined);
 });
+test('shell rows: retryable only for a failed outgoing transfer with a source on record', () => {
+  const retry = rec({ state: 'failed', sourcePath: '/home/user/report.pdf', manifest: { direction: 'to-client' } });
+  assert.equal(transferRows([retry], destinationOf)[0]!.retryable, true);
+  assert.equal(transferRows([rec({ state: 'failed', sourcePath: '/x', manifest: { direction: 'to-desktop' } })], destinationOf)[0]!.retryable, undefined); // incoming failures retry from the phone
+  assert.equal(transferRows([rec({ state: 'failed', manifest: { direction: 'to-client' } })], destinationOf)[0]!.retryable, undefined); // no surviving source path
+  assert.equal(transferRows([rec({ state: 'cancelled', sourcePath: '/x', manifest: { direction: 'to-client' } })], destinationOf)[0]!.retryable, undefined); // user-cancelled stays quiet
+});
 test('knownPath: the page may act on a completed incoming destination', () => {
   destinations.set('t1', '/inbox/photo.jpg');
   const records = [rec({ state: 'completed' })];

@@ -11,7 +11,7 @@ const api = window.orbit ?? (() => {
     browserExtension: { port: 17342, token: 'd2VsbC1kb25lLXlvdS1mb3VuZC10aGU' } };
   return { state: async () => { const th = new URLSearchParams(location.search).get('theme'); if (th) s.dark = th !== 'light'; return s; }, onState() {}, pair: async () => { const expiresAt = Date.now() + 120000; s.pairingUntil = expiresAt; return { svg: '<svg viewBox="0 0 10 10"><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM5 5h1v1H5zM7 6h2v1H7zM6 8h1v1H6z"/></svg>', expiresAt }; }, cancelPair: async () => { s.pairingUntil = 0; }, revoke: async () => true, retry: async () => {}, loginItem: async () => false, copyText: async () => true, agentSave: async () => ({ ok: true }), agentClear: async () => ({ ok: true }), agentTest: async () => ({ status: 'ok' }),
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
-    openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name,
+    openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name, retryTransfer: async () => ({ offered: ['orbit-logo.png'] }),
     dictationGet: async () => ({ enabled: false, accelerator: 'Control+Shift+D', model: 'tiny', engine: true, suggested: null }), dictationSet: async () => ({ ok: true }), dictationSetModel: async () => ({ ok: true, downloaded: true }), dictationFinish: async () => ({ text: '' }), dictationTypeNow: async () => ({ ok: true }), fastDetect: async () => ({ error: 'No Ollama or LM Studio server detected on this computer' }),
     onDictationCapture() {}, onDictationState() {}, onDictationPreview() {} };
 })();
@@ -93,11 +93,13 @@ setInterval(() => { if ($('clipboard').classList.contains('on')) readClipboard()
 const EVT_LABELS = { 'session.opened': 'Phone connected', 'session.closed': 'Phone disconnected', 'clipboard.sync': 'Clipboard synced', 'clipboard.changed': 'Clipboard synced', 'clipboard.ignored': 'Clipboard skipped', 'clipboard.conflict': 'Clipboard conflict avoided', 'file.state': 'File transfer updated', 'file.offered': 'File offered', 'pairing.opened': 'Pairing opened', 'pairing.completed': 'Phone paired', 'pairing.failed': 'Pairing failed', 'system.mode': 'Display mode changed', 'input.session': 'Remote control session', 'app.launch': 'App launched', 'agent.task': 'Agent task', 'discovery.error': 'Discovery issue', 'session.issued': 'Phone connected', 'session.refreshed': 'Session refreshed', 'connection.opened': 'Connection opened', 'connection.closed': 'Connection closed', 'connection.timeout': 'Connection timed out', 'authentication.rejected': 'Authentication rejected', 'pairing.revoked': 'Device removed', 'clipboard.unavailable': 'Clipboard unavailable', 'service.started': 'Service started', 'service.stopped': 'Service stopped', 'service.error': 'Service problem', 'message.rejected': 'Request blocked', 'command.completed': 'Command finished' };
 const evtLabel = e => { const raw = EVT_LABELS[e.eventType] || e.eventType.replace(/\./g, ' '); return raw.charAt(0).toUpperCase() + raw.slice(1); };
 const TRANSFER_LABEL = { offered: 'Waiting for phone', transferring: 'Transferring', paused: 'Paused', verifying: 'Verifying', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', expired: 'Expired' };
+const FILE_ERROR_LABEL = { FILE_IO: 'the file could not be read', FILE_BYTES: 'the file could not be read', FILE_INTEGRITY: 'the copy failed a safety check', FILE_SOURCE_CHANGED: 'the file changed while sending', FILE_QUOTA: 'the phone was busy with another transfer', FILE_NOT_FOUND: 'the file was not found' };
+function fileErrorLabel(code) { return FILE_ERROR_LABEL[code] || 'the transfer broke mid-way'; }
 
 function transferRow(f, actions) {
   const cls = f.state === 'completed' ? 'done' : f.state === 'failed' ? 'fail' : '';
   return '<div class="transfer">' + fileIcon(f.name) +
-    '<div class="tinfo"><div class="tname">' + esc(f.name) + '</div><div class="tsub">' + fmtSize(f.size) + ' · ' + TRANSFER_LABEL[f.state] + ' · ' + ago(f.updatedAt) + '</div></div>' +
+    '<div class="tinfo"><div class="tname">' + esc(f.name) + '</div><div class="tsub">' + fmtSize(f.size) + ' · ' + TRANSFER_LABEL[f.state] + (f.state === 'failed' && f.error ? ' - ' + fileErrorLabel(f.error) : '') + ' · ' + ago(f.updatedAt) + '</div></div>' +
     (['transferring', 'offered', 'verifying', 'paused'].includes(f.state) ? '<progress class="' + cls + '" max="1" value="' + f.progress + '"></progress>' : '') +
     (actions || '') + '</div>';
 }
@@ -156,7 +158,16 @@ function render(s) {
     return transferRow(f, actions);
   }).join('') : '<div class="empty">Nothing received yet. Send something from your phone and it appears here.</div>';
   const sent = files.filter(f => f.direction === 'to-client' && !active.includes(f));
-  $('sent-list').innerHTML = sent.length ? sent.map(f => transferRow(f)).join('') : '<div class="empty">Nothing sent yet. Drop files above.</div>';
+  $('sent-list').innerHTML = sent.length ? sent.map(f => {
+    const actions = f.retryable ? '<div class="actions"><button class="link" data-retry="' + esc(f.id) + '">Retry</button></div>' : '';
+    return transferRow(f, actions);
+  }).join('') : '<div class="empty">Nothing sent yet. Drop files above.</div>';
+  document.querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => {
+    const r = await api.retryTransfer(b.dataset.retry);
+    if (r && r.error) { toast(r.error); return; }
+    toast('Offered to your phone again');
+    render(await api.state());
+  });
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     if (b.dataset.act === 'open') await api.openFile(b.dataset.p);
     if (b.dataset.act === 'reveal') await api.revealFile(b.dataset.p);

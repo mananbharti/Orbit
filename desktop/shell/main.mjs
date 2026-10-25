@@ -1,6 +1,6 @@
 // Orbit Desktop shell: a tray + window around the existing service. Depends on Electron and the compiled service in ../dist.
 // Runs the service in-process, shows a pairing QR only when the user asks, and never exposes the service to the page except through preload.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, safeStorage, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
@@ -304,6 +304,16 @@ ipcMain.handle('orbit:file-open', (_e, path) => { const p = knownPath(path); if 
 ipcMain.handle('orbit:file-reveal', (_e, path) => { const p = knownPath(path); if (p) shell.showItemInFolder(p); return Boolean(p); });
 ipcMain.handle('orbit:open-inbox', () => { if (!service) return false; void shell.openPath(service.files.store.inbox); return true; });
 ipcMain.handle('orbit:file-copy-path', (_e, path) => { const p = knownPath(path); if (p) electronClipboard.writeText(p); return Boolean(p); });
+// Retry of a failed outgoing transfer: keyed by transfer id, so the renderer never supplies a path - the
+// original recorded source is re-offered to the same phone, and only while the file is still there.
+ipcMain.handle('orbit:file-retry', async (_e, id) => {
+  if (!service || typeof id !== 'string' || id.length > 128) return { error: 'Orbit is not running yet.' };
+  const record = [...service.files.store.records.values()].find(r => r.manifest.transferId === id);
+  if (!record || record.manifest.direction !== 'to-client' || record.state !== 'failed' || !record.sourcePath) return { error: 'That transfer cannot be retried.' };
+  if (!existsSync(record.sourcePath)) return { error: 'The original file is no longer there.' };
+  try { await service.files.offerLocal(record.sourcePath, record.owner); push(); return { offered: [basename(record.sourcePath)] }; }
+  catch (error) { return { error: String(error?.message ?? error).slice(0, 120) }; }
+});
 // Renderer clipboard writes can silently no-op when the window lacks OS focus; the main-process clipboard always lands.
 ipcMain.handle('orbit:copy-text', (_e, text) => { if (typeof text !== 'string' || !text || text.length > 64 * 1024) return false; electronClipboard.writeText(text); return true; });
 
