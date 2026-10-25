@@ -36,10 +36,9 @@ jobs:
           curl -sL -o /tmp/fleurs-hi-test.tsv https://huggingface.co/datasets/google/fleurs/resolve/main/data/hi_in/test.tsv
           curl -sL -o /tmp/fleurs.tar.gz https://huggingface.co/datasets/google/fleurs/resolve/main/data/hi_in/audio/test.tar.gz
           mkdir -p /tmp/fleurs-raw /tmp/fleurs-hi16 && tar xzf /tmp/fleurs.tar.gz -C /tmp/fleurs-raw --strip-components=1
-          # Normalize only the clips the eval reads (first 10 tsv rows) to canonical 16 kHz mono s16 wav
-          for f in $(head -10 /tmp/fleurs-hi-test.tsv | cut -f2); do
-            ffmpeg -y -loglevel error -i "/tmp/fleurs-raw/$f" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/fleurs-hi16/$f"
-          done
+          # Normalize the clips the eval reads (first 10 tsv rows): raw FLEURS wavs are float32,
+          # the repo parser takes integer PCM - scripts/normalize-fleurs.mjs converts without ffmpeg
+          node scripts/normalize-fleurs.mjs /tmp/fleurs-raw /tmp/fleurs-hi16 $(head -10 /tmp/fleurs-hi-test.tsv | cut -f2 | tr '\n' ' ')
           ls /tmp/fleurs-hi16 | head -3
       - name: Run the eval (medium vs small, 10 clips)
         run: MODELS=medium,small node scripts/eval-dictation-hindi.mjs 2>&1 | tee /tmp/eval-medium.log
