@@ -4,6 +4,8 @@ import { ThemeProvider, useTheme, type ThemePref } from '../src/theme';
 import { ActivityScreen } from '../src/screens/ActivityScreen';
 import { AppsScreen } from '../src/screens/AppsScreen';
 import { ClipboardScreen } from '../src/screens/ClipboardScreen';
+import { useEffect, useState } from 'react';
+import { Text } from 'react-native';
 import { ControlScreen } from '../src/screens/ControlScreen';
 import { FilesScreen } from '../src/screens/FilesScreen';
 import { MemoryScreen } from '../src/screens/MemoryScreen';
@@ -18,10 +20,20 @@ import { TerminalScreen } from '../src/screens/TerminalScreen';
 import { TabsScreen } from '../src/screens/TabsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
+import { liveNl } from './live-nl';
 import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockTabs, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, mockStoreAnswered, tasks , mockSystem, mockNl } from './mocks';
 
 const noop = (): void => {};
-export const SCREENS = ['tasks', 'tasks-answer', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'tasks-agent-off', 'task-detail', 'task-answer-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'remote-keys', 'pair'] as const;
+export const SCREENS = ['tasks', 'tasks-answer', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'tasks-agent-off', 'task-detail', 'task-answer-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'control-live', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'remote-keys', 'pair'] as const;
+
+function LiveControlScreen() {
+  const [nl, setNl] = useState<never>();
+  const [failed, setFailed] = useState<string>();
+  useEffect(() => { liveNl().then(api => setNl(api as never), e => setFailed(String(e))); }, []);
+  if (failed) return <Text style={{ color: 'red', padding: 24 }}>Live connect failed: {failed}</Text>;
+  if (!nl) return <Text style={{ padding: 24 }}>Connecting to the real desktop...</Text>;
+  return <ControlScreen api={mockSystem} nl={nl} onBack={noop} onPanic={noop} />;
+}
 
 function Screen({ name }: { name: string }) {
   switch (name) {
@@ -46,6 +58,7 @@ function Screen({ name }: { name: string }) {
     case 'remote-keys': return <RemoteScreen api={mockInputMacros()} onBack={noop} initialShowKeys />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} nl={mockNl} onBack={noop} onPanic={noop} />;
+    case 'control-live': return <LiveControlScreen />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} dictLang="auto" onDictLang={noop} />;
     case 'terminal': return <TerminalScreen api={mockTerminal} onBack={noop} initialState={{ cwd: 'C:\\Users\\Manan', lines: terminalLines }} />;
     case 'terminal-start': return <TerminalScreen api={mockTerminal} onBack={noop} />;
