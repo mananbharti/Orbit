@@ -90,6 +90,14 @@ export const NL_INTENTS: readonly NlIntent[] = [
     id: 'brightness.down', command: 'system.brightness.set', describe: 'Turn the brightness down',
     build: t => (/^brightness\s+(?:kam|ghata|down|kam karo)$/i.test(t) || /^kam\s+brightness(?:\s+(?:karo|kar do))?$/i.test(t)) ? { delta: -10 } : undefined,
   },
+  {
+    id: 'mode.dark', command: 'system.mode.set', describe: 'Switch the computer to dark mode',
+    build: t => (/^(?:dark\s+mode|dark\s+theme)(?:\s+(?:on|laga|lagao|laga do|karo|kar do|set|on karo))*$/i.test(t)) ? { theme: 'dark' } : undefined,
+  },
+  {
+    id: 'mode.light', command: 'system.mode.set', describe: 'Switch the computer to light mode',
+    build: t => (/^(?:light\s+mode|light\s+theme)(?:\s+(?:on|laga|lagao|laga do|karo|kar do|set|on karo))*$/i.test(t)) ? { theme: 'light' } : undefined,
+  },
 ];
 
 /** Deterministic match: normalized text (lowercased, collapsed spaces) against the catalog, first hit wins. */

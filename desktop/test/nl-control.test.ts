@@ -221,4 +221,11 @@ describe('nl.control service', () => {
     (bad as never as { client: unknown }).client = { decide: async () => { throw new Error('down'); } };
     await assert.rejects(bad.decide('x', ['media.next']));
   });
+
+  it('theme mode phrases map to system.mode.set', async () => {
+    assert.deepEqual(matched('dark mode'), { id: 'mode.dark', command: 'system.mode.set', payload: { theme: 'dark' } });
+    assert.deepEqual(matched('dark mode laga do'), { id: 'mode.dark', command: 'system.mode.set', payload: { theme: 'dark' } });
+    assert.deepEqual(matched('light mode karo'), { id: 'mode.light', command: 'system.mode.set', payload: { theme: 'light' } });
+    assert.equal(matched('night mode'), undefined);
+  });
 });
