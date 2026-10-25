@@ -101,7 +101,7 @@ async function boot() {
     // No verified delivery path (Windows typing removed, see type-now) means no captured target, so the preview shows Copy/Dismiss only - never an unverified Insert.
     const captureProbe = dictationInsertion ? { current: dictationInsertion.captureFocus } : undefined;
     localDictation = new LocalDictation({ ...(captureProbe ? { probe: captureProbe } : {}),
-      transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
+      transcribe: async pcm => { if (!localDictationEngine) return undefined; const lang = dictationHotkeyGet().language; const r = await dictate(pcm, localDictationEngine, { ...(lang !== 'auto' ? { language: lang } : {}), signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
       onPreview: dictationPreview, onState: dictationStatePush,
       onEmpty: reason => dictationWin?.webContents.send('orbit:dictation-empty', reason) });
     dictationHotkeyApply(dictationHotkeyGet());
@@ -225,6 +225,12 @@ ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
   if (existing) { try { attachDictationRef?.(existing, model); dictationSetupRef?.markReady(); } catch { return { ok: false, reason: 'engine failed to load' }; } }
   else void dictationSetupRef?.start(true); // visible, cancellable download of the newly picked model
   return { ok: true, downloaded: Boolean(existing) };
+});
+ipcMain.handle('orbit:dictation-set-language', (_e, language) => {
+  if (!DICTATION_LANGS.includes(language)) return { ok: false };
+  const cfg = dictationHotkeyGet();
+  dictationHotkeySave(cfg.enabled, cfg.accelerator, cfg.model, language);
+  return { ok: true, language };
 });
 ipcMain.handle('orbit:dictation-set', (_e, enabled, accelerator) => {
   const cfg = dictationHotkeySave(enabled, accelerator);
@@ -374,13 +380,14 @@ function createWindow() {
 // --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
 const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
 const DICTATION_MODELS = ['tiny', 'base', 'small', 'turbo'];
+const DICTATION_LANGS = ['auto', 'en', 'hi']; // mirrors the phone's dictation language setting
 function dictationHotkeyGet() {
-  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', model: DICTATION_MODELS.includes(c.model) ? c.model : 'tiny' }; }
-  catch { return { enabled: false, accelerator: 'Control+Shift+D', model: 'tiny' }; }
+  try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', model: DICTATION_MODELS.includes(c.model) ? c.model : 'tiny', language: DICTATION_LANGS.includes(c.language) ? c.language : 'auto' }; }
+  catch { return { enabled: false, accelerator: 'Control+Shift+D', model: 'tiny', language: 'auto' }; }
 }
-function dictationHotkeySave(enabled, accelerator, model) {
+function dictationHotkeySave(enabled, accelerator, model, language) {
   const prev = dictationHotkeyGet();
-  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.length <= 64 ? accelerator.trim() : 'Control+Shift+D', model: DICTATION_MODELS.includes(model) ? model : prev.model };
+  const cfg = { enabled: Boolean(enabled), accelerator: typeof accelerator === 'string' && accelerator.trim().length >= 3 && accelerator.trim().length <= 64 ? accelerator.trim() : 'Control+Shift+D', model: DICTATION_MODELS.includes(model) ? model : prev.model, language: DICTATION_LANGS.includes(language) ? language : prev.language };
   writeFileSync(dictationHotkeyPath(), JSON.stringify(cfg), { mode: 0o600 });
   return cfg;
 }

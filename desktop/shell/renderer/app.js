@@ -351,6 +351,11 @@ if (api.dictationGet) void (async () => {
       if (r.ok && !r.downloaded) dictationEngineWatch(await api.dictationGet());
     };
   } else dictationStatus(dictationEngineLine(cfg));
+  const langSel = $('dictation-lang');
+  if (langSel && cfg.language) {
+    langSel.value = cfg.language;
+    langSel.onchange = async () => { const r = await api.dictationSetLanguage(langSel.value); if (!r.ok) { langSel.value = cfg.language; toast('Could not save the dictation language'); } };
+  }
   const save = $('dictation-save');
   if (save) save.onclick = async () => {
     const r = await api.dictationSet($('dictation-enable').checked, $('dictation-key').value.trim());
