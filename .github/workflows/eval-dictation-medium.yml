@@ -1,0 +1,46 @@
+# One-off Hindi dictation eval for the medium model on GitHub-hosted runners (16 GB RAM -
+# the medium model OOMs on smaller machines). Dispatch-only: never runs on push, no schedule.
+# Downloads pinned whisper.cpp b5454 + ggml-medium/ggml-small (same sources as desktop
+# provisioning) and 10 FLEURS hi_in test clips (CC-BY-4.0), runs scripts/eval-dictation-hindi.mjs.
+name: eval-dictation-medium
+on:
+  workflow_dispatch:
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Build core + desktop (eval imports the real pipeline)
+        run: |
+          cd mobile/core && npm ci && npm run build
+          cd ../../desktop && npm ci && npm run build
+      - name: Fetch pinned whisper-cli b5454 (ubuntu x64)
+        run: |
+          mkdir -p /tmp/whisper.cpp/build/bin
+          curl -sL -o /tmp/engine.tar.gz https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz
+          echo "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c  /tmp/engine.tar.gz" | sha256sum -c
+          tar xzf /tmp/engine.tar.gz -C /tmp/whisper.cpp/build/bin --strip-components=1 || tar xzf /tmp/engine.tar.gz -C /tmp/whisper.cpp/build/bin
+          find /tmp/whisper.cpp -name whisper-cli | head -2
+      - name: Fetch ggml-medium + ggml-small (pinned hashes from desktop provisioning)
+        run: |
+          curl -sL -o /tmp/ggml-medium.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin &
+          curl -sL -o /tmp/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin &
+          wait
+          echo "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b  /tmp/ggml-small.bin" | sha256sum -c
+          ls -la /tmp/ggml-medium.bin
+      - name: Fetch FLEURS hi_in test clips (CC-BY-4.0)
+        run: |
+          curl -sL -o /tmp/fleurs-hi-test.tsv https://huggingface.co/datasets/google/fleurs/resolve/main/data/hi_in/test.tsv
+          curl -sL -o /tmp/fleurs.tar.gz https://huggingface.co/datasets/google/fleurs/resolve/main/data/hi_in/audio/test.tar.gz
+          mkdir -p /tmp/fleurs-hi16 && tar xzf /tmp/fleurs.tar.gz -C /tmp/fleurs-hi16 --strip-components=1
+          ls /tmp/fleurs-hi16 | head -3
+      - name: Run the eval (medium vs small, 10 clips)
+        run: MODELS=medium,small node scripts/eval-dictation-hindi.mjs 2>&1 | tee /tmp/eval-medium.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-dictation-medium-log
+          path: /tmp/eval-medium.log

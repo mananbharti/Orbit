@@ -3,13 +3,13 @@
     pipeline and whisper-cli with each pinned model. Bounded sample of 10 clips; reports per-model
     exact/normalized matches and WER against the dataset's normalized references. Not a Hinglish
     (code-mixed) measurement: these are read Hindi sentences. */
-import { wavToPcm16k } from '/tmp/Orbit-1.0/mobile/core/dist/src/wav.js';
-import { WhisperCpp } from '/tmp/Orbit-1.0/desktop/dist/src/dictation/whisper-cpp.js';
-import { dictate } from '/tmp/Orbit-1.0/desktop/dist/src/dictation/pipeline.js';
+import { wavToPcm16k } from '../mobile/core/dist/src/wav.js';
+import { WhisperCpp } from '../desktop/dist/src/dictation/whisper-cpp.js';
+import { dictate } from '../desktop/dist/src/dictation/pipeline.js';
 import { readFileSync } from 'node:fs';
 
-const BIN = '/tmp/whisper.cpp/build/bin/whisper-cli';
-const rows = readFileSync('/tmp/fleurs-hi-test.tsv', 'utf8').split('\n').filter(Boolean).slice(Number(process.env.OFF || 0), Number(process.env.OFF || 0) + Number(process.env.N || 10))
+const BIN = process.env.WHISPER_BIN || '/tmp/whisper.cpp/build/bin/whisper-cli';
+const rows = readFileSync(process.env.FLEURS_TSV || '/tmp/fleurs-hi-test.tsv', 'utf8').split('\n').filter(Boolean).slice(Number(process.env.OFF || 0), Number(process.env.OFF || 0) + Number(process.env.N || 10))
   .map(l => { const c = l.split('\t'); return { file: c[1], ref: c[3] }; });
 
 const norm = s => s.normalize('NFC').replace(/[।,.\-!?()"']/g, ' ').replace(/\s+/g, ' ').trim();
@@ -23,10 +23,10 @@ const wer = (ref, hyp) => {
 };
 
 for (const model of (process.env.MODELS || 'tiny,base,small').split(',')) {
-  const eng = new WhisperCpp({ binary: BIN, model: `/tmp/ggml-${model}.bin`, threads: 8 });
+  const eng = new WhisperCpp({ binary: BIN, model: `${process.env.MODEL_DIR || '/tmp'}/ggml-${model}.bin`, threads: 8 });
   let exact = 0, wers = [], done = 0;
   for (const { file, ref } of rows) {
-    const pcm = wavToPcm16k(new Uint8Array(readFileSync(`/tmp/fleurs-hi16/${file}`)));
+    const pcm = wavToPcm16k(new Uint8Array(readFileSync(`${process.env.FLEURS_DIR || '/tmp/fleurs-hi16'}/${file}`)));
     const r = await dictate(pcm, eng, { language: 'hi', signal: new AbortController().signal });
     if (r.status === 'text') {
       done++;
