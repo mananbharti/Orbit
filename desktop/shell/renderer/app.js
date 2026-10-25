@@ -13,7 +13,7 @@ const api = window.orbit ?? (() => {
     clipboardRead: async () => ({ kind: 'text', text: 'https://github.com/mananbharti/orbit' }), clipboardWrite: async () => true,
     openFile: async () => true, revealFile: async () => true, copyPath: async () => true, sendFiles: async () => ({ offered: ['orbit-logo.png'], errors: [] }), sendPaths: async () => ({ offered: [], errors: [] }), openInbox: async () => true, pathForFile: f => f.name, retryTransfer: async () => ({ offered: ['orbit-logo.png'] }),
     dictationGet: async () => ({ enabled: false, accelerator: 'Control+Shift+D', model: 'tiny', engine: true, suggested: null }), dictationSet: async () => ({ ok: true }), dictationSetModel: async () => ({ ok: true, downloaded: true }), dictationFinish: async () => ({ text: '' }), dictationTypeNow: async () => ({ ok: true }), fastDetect: async () => ({ error: 'No Ollama or LM Studio server detected on this computer' }),
-    onDictationCapture() {}, onDictationState() {}, onDictationPreview() {} };
+    onDictationCapture() {}, onDictationState() {}, onDictationPreview() {}, onDictationEmpty() {} };
 })();
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const fmtSize = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(0) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(2) + ' GB';
@@ -48,7 +48,7 @@ $('choose-files').onclick = async () => {
   const el = $('send-result');
   if (r.error) { el.textContent = r.error; el.className = 'send-result err'; }
   else if (r.offered.length) { el.textContent = 'Waiting for phone: ' + r.offered.join(', '); el.className = 'send-result'; toast('Waiting for your phone to accept'); }
-  if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
+  if (r.errors && r.errors.length) { el.innerHTML = r.errors.map(sendErrorText).join(' · '); el.className = 'send-result err'; }
 };
 $('open-inbox').onclick = () => api.openInbox();
 $('ext-copy-port').onclick = async () => { if (await api.copyText($('ext-port').textContent)) toast('Port copied'); };
@@ -65,7 +65,7 @@ dz.addEventListener('drop', async e => {
   const el = $('send-result');
   if (r.error) { el.textContent = r.error; el.className = 'send-result err'; }
   else if (r.offered.length) { el.textContent = 'Waiting for phone: ' + r.offered.join(', '); el.className = 'send-result'; toast('Waiting for your phone to accept'); }
-  if (r.errors && r.errors.length) { el.textContent = r.errors.join(' · '); el.className = 'send-result err'; }
+  if (r.errors && r.errors.length) { el.innerHTML = r.errors.map(sendErrorText).join(' · '); el.className = 'send-result err'; }
 });
 
 let clipTimer;
@@ -93,8 +93,9 @@ setInterval(() => { if ($('clipboard').classList.contains('on')) readClipboard()
 const EVT_LABELS = { 'session.opened': 'Phone connected', 'session.closed': 'Phone disconnected', 'clipboard.sync': 'Clipboard synced', 'clipboard.changed': 'Clipboard synced', 'clipboard.ignored': 'Clipboard skipped', 'clipboard.conflict': 'Clipboard conflict avoided', 'file.state': 'File transfer updated', 'file.offered': 'File offered', 'pairing.opened': 'Pairing opened', 'pairing.completed': 'Phone paired', 'pairing.failed': 'Pairing failed', 'system.mode': 'Display mode changed', 'input.session': 'Remote control session', 'app.launch': 'App launched', 'agent.task': 'Agent task', 'discovery.error': 'Discovery issue', 'session.issued': 'Phone connected', 'session.refreshed': 'Session refreshed', 'connection.opened': 'Connection opened', 'connection.closed': 'Connection closed', 'connection.timeout': 'Connection timed out', 'authentication.rejected': 'Authentication rejected', 'pairing.revoked': 'Device removed', 'clipboard.unavailable': 'Clipboard unavailable', 'service.started': 'Service started', 'service.stopped': 'Service stopped', 'service.error': 'Service problem', 'message.rejected': 'Request blocked', 'command.completed': 'Command finished' };
 const evtLabel = e => { const raw = EVT_LABELS[e.eventType] || e.eventType.replace(/\./g, ' '); return raw.charAt(0).toUpperCase() + raw.slice(1); };
 const TRANSFER_LABEL = { offered: 'Waiting for phone', transferring: 'Transferring', paused: 'Paused', verifying: 'Verifying', completed: 'Done', cancelled: 'Cancelled', failed: 'Failed', expired: 'Expired' };
-const FILE_ERROR_LABEL = { FILE_IO: 'the file could not be read', FILE_BYTES: 'the file could not be read', FILE_INTEGRITY: 'the copy failed a safety check', FILE_SOURCE_CHANGED: 'the file changed while sending', FILE_QUOTA: 'the phone was busy with another transfer', FILE_NOT_FOUND: 'the file was not found' };
+const FILE_ERROR_LABEL = { FILE_IO: 'the file could not be read', FILE_BYTES: 'the file could not be read', FILE_INTEGRITY: 'the copy failed a safety check', FILE_SOURCE_CHANGED: 'the file changed while sending', FILE_QUOTA: 'the phone was busy with another transfer', FILE_NOT_FOUND: 'the file was not found', IS_DIRECTORY: 'that is a folder - pick the files inside it' };
 function fileErrorLabel(code) { return FILE_ERROR_LABEL[code] || 'the transfer broke mid-way'; }
+function sendErrorText(e) { return (typeof e === 'string' ? e : esc(e.name) + ': ' + fileErrorLabel(e.code)); }
 
 function transferRow(f, actions) {
   const cls = f.state === 'completed' ? 'done' : f.state === 'failed' ? 'fail' : '';

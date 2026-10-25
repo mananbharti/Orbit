@@ -1,6 +1,6 @@
 // Orbit Desktop shell: a tray + window around the existing service. Depends on Electron and the compiled service in ../dist.
 // Runs the service in-process, shows a pairing QR only when the user asks, and never exposes the service to the page except through preload.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Tray, Menu, Notification, clipboard as electronClipboard, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, safeStorage, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
@@ -324,12 +324,17 @@ async function offerToPhones(paths) {
   if (!devices.length) return { error: 'Pair your phone first.' };
   const names = []; const errors = [];
   for (const path of paths) {
+    const name = basename(path);
+    let isDir = false;
+    try { isDir = statSync(path).isDirectory(); }
+    catch { errors.push({ name, code: 'FILE_NOT_FOUND' }); continue; } // the file vanished between picking and sending
+    if (isDir) { errors.push({ name, code: 'IS_DIRECTORY' }); continue; }
     let offered = false;
     for (const device of devices) {
       try { await service.files.offerLocal(path, device.deviceId); offered = true; }
-      catch (error) { errors.push(`${basename(path)}: ${String(error?.message ?? error).slice(0, 120)}`); }
+      catch (error) { errors.push({ name, code: typeof error?.code === 'string' ? error.code : 'FILE_IO' }); }
     }
-    if (offered) names.push(basename(path));
+    if (offered) names.push(name);
   }
   push();
   return { offered: names, errors };
