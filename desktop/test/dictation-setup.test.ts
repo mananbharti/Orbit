@@ -87,6 +87,20 @@ test('switching models mid-download cancels the old model and downloads the new 
   assert.deepEqual(ready, [pathsTurbo]); // small never reported ready
 });
 
+test('setModel alone cancels an in-flight download of the old pick, so it can never re-attach over the new one', async () => {
+  const registry = new CommandRegistry();
+  let settled = false;
+  const setup = new DictationSetup(registry, tmp(), () => { throw new Error('stale download must never attach'); }, log(), { model: 'small',
+    provision: o => new Promise<EnginePaths>((_res, rej) => { o.signal?.addEventListener('abort', () => { settled = true; rej(new ProvisionError('DOWNLOAD_FAILED', 'cancelled')); }); }) });
+  const first = setup.start(true);
+  assert.equal(setup.state.state, 'downloading');
+  setup.setModel('turbo'); // no start() call: the switch alone must stop the stale download
+  await first.catch(() => undefined);
+  assert.ok(settled);
+  assert.equal(setup.state.state, 'failed');
+  assert.equal(setup.state.reason, 'cancelled');
+});
+
 test('autoStart attaches an existing env engine, skips downloads within the backoff window, and starts once after it', async () => {
   const dir = tmp();
   const bin = join(dir, 'w'); const model = join(dir, 'm');

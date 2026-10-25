@@ -221,7 +221,7 @@ ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
   const { assetsFor, resolveEnginePaths } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
   if (!dictationDataDir) return { ok: false, reason: 'not ready yet' };
   const existing = resolveEnginePaths(process.env, dictationDataDir, assetsFor(model));
-  if (existing) { try { attachDictationRef?.(existing); } catch { return { ok: false, reason: 'engine failed to load' }; } }
+  if (existing) { try { attachDictationRef?.(existing); dictationSetupRef?.markReady(); } catch { return { ok: false, reason: 'engine failed to load' }; } }
   else void dictationSetupRef?.start(true); // visible, cancellable download of the newly picked model
   return { ok: true, downloaded: Boolean(existing) };
 });
