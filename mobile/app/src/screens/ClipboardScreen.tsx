@@ -14,8 +14,12 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
   const [history, setHistory] = useState<ClipboardHistoryEntry[]>([]);
+  const [historyError, setHistoryError] = useState<string>();
 
-  const refreshHistory = (): void => { api.history().then(page => setHistory(page.entries)).catch(() => {}); };
+  const refreshHistory = (): void => {
+    api.history().then(page => { setHistory(page.entries); setHistoryError(undefined); })
+      .catch(e => setHistoryError(friendlyError(e)));
+  };
   useEffect(refreshHistory, [api]);
   // A clip from either device lands in history; refresh when the incoming banner changes.
   useEffect(() => { refreshHistory(); }, [state.incoming?.revision]);
@@ -93,6 +97,11 @@ export function ClipboardScreen({ api, onBack }: { api: ClipboardApi; onBack: ()
             </Pressable>
           ))}
         </View>
+      ) : null}
+      {!history.length && historyError ? (
+        <Pressable accessibilityRole="button" onPress={() => refreshHistory()}>
+          <Text style={{ color: t.bad, fontSize: 15 }}>Could not load the clipboard history: {historyError} Tap to try again.</Text>
+        </Pressable>
       ) : null}
       {note ? <Text style={{ color: t.good, fontSize: 15 }}>{note}</Text> : null}
       {error ? <Text accessibilityLiveRegion="polite" style={{ color: t.bad, fontSize: 15 }}>{error}</Text> : null}

@@ -25,6 +25,7 @@ export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; 
   const [error, setError] = useState<string>();
   const [typed, setTyped] = useState('');
   const [macros, setMacros] = useState<KeyboardMacro[]>([]);
+  const [macrosError, setMacrosError] = useState<string>();
   const [running, setRunning] = useState<string>();
   const [gyro, setGyro] = useState(false);
   const [showKeys, setShowKeys] = useState(!!initialShowKeys);
@@ -56,7 +57,11 @@ export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; 
   const last = useRef({ x: 0, y: 0, moved: false });
   const scrollLast = useRef(0);
   const active = state.status === 'active';
-  useEffect(() => { if (active) void api.macros().then(setMacros).catch(() => {}); }, [api, active]);
+  const loadMacros = (): void => {
+    api.macros().then(list => { setMacros(list); setMacrosError(undefined); })
+      .catch(e => setMacrosError(friendlyError(e)));
+  };
+  useEffect(() => { if (active) loadMacros(); }, [api, active]);
   useEffect(() => { void gyroAvailable().then(setGyroSupported); }, []);
   useEffect(() => {
     if (!gyro || !active) return;
@@ -154,6 +159,11 @@ export function RemoteScreen({ api, onBack, initialShowKeys }: { api: InputApi; 
             </View>
           ) : null}
           <Text style={{ color: t.sub, fontSize: 13, fontWeight: '600' }}>MACROS</Text>
+          {macrosError ? (
+            <Pressable accessibilityRole="button" onPress={() => loadMacros()}>
+              <Text style={{ color: t.bad, fontSize: 13 }}>Could not load your macros: {macrosError} Tap to try again.</Text>
+            </Pressable>
+          ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space.s }}>
             {macros.map(macro => (
               <Pressable key={macro.id} accessibilityRole="button" accessibilityLabel={`Run macro ${macro.name}`} disabled={!!running}

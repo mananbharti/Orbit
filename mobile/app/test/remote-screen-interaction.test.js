@@ -165,3 +165,16 @@ test('stopping control ends the session, and an ended session says why', async (
   assert.ok(allText(r).includes('Control ended: connection dropped'), allText(r).slice(0, 400));
   r.unmount();
 });
+
+test('a failed macro load says so and retries instead of silently showing none', async () => {
+  let fail = true;
+  const api = fakeApi({ macros: async () => { if (fail) throw new Error('boom'); return MACROS; } });
+  const r = await mountActive(api);
+  await act(async () => { await new Promise(res => setTimeout(res, 5)); });
+  assert.ok(allText(r).includes('Could not load your macros'), 'silent macro loss: ' + allText(r).slice(0, 300));
+  fail = false;
+  await pressText(r, 'Tap to try again.');
+  assert.ok(allText(r).includes('Paste plain'), 'retry did not load macros: ' + allText(r).slice(0, 300));
+  assert.ok(!allText(r).includes('Could not load your macros'), 'error stayed after success');
+  r.unmount();
+});

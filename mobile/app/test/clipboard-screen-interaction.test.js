@@ -100,3 +100,23 @@ test('paste-and-send with an empty phone clipboard says so and sends nothing', a
   assert.ok(allText(r).includes('Your phone clipboard has no text'), allText(r).slice(0, 300));
   assert.deepEqual(calls.filter(c => c.startsWith('clipboard.write')), [], JSON.stringify(calls));
 });
+
+test('a failed history load says so and retries instead of looking empty', async () => {
+  let fail = true;
+  const orig = session.command;
+  session.command = async (type, body) => {
+    if (type === 'clipboard.history' && fail) throw new Error('boom');
+    return orig(type, body);
+  };
+  const r = await mount();
+  await act(async () => { await new Promise(res => setTimeout(res, 5)); });
+  const flat = node => { if (typeof node === 'string') return node; const c = node && node.props ? node.props.children : undefined; return typeof c === 'string' ? c : Array.isArray(c) ? c.map(flat).join('') : c && typeof c === 'object' ? flat(c) : ''; };
+  const allText = r.root.findAll(n => n.props).map(flat).join('');
+  assert.ok(allText.includes('Could not load the clipboard history'), 'silent history loss: ' + allText.slice(0, 300));
+  fail = false;
+  const retry = r.root.findAll(n => n.props && typeof n.props.onPress === 'function' && flat(n).includes('Tap to try again.'));
+  assert.ok(retry.length, 'no retry offered');
+  await act(async () => { retry[0].props.onPress(); await new Promise(res => setTimeout(res, 5)); });
+  const after = r.root.findAll(n => n.props).map(flat).join('');
+  assert.ok(after.includes('address from the computer'), 'retry did not load history: ' + after.slice(0, 300));
+});

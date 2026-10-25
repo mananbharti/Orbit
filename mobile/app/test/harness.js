@@ -1,3 +1,6 @@
+// React's act() only flushes queued state updates when this flag is set; without it,
+// effects that resolve asynchronously (most screen loads) render after the assertion runs.
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 /*
  * Node require shims for app render tests: react-native maps to react-native-web (already a
  * devDependency for the web preview), native-only expo modules and the connection-bound
