@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AudioSession, DisplayMode, DisplayTheme, MediaAction, PowerAction, SystemApi } from '@orbit/core';
 import { Icon, type IconName } from '../components/Icon';
+import { CommandError } from '@orbit/core';
 import { friendlyError } from '../orbit';
 import { radius, space, useTheme } from '../theme';
 
@@ -27,11 +28,15 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   const [brightness, setBrightness] = useState<number | null>();
   const [mode, setMode] = useState<DisplayMode | null>();
   const [sessions, setSessions] = useState<AudioSession[]>([]);
+  const [volumeSupported, setVolumeSupported] = useState(true);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
 
   useEffect(() => {
-    api.getVolume().then(v => { setVolume(v.level); setMuted(v.muted); }).catch(() => {});
+    api.getVolume().then(v => { setVolume(v.level); setMuted(v.muted); }).catch(e => {
+      // A desktop without sound control (e.g. macOS has no adapter) must not leave a dead card on screen - hide it like the theme and brightness cards.
+      if (e instanceof CommandError && e.code === 'SYSTEM_UNAVAILABLE') setVolumeSupported(false);
+    });
     api.getBrightness().then(setBrightness).catch(() => setBrightness(null));
     api.getMode().then(setMode).catch(() => setMode(null));
     api.audioSessions().then(setSessions).catch(() => {});
@@ -109,6 +114,8 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
           </Pressable>
         ))}
       </View>
+      {volumeSupported ? (
+      <>
       <Text style={[styles.section, { color: t.sub }]}>VOLUME</Text>
       <View style={[styles.card, { backgroundColor: t.card }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volume down" onPress={() => nudgeVolume(-10)} style={[styles.step, { backgroundColor: t.fill }]}><Text style={[styles.stepText, { color: t.text }]}>−</Text></Pressable>
@@ -123,6 +130,8 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
           <Icon name={muted ? 'mute' : 'speaker'} size={20} color={muted ? '#fff' : t.text} />
         </Pressable>
       </View>
+      </>
+      ) : null}
       {sessions.length ? (
         <>
           <Text style={[styles.section, { color: t.sub }]}>APP VOLUME</Text>
