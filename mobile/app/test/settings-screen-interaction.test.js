@@ -17,7 +17,7 @@ async function mount(props = {}) {
     name: 'Manan’s Mac', onBack: () => {}, onRepair: () => calls.push('repair'),
     autoSync: true, onAutoSync: v => calls.push(`autoSync:${v}`),
     appLock: false, onAppLock: v => calls.push(`appLock:${v}`),
-    biometrics: true, onDevices: () => calls.push('devices'), onComputers: () => calls.push('computers'), ...props }))); });
+    biometrics: true, onDevices: () => calls.push('devices'), onComputers: () => calls.push('computers'), dictLang: 'auto', onDictLang: v => calls.push(`dictLang:${v}`), ...props }))); });
   return { r, calls };
 }
 const textOf = node => {
@@ -84,4 +84,16 @@ test('the computer, devices and re-pair rows call their handlers', async () => {
   await pressText('Forget this computer');
   assert.deepEqual(calls, ['computers', 'devices', 'repair'], JSON.stringify(calls));
   r.unmount();
+});
+
+test('dictation language radio reports the picked language', async () => {
+  const { r, calls } = await mount();
+  const dictRadios = r.root.findAll(n => n.props && n.props.accessibilityRole === 'radio');
+  const hindi = dictRadios.find(n => textOf(n) === 'Hindi');
+  assert.ok(hindi, 'Hindi option rendered');
+  await act(async () => { hindi.props.onPress(); });
+  assert.deepEqual(calls, ['dictLang:hi']);
+  const { r: r2 } = await mount({ dictLang: 'hi' });
+  const hindi2 = r2.root.findAll(n => n.props && n.props.accessibilityRole === 'radio').find(n => textOf(n) === 'Hindi');
+  assert.equal(hindi2.props.accessibilityState.selected, true, 'Hindi selected when the preference is hi');
 });

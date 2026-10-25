@@ -20,7 +20,7 @@ function readAll(file: File): Uint8Array {
 }
 
 /** Tap to start, tap to stop. The clip goes to your computer for transcription; the file is deleted right after. UNTESTED ON A REAL PHONE (iPhone or Android). */
-export function MicButton({ api, onText, onError }: { api: DictationApi; onText: (text: string) => void; onError: (message: string) => void }) {
+export function MicButton({ api, language, onText, onError }: { api: DictationApi; language?: string; onText: (text: string) => void; onError: (message: string) => void }) {
   const t = useTheme();
   const recorder = useAudioRecorder(OPTIONS);
   const [state, setState] = useState<'idle' | 'recording' | 'working'>('idle');
@@ -64,7 +64,8 @@ export function MicButton({ api, onText, onError }: { api: DictationApi; onText:
       file = new File(recorder.uri);
       const bytes = readAll(file);
       // iOS wrote uncompressed WAV. Android wrote m4a; the computer decodes it and needs ffmpeg (ORBIT_FFMPEG).
-      const { result, dictationId } = Platform.OS === 'ios' ? await api.transcribeForInsert(wavToPcm16k(bytes)) : await api.transcribeCompressedForInsert(bytes);
+      const lang = language && language !== 'auto' ? language : undefined;
+      const { result, dictationId } = Platform.OS === 'ios' ? await api.transcribeForInsert(wavToPcm16k(bytes), lang) : await api.transcribeCompressedForInsert(bytes, lang);
       if (result.status === 'text') {
         onText(result.text);
         // The computer may offer to paste this into the window that was focused when recording began; the user decides per use.

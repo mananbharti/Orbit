@@ -14,7 +14,7 @@ import { radius, space, useTheme } from '../theme';
 const connectionText = { connected: '', connecting: 'Connecting to your computer…', reconnecting: 'Reconnecting…', searching: 'Looking for your computer on this network…', stopped: 'Not connected',
   'authentication-required': 'This computer no longer recognises this phone' } as const;
 
-export function TasksScreen({ store, api, dictation, name, macAddresses, wakePreview, answerOnlyPreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings, onComputers, onAutomations, onTerminal, onTabs }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; onComputers?: () => void; onAutomations?: () => void; onTerminal?: () => void; onTabs?: () => void; wakePreview?: boolean;
+export function TasksScreen({ store, api, dictation, dictLang, name, macAddresses, wakePreview, answerOnlyPreview, onOpen, onRepair, onActivity, onApps, onClipboard, onFiles, onRemote, onPresent, onMemory, onControl, onSettings, onComputers, onAutomations, onTerminal, onTabs }: { store: TaskStore; api: AgentApi; dictation: DictationApi; name: string; macAddresses?: string[]; onOpen: (task: TaskSummary) => void; onRepair: () => void; onActivity: () => void; onApps: () => void; onClipboard: () => void; onFiles: () => void; onRemote: () => void; onPresent: () => void; onMemory: () => void; onControl: () => void; onSettings: () => void; onComputers?: () => void; onAutomations?: () => void; onTerminal?: () => void; onTabs?: () => void; wakePreview?: boolean; dictLang?: 'auto' | 'en' | 'hi';
   /** Preview only: render the answer-only toggle already switched on. Real phones always start it off. */
   answerOnlyPreview?: boolean }) {
   const t = useTheme();
@@ -123,7 +123,7 @@ export function TasksScreen({ store, api, dictation, name, macAddresses, wakePre
       <Glass radius={24} style={styles.composer}>
         <TextInput value={prompt} onChangeText={setPrompt} placeholder="What should I do?" placeholderTextColor={t.sub} multiline
           style={[styles.input, { color: t.text }]} maxLength={4000} accessibilityLabel="Describe a task" />
-        <MicButton api={dictation} onText={text => setPrompt(p => (p ? `${p} ${text}` : text).slice(0, 4000))} onError={setError} />
+        <MicButton api={dictation} language={dictLang} onText={text => setPrompt(p => (p ? `${p} ${text}` : text).slice(0, 4000))} onError={setError} />
         <Pressable accessibilityRole="button" accessibilityLabel="Send task" disabled={!prompt.trim() || sending || offline || paused} onPress={() => { void send(); }}
           style={[styles.send, { backgroundColor: !prompt.trim() || offline ? t.fill : t.tint }]}>
           <Icon name="send" size={20} color="#FFFFFF" />

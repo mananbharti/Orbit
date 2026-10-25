@@ -13,7 +13,7 @@ import { PresentScreen } from './screens/PresentScreen';
 import { PairScreen } from './screens/PairScreen';
 import { TaskDetailScreen } from './screens/TaskDetailScreen';
 import { TasksScreen } from './screens/TasksScreen';
-import { loadAppLock, loadClipboardAuto, loadPairedList, removePaired, saveAppLock, saveClipboardAuto, savePairedList, upsertPaired } from './storage';
+import { loadAppLock, loadClipboardAuto, loadDictationLanguage, loadPairedList, removePaired, saveAppLock, saveClipboardAuto, saveDictationLanguage, savePairedList, upsertPaired, type DictationLanguage } from './storage';
 import { authenticate, biometricAvailable } from './biometrics';
 import { startClipboardAutoSync, type AutoSync } from './clipboard-auto';
 import { PhotoBackup, photoBackupAvailable, photoBackupEnabled, photoBackupPermitted, setPhotoBackupEnabled, type BackupProgress } from './photo-backup';
@@ -68,6 +68,7 @@ function Shell() {
   const [present, setPresent] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
+  const [dictLang, setDictLang] = useState<DictationLanguage>('auto');
   const [banner, setBanner] = useState<string>();
   const autoRef = useRef<AutoSync | undefined>(undefined);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -79,6 +80,7 @@ function Shell() {
   useEffect(() => {
     void loadClipboardAuto().then(setAutoSync);
     void loadAppLock().then(setAppLock);
+    void loadDictationLanguage().then(setDictLang);
     void biometricAvailable().then(setBiometrics);
     void loadPairedList().then(async ({ list, activeId: active }) => {
       setPairedList(list); setActiveId(active);
@@ -198,7 +200,7 @@ function Shell() {
     : <PairScreen onScanned={onScanned} onBack={pairedList.length > 0 ? () => setComputersOpen(true) : undefined} />;
   else if (pairing) body = <PairScreen onScanned={onScanned} onBack={() => { setPairing(false); setComputersOpen(true); }} />;
   else if (computersOpen) body = <ComputersScreen list={pairedList} activeId={activeId} switchingId={switchingId} onSwitch={id => { void switchTo(id); }} onAdd={() => { setComputersOpen(false); setPairing(true); }} onForget={id => { void forgetComputer(id); }} onBack={() => setComputersOpen(false)} />;
-  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} onComputers={() => setComputersOpen(true)} />;
+  else if (settings) body = <SettingsScreen name={connected.paired.displayName} onBack={() => setSettings(false)} onRepair={repair} autoSync={autoSync} onAutoSync={onAutoSync} appLock={appLock} onAppLock={(on: boolean) => { setAppLock(on); void saveAppLock(on); }} biometrics={biometrics} onDevices={() => setDevicesOpen(true)} onComputers={() => setComputersOpen(true)} dictLang={dictLang} onDictLang={(lang: DictationLanguage) => { setDictLang(lang); void saveDictationLanguage(lang); }} />;
   else if (terminalOpen) body = <TerminalScreen api={connected.terminal} onBack={() => setTerminalOpen(false)} />;
   else if (tabsOpen) body = <TabsScreen api={connected.tabs} onBack={() => setTabsOpen(false)} />;
   else if (automationsOpen) body = <AutomationsScreen api={connected.automation} scenes={sceneOptions} onBack={() => setAutomationsOpen(false)} />;
@@ -215,7 +217,7 @@ function Shell() {
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} desktopServiceId={connected.paired.desktopServiceId} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
-  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} onAutomations={() => { setAutomationsOpen(true); void connected.launcher.scenes().then(list => setSceneOptions(list.map(sc => ({ id: sc.id, name: sc.name })))).catch(() => {}); }} onTerminal={() => setTerminalOpen(true)} onTabs={() => setTabsOpen(true)} />;
+  else body = <TasksScreen store={connected.store} api={connected.api} dictation={connected.dictation} dictLang={dictLang} name={connected.paired.displayName} macAddresses={connected.paired.macAddresses} onOpen={t => setOpen(t.taskId)} onRepair={repair} onComputers={pairedList.length > 1 ? () => setComputersOpen(true) : undefined} onActivity={() => setActivity(true)} onApps={() => setApps(true)} onClipboard={() => setClip(true)} onFiles={() => setFilesOpen(true)} onRemote={() => setRemote(true)} onPresent={() => setPresent(true)} onMemory={() => setMemoryOpen(true)} onControl={() => setControl(true)} onSettings={() => setSettings(true)} onAutomations={() => { setAutomationsOpen(true); void connected.launcher.scenes().then(list => setSceneOptions(list.map(sc => ({ id: sc.id, name: sc.name })))).catch(() => {}); }} onTerminal={() => setTerminalOpen(true)} onTabs={() => setTabsOpen(true)} />;
   const screenKey = booting ? 'boot' : !connected ? 'pair' : computersOpen ? 'computers' : pairing ? 'pair-add' : settings ? (devicesOpen ? 'devices' : 'settings') : control ? 'control' : present ? 'present' : terminalOpen ? 'terminal' : tabsOpen ? 'tabs' : automationsOpen ? 'automations' : memoryOpen ? 'memory' : remote ? 'remote' : filesOpen ? 'files' : clip ? 'clip' : apps ? 'apps' : activity ? 'activity' : open ? `task-${open}` : 'tasks';
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>

@@ -5,7 +5,10 @@ import { radius, space, useTheme, useThemePref, type ThemePref } from '../theme'
 
 const options: { value: ThemePref; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }];
 
-export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, appLock, onAppLock, biometrics, onDevices, onComputers }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void; appLock: boolean; onAppLock: (on: boolean) => void; biometrics: boolean; onDevices: () => void; onComputers: () => void }) {
+export type DictationLang = 'auto' | 'en' | 'hi';
+const langOptions: { value: DictationLang; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'en', label: 'English' }, { value: 'hi', label: 'Hindi' }];
+
+export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, appLock, onAppLock, biometrics, onDevices, onComputers, dictLang, onDictLang }: { name: string; onBack: () => void; onRepair: () => void; autoSync: boolean; onAutoSync: (on: boolean) => void; appLock: boolean; onAppLock: (on: boolean) => void; biometrics: boolean; onDevices: () => void; onComputers: () => void; dictLang: DictationLang; onDictLang: (lang: DictationLang) => void }) {
   const t = useTheme();
   const { pref, setPref } = useThemePref();
   return (
@@ -25,6 +28,20 @@ export function SettingsScreen({ name, onBack, onRepair, autoSync, onAutoSync, a
         })}
       </View>
       <Text style={{ color: t.sub, fontSize: 13 }}>Auto follows your phone's light or dark setting.</Text>
+      <Text style={[styles.section, { color: t.sub }]}>DICTATION</Text>
+      <Text style={{ color: t.text, fontSize: 17 }}>Dictation language</Text>
+      <View style={[styles.segment, { backgroundColor: t.fill }]} accessibilityRole="radiogroup" accessibilityLabel="Dictation language">
+        {langOptions.map(o => {
+          const on = dictLang === o.value;
+          return (
+            <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => { onDictLang(o.value); void Haptics.selectionAsync(); }}
+              style={[styles.seg, on && { backgroundColor: t.isDark ? '#636366' : t.card }]}>
+              <Text style={{ color: t.text, fontSize: 15, fontWeight: on ? '600' : '400' }}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={{ color: t.sub, fontSize: 13 }}>Pick Hindi if you dictate in Hindi or Hinglish - Auto often transcribes Hindi as romanized text on smaller models.</Text>
       <Text style={[styles.section, { color: t.sub }]}>CLIPBOARD</Text>
       <View style={[styles.card, { backgroundColor: t.card }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.m }}>

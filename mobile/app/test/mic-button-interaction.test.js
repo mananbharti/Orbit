@@ -122,3 +122,25 @@ test('no insert offer renders no insert row', async () => {
   assert.deepEqual(texts, ['hello']);
   assert.equal(r.root.findAllByProps({ accessibilityLabel: 'Insert dictated text into the computer window' }).length, 0);
 });
+
+test('a configured dictation language is passed through to the transcription', async () => {
+  let seen;
+  api.transcribeForInsert = async (pcm, lang) => { seen = lang; return { result: { status: 'text', text: 'namaste' } }; };
+  let r;
+  await act(async () => { r = create(React.createElement(MicButton, { api, language: 'hi', onText: t => texts.push(t), onError: e => errors.push(e) })); });
+  await act(async () => { mic(r).props.onPress(); });
+  assert.equal(rec.recorded, true);
+  await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
+  assert.equal(seen, 'hi', 'language prop reached transcribeForInsert');
+  assert.deepEqual(texts, ['namaste']);
+});
+
+test('auto language sends no language, preserving auto-detect', async () => {
+  let seen = 'unset';
+  api.transcribeForInsert = async (pcm, lang) => { seen = lang === undefined ? 'undefined' : lang; return { result: { status: 'text', text: 'hello' } }; };
+  let r;
+  await act(async () => { r = create(React.createElement(MicButton, { api, language: 'auto', onText: t => texts.push(t), onError: e => errors.push(e) })); });
+  await act(async () => { mic(r).props.onPress(); });
+  await act(async () => { r.root.findByProps({ accessibilityLabel: 'Stop dictation' }).props.onPress(); });
+  assert.equal(seen, 'undefined', 'auto sends no language field');
+});

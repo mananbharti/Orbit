@@ -84,3 +84,12 @@ export async function loadAppLock(): Promise<boolean> {
 export async function saveAppLock(on: boolean): Promise<void> {
   try { await SecureStore.setItemAsync(LOCK_KEY, on ? 'on' : 'off'); } catch { /* preference; ignore */ }
 }
+
+const DICT_LANG_KEY = 'orbit.dictation-language.v1';
+export type DictationLanguage = 'auto' | 'en' | 'hi';
+export async function loadDictationLanguage(): Promise<DictationLanguage> {
+  try { const v = await SecureStore.getItemAsync(DICT_LANG_KEY); return v === 'en' || v === 'hi' ? v : 'auto'; } catch { return 'auto'; }
+}
+export async function saveDictationLanguage(lang: DictationLanguage): Promise<void> {
+  try { await SecureStore.setItemAsync(DICT_LANG_KEY, lang); } catch { /* preference; ignore */ }
+}

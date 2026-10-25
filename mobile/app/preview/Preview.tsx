@@ -46,7 +46,7 @@ function Screen({ name }: { name: string }) {
     case 'remote-keys': return <RemoteScreen api={mockInputMacros()} onBack={noop} initialShowKeys />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
     case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
-    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} />;
+    case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} dictLang="auto" onDictLang={noop} />;
     case 'terminal': return <TerminalScreen api={mockTerminal} onBack={noop} initialState={{ cwd: 'C:\\Users\\Manan', lines: terminalLines }} />;
     case 'terminal-start': return <TerminalScreen api={mockTerminal} onBack={noop} />;
     case 'automations': return <AutomationsScreen api={mockAutomation} scenes={mockSceneOptions} onBack={noop} />;
