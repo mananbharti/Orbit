@@ -106,13 +106,17 @@ describe('nl.control service', () => {
   });
 
   it('scoped-out devices get the mapped command SCOPE_DENIED, exactly like a direct send', async () => {
-    const c = core();
+    const scopes = new Map<string, readonly ('clipboard' | 'launcher')[]>();
+    const c = core({ scopes });
     c.registry.register('system.volume.set', { validate: () => true, execute: async () => ({ applied: true }) });
     new NlControlService(c.registry, c.router, c.log);
-    const scoped = { deviceId: 'phone-scoped', sessionId: 's1', expiresAt: Date.now() + 60_000, scopes: ['clipboard'] as const };
+    const phone = c.addDevice();
+    scopes.set(phone.deviceId, ['clipboard']);
+    const { session: scoped } = c.auth.issue(phone.credential)!;
+    assert.deepEqual(scoped.scopes, ['clipboard']);
     const handler = c.registry.get('nl.control')!;
     const out = await handler.execute({ text: 'volume 10' },
-      { session: scoped as never, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+      { session: scoped, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
     assert.deepEqual(out, { status: 'rejected', command: 'system.volume.set', error: 'SCOPE_DENIED' });
   });
 
@@ -227,5 +231,24 @@ describe('nl.control service', () => {
     assert.deepEqual(matched('dark mode laga do'), { id: 'mode.dark', command: 'system.mode.set', payload: { theme: 'dark' } });
     assert.deepEqual(matched('light mode karo'), { id: 'mode.light', command: 'system.mode.set', payload: { theme: 'light' } });
     assert.equal(matched('night mode'), undefined);
+  });
+
+  it('scoped devices CAN use nl.control for what their scope allows; the rest is rejected inside', async () => {
+    const scopes = new Map<string, readonly ('clipboard' | 'launcher')[]>();
+    const c = core({ scopes });
+    const executed: string[] = [];
+    c.registry.register('system.volume.set', { validate: () => true, execute: async () => { executed.push('volume'); return { applied: true }; } });
+    c.registry.register('launcher.launch', { validate: () => true, execute: async () => { executed.push('launch'); return { launched: true }; } });
+    new NlControlService(c.registry, c.router, c.log, undefined, 0.6,
+      () => ({ revision: 'r', apps: [{ appId: 'chrome', name: 'Google Chrome' }] }));
+    const phone = c.addDevice();
+    scopes.set(phone.deviceId, ['launcher']);
+    const { session: launcherPhone } = c.auth.issue(phone.credential)!;
+    const handler = c.registry.get('nl.control')!;
+    const say = (text: string) => handler.execute({ text }, { session: launcherPhone, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    // launcher scope: "open chrome" launches; "volume 10" is rejected by the INNER scope check with no effect
+    assert.deepEqual(await say('open chrome'), { status: 'executed', command: 'launcher.launch', result: { launched: true } });
+    assert.deepEqual(await say('volume 10'), { status: 'rejected', command: 'system.volume.set', error: 'SCOPE_DENIED' });
+    assert.deepEqual(executed, ['launch']);
   });
 });

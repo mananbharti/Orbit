@@ -11,14 +11,16 @@ import { SessionAuth } from '../src/security-pairing/session-auth.js';
 import { loadEncryptedChannel } from '../src/transport/websocket/encrypted-channel.js';
 import { generate } from 'selfsigned';
 
-export function core(options: { ttlMs?: number; now?: () => number; biometric?: BiometricConfirmation } = {}) {
+export function core(options: { ttlMs?: number; now?: () => number; biometric?: BiometricConfirmation;
+    scopes?: Map<string, readonly import('../src/security-pairing/scopes.js').Scope[]> } = {}) {
   const deviceId = randomUUID();
   const credential = randomBytes(32).toString('base64url');
   const log = new ActivityLog();
   let active = true;
   const pairedDevices = new Map<string, string>([[credential, deviceId]]);
   const auth = new SessionAuth({ verify: token => pairedDevices.get(token),
-    isActive: id => active && [...pairedDevices.values()].includes(id) }, log, options.ttlMs, options.now);
+    isActive: id => active && [...pairedDevices.values()].includes(id),
+    ...(options.scopes ? { scopesOf: id => options.scopes!.get(id) } : {}) }, log, options.ttlMs, options.now);
   const registry = new CommandRegistry();
   const router = new CommandRouter(registry, auth, log, options.biometric);
   const addDevice = () => {

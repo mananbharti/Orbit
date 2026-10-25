@@ -10,6 +10,10 @@ export function scopeForCommand(type: string): Scope | undefined { return FAMILY
 /** undefined scopes means a full-access device (every device paired before scopes existed). */
 export function isCommandAllowed(scopes: readonly Scope[] | undefined, type: string): boolean {
   if (!scopes) return true;
+  // nl.control is a router, not a privilege: it never touches the OS itself, and every command it
+  // routes to faces its own scope check on dispatch. Denying it outright would block scoped devices
+  // from the features they ARE allowed (e.g. a launcher-scoped phone saying "open chrome").
+  if (type === 'nl.control') return true;
   const needed = scopeForCommand(type);
   return needed !== undefined && scopes.includes(needed); // unknown families need full access: fail closed
 }
