@@ -18,7 +18,7 @@ import { TerminalScreen } from '../src/screens/TerminalScreen';
 import { TabsScreen } from '../src/screens/TabsScreen';
 import { TaskDetailScreen } from '../src/screens/TaskDetailScreen';
 import { TasksScreen } from '../src/screens/TasksScreen';
-import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockTabs, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, mockStoreAnswered, tasks , mockSystem } from './mocks';
+import { mockAgent, mockAutomation, mockSceneOptions, mockTerminal, terminalLines, mockTabs, mockClipboard, mockComputers, mockDevices, mockDictation, ipadDeviceId, mockFiles, mockInput, mockInputMacros, mockLauncher, mockLauncherPinned, mockLauncherScenes, mockMemory, mockStore, mockStoreAnswered, tasks , mockSystem, mockNl } from './mocks';
 
 const noop = (): void => {};
 export const SCREENS = ['tasks', 'tasks-answer', 'tasks-empty', 'tasks-offline', 'tasks-wake', 'tasks-agent-off', 'task-detail', 'task-answer-detail', 'activity', 'apps', 'apps-pinned', 'apps-scenes', 'clipboard', 'files', 'memory', 'remote', 'remote-macros', 'present', 'control', 'settings', 'devices', 'devices-limited', 'computers', 'computers-switching', 'automations', 'automations-edit', 'terminal', 'terminal-start', 'files-backup', 'tabs', 'remote-keys', 'pair'] as const;
@@ -45,7 +45,7 @@ function Screen({ name }: { name: string }) {
     case 'remote-macros': return <RemoteScreen api={mockInputMacros()} onBack={noop} />;
     case 'remote-keys': return <RemoteScreen api={mockInputMacros()} onBack={noop} initialShowKeys />;
     case 'present': return <PresentScreen api={mockInputMacros()} onBack={noop} />;
-    case 'control': return <ControlScreen api={mockSystem} onBack={noop} onPanic={noop} />;
+    case 'control': return <ControlScreen api={mockSystem} nl={mockNl} onBack={noop} onPanic={noop} />;
     case 'settings': return <SettingsScreen name="Manan's PC" onBack={noop} onRepair={noop} autoSync={true} onAutoSync={noop} appLock={true} onAppLock={noop} biometrics={true} onDevices={noop} onComputers={noop} dictLang="auto" onDictLang={noop} />;
     case 'terminal': return <TerminalScreen api={mockTerminal} onBack={noop} initialState={{ cwd: 'C:\\Users\\Manan', lines: terminalLines }} />;
     case 'terminal-start': return <TerminalScreen api={mockTerminal} onBack={noop} />;

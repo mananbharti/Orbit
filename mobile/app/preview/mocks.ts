@@ -85,6 +85,12 @@ export const mockInputMacros = (): InputApi => ({ ...store({ status: 'active' })
     { id: '44444444-4444-4444-8444-444444444444', name: 'Task view', steps: [{ key: 'tab', modifiers: ['meta'] }] },
   ],
   saveMacro: async () => [], deleteMacro: async () => [], runMacro: async () => {} }) as unknown as InputApi;
+export const mockNl = {
+  say: async (text: string) => text.includes('volume')
+    ? { status: 'executed' as const, command: 'system.volume.set', result: { applied: true } }
+    : { status: 'unknown' as const },
+} as never;
+
 export const mockSystem: SystemApi = ({
   power: async () => {}, panic: async () => 'locked' as const,
   audioSessions: async () => [{ id: '4204', name: 'Spotify', volume: 80, muted: false }, { id: '512', name: 'Discord', volume: 35, muted: true }],

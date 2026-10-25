@@ -1,8 +1,8 @@
 import { BackButton } from '../components/BackButton';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { AudioSession, DisplayMode, DisplayTheme, MediaAction, PowerAction, SystemApi } from '@orbit/core';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { AudioSession, DisplayMode, DisplayTheme, MediaAction, NlControlApi, NlOutcome, PowerAction, SystemApi } from '@orbit/core';
 import { Icon, type IconName } from '../components/Icon';
 import { CommandError } from '@orbit/core';
 import { friendlyError } from '../orbit';
@@ -21,7 +21,7 @@ const MEDIA: { action: MediaAction; label: string; icon: IconName }[] = [
   { action: 'next', label: 'Next track', icon: 'next' },
 ];
 
-export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack: () => void; onPanic?: () => void }) {
+export function ControlScreen({ api, nl, onBack, onPanic }: { api: SystemApi; nl: NlControlApi; onBack: () => void; onPanic?: () => void }) {
   const t = useTheme();
   const [volume, setVolume] = useState<number>();
   const [muted, setMuted] = useState(false);
@@ -31,6 +31,8 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   const [volumeSupported, setVolumeSupported] = useState(true);
   const [error, setError] = useState<string>();
   const [note, setNote] = useState<string>();
+  const [phrase, setPhrase] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.getVolume().then(v => { setVolume(v.level); setMuted(v.muted); }).catch(e => {
@@ -55,6 +57,21 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
       setSessions(prev => prev.map(x => (x.id === session.id ? { ...x, muted: !x.muted } : x)));
       void Haptics.selectionAsync();
     } catch (e) { setError(friendlyError(e)); }
+  };
+
+  const say = (): void => {
+    const text = phrase.trim();
+    if (!text || busy) return;
+    setBusy(true); setError(undefined); setNote(undefined);
+    const describe = (out: NlOutcome): string =>
+      out.status === 'executed' ? 'Done on your computer'
+      : out.status === 'rejected' ? `Not allowed (${out.error})`
+      : out.status === 'unclear' ? out.hint
+      : "Didn't understand - try 'volume 50' or 'agla gana'";
+    void nl.say(text).then(out => {
+      setNote(describe(out));
+      if (out.status === 'executed') { setPhrase(''); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+    }, e => setError(friendlyError(e))).finally(() => setBusy(false));
   };
 
   const run = (job: () => Promise<void>, done: string): void => {
@@ -94,6 +111,26 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
       <BackButton onPress={onBack} />
       <Text style={[styles.title, { color: t.text }]}>Control</Text>
       <Text style={{ color: t.sub, fontSize: 15 }}>Power, sound and display on your computer.</Text>
+      <Text style={[styles.section, { color: t.sub }]}>SAY IT</Text>
+      <View style={[styles.card, styles.sayRow, { backgroundColor: t.card }]}>
+        <TextInput
+          style={[styles.sayInput, { color: t.text, borderColor: t.fill }]}
+          placeholder="volume 50, agla gana, open chrome..."
+          placeholderTextColor={t.sub}
+          value={phrase}
+          onChangeText={setPhrase}
+          onSubmitEditing={say}
+          maxLength={200}
+          returnKeyType="send"
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Tell your computer what to do"
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="Send to your computer" onPress={say}
+          style={({ pressed }) => [styles.step, { backgroundColor: t.tint, opacity: pressed || busy ? 0.6 : 1 }]}>
+          <Icon name="next" size={18} color="#fff" />
+        </Pressable>
+      </View>
       <Text style={[styles.section, { color: t.sub }]}>POWER</Text>
       <View style={styles.grid}>
         {POWER.map(p => (
@@ -225,6 +262,8 @@ export function ControlScreen({ api, onBack, onPanic }: { api: SystemApi; onBack
   );
 }
 const styles = StyleSheet.create({
+  sayRow: { flexDirection: 'row', alignItems: 'center', gap: space.s, padding: space.s },
+  sayInput: { flex: 1, borderWidth: 1, borderRadius: radius, paddingHorizontal: space.m, paddingVertical: 10, fontSize: 15 },
   root: { padding: space.l, paddingTop: 70, paddingBottom: 40, gap: space.m },
   title: { fontSize: 34, fontWeight: '700' },
   section: { fontSize: 13, fontWeight: '500', marginTop: space.s },

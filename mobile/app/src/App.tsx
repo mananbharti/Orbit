@@ -213,7 +213,7 @@ function Shell() {
     backup={{ available: photoBackupAvailable(), enabled: backupOn, progress: backupProgress,
       onToggle: on => { void (async () => { if (on && !(await photoBackupPermitted())) { showBanner('Orbit needs access to your photos'); return; } await setPhotoBackupEnabled(on); setBackupOn(on); })(); } }} />;
   else if (clip) body = <ClipboardScreen api={connected.clipboard} onBack={() => setClip(false)} />;
-  else if (control) body = <ControlScreen api={connected.system} onBack={() => setControl(false)} onPanic={() => { if (activeId) void forgetComputer(activeId); }} />;
+  else if (control) body = <ControlScreen api={connected.system} nl={connected.nl} onBack={() => setControl(false)} onPanic={() => { if (activeId) void forgetComputer(activeId); }} />;
   else if (apps) body = <AppsScreen api={connected.launcher} onBack={() => setApps(false)} desktopServiceId={connected.paired.desktopServiceId} />;
   else if (activity) body = <ActivityScreen api={connected.api} onBack={() => setActivity(false)} />;
   else if (open) body = <TaskDetailScreen store={connected.store} taskId={open} onBack={() => setOpen(undefined)} />;
