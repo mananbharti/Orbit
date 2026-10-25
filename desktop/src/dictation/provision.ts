@@ -1,7 +1,7 @@
 /** First-run dictation engine provisioning: downloads one pinned whisper.cpp build and one pinned ggml model per computer, verifies sha256 before use, extracts with the system tar, and stores both under the private data directory. Downloads binaries only; audio never leaves the device. Env overrides (ORBIT_WHISPER_BIN / ORBIT_WHISPER_MODEL) always win and skip every download. */
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -16,14 +16,15 @@ export interface Asset { url: string; sha256: string; file: string }
 interface PlatformBuild extends Asset { binaryRel: string }
 export interface AssetTable { model: Asset; builds: Record<string, PlatformBuild> }
 
-/** The three offered models, all from the official whisper.cpp model bucket, MIT licensed; hashes verified out-of-band by download on 2026-10-24. tiny is the default everywhere: 75 MB and fast on any hardware; base and small trade download size and CPU for accuracy. */
-export type ModelName = 'tiny' | 'base' | 'small';
+/** The offered models, all from the official whisper.cpp model bucket, MIT licensed; hashes verified out-of-band by download (tiny/base/small 2026-10-24, turbo 2026-10-25 against the published ETag). tiny is the default everywhere: 75 MB and fast on any hardware; base and small trade download size and CPU for accuracy. turbo is the q5_0 quantization of large-v3-turbo: opt-in only, never suggested, 574 MB, measurably slower than small per clip (~2x on a constrained test box; real device speed unmeasured), and the only option that measurably improves Hindi (38% vs 53% WER on 10 public read-Hindi clips, 2026-10-25 - still rough, and untested on Hinglish or any user's own voice). */
+export type ModelName = 'tiny' | 'base' | 'small' | 'turbo';
 export const MODELS: Record<ModelName, Asset> = {
   tiny: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21', file: 'ggml-tiny.bin' },
   base: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe', file: 'ggml-base.bin' },
   small: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin', sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b', file: 'ggml-small.bin' },
+  turbo: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin', sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2', file: 'ggml-large-v3-turbo-q5_0.bin' },
 };
-export const MODEL_SIZES_MB: Record<ModelName, number> = { tiny: 75, base: 142, small: 466 };
+export const MODEL_SIZES_MB: Record<ModelName, number> = { tiny: 75, base: 142, small: 466, turbo: 574 };
 
 /** Conservative hardware hint: tiny below 4 cores or 8 GB, base below 8 cores or 16 GB, small above. The user still chooses; this only labels the suggestion. */
 export function suggestModel(cores: number, totalMemGB: number): ModelName {
@@ -52,8 +53,11 @@ async function sha256Of(path: string): Promise<string> {
 
 async function defaultFetch(url: string, dest: string, signal?: AbortSignal): Promise<void> {
   const res = await fetch(url, { redirect: 'follow', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10 * 60_000)]) : AbortSignal.timeout(10 * 60_000) });
-  if (!res.ok) throw new ProvisionError('DOWNLOAD_FAILED', `${url} -> HTTP ${res.status}`);
-  writeFileSync(dest, Buffer.from(await res.arrayBuffer()), { mode: 0o600 });
+  if (!res.ok || !res.body) throw new ProvisionError('DOWNLOAD_FAILED', `${url} -> HTTP ${res.status}`);
+  // Stream to disk: models run to 574 MB, and buffering the whole body in RAM OOMs small machines.
+  const { Readable } = await import('node:stream');
+  const { pipeline } = await import('node:stream/promises');
+  await pipeline(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), createWriteStream(dest, { mode: 0o600 }));
 }
 
 async function defaultExtract(archive: string, destDir: string): Promise<void> {
@@ -126,7 +130,8 @@ export async function ensureEngine(options: ProvisionOptions): Promise<EnginePat
     await fetchImpl(assets.model.url, modelPath, signal).catch(e => { throw e instanceof ProvisionError ? e : new ProvisionError('DOWNLOAD_FAILED', e instanceof Error ? e.message : String(e)); });
     if ((await sha256Of(modelPath)) !== assets.model.sha256) throw new ProvisionError('HASH_MISMATCH', assets.model.file);
 
-    rmSync(dir, { recursive: true, force: true });
+    // Replace only the engine build; other previously verified models stay on disk so switching back never re-downloads.
+    rmSync(join(dir, 'engine'), { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     renameSync(normalized, join(dir, 'engine'));
     renameSync(modelPath, join(dir, assets.model.file));

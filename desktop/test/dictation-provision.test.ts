@@ -90,14 +90,39 @@ test('env override skips provisioning entirely even when nothing is downloaded y
   const paths = await ensureEngine({ env: { ORBIT_WHISPER_BIN: bin, ORBIT_WHISPER_MODEL: model }, dataDir: join(dir, 'data'), fetchImpl: async () => { throw new Error('must not download'); } });
   assert.deepEqual(paths, { binary: bin, model });
 });
-test('model picker: three pinned models with distinct hashes; assetsFor swaps only the model', () => {
-  assert.equal(new Set([MODELS.tiny.sha256, MODELS.base.sha256, MODELS.small.sha256]).size, 3);
-  for (const name of ['tiny', 'base', 'small'] as const) {
-    assert.equal(MODELS[name].file, `ggml-${name}.bin`);
+test('model picker: four pinned models with distinct hashes; assetsFor swaps only the model', () => {
+  assert.equal(new Set([MODELS.tiny.sha256, MODELS.base.sha256, MODELS.small.sha256, MODELS.turbo.sha256]).size, 4);
+  for (const name of ['tiny', 'base', 'small'] as const) assert.equal(MODELS[name].file, `ggml-${name}.bin`);
+  assert.equal(MODELS.turbo.file, 'ggml-large-v3-turbo-q5_0.bin');
+  assert.equal(MODELS.turbo.url, 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin');
+  for (const name of ['tiny', 'base', 'small', 'turbo'] as const) {
     const t = assetsFor(name);
     assert.equal(t.model.sha256, MODELS[name].sha256);
     assert.equal(t.builds['linux-x64']!.sha256, PINNED_ASSETS.builds['linux-x64']!.sha256); // engine unchanged
   }
+});
+
+test('model picker: suggestModel never auto-suggests turbo (opt-in only)', () => {
+  for (const [cores, mem] of [[2, 4], [4, 8], [8, 16], [16, 32], [32, 128]] as const) assert.notEqual(suggestModel(cores, mem), 'turbo');
+});
+
+test('switching models re-downloads the engine but keeps the previously verified model on disk', async () => {
+  const stage = join(tmp(), 'payload'); mkdirSync(stage);
+  writeFileSync(join(stage, 'whisper-cli'), '#!/bin/sh\necho fake\n');
+  const engineTar = join(tmp(), 'engine.tar.gz');
+  execFileSync('tar', ['czf', engineTar, '-C', stage, 'whisper-cli']);
+  const engineBytes = Buffer.from(execFileSync('cat', [engineTar]));
+  const mk = (name: string) => { const a = fakeAssets(engineBytes, Buffer.from(`${name} bytes`)); a.model.file = `${name}.bin`; return a; };
+  const dataDir = tmp();
+  const first = await ensureEngine({ platform: 'linux', arch: 'x64', dataDir, assets: mk('small'),
+    fetchImpl: async (u, d) => writeFileSync(d, u.includes('model') ? Buffer.from('small bytes') : engineBytes) });
+  const second = await ensureEngine({ platform: 'linux', arch: 'x64', dataDir, assets: mk('turbo'),
+    fetchImpl: async (u, d) => writeFileSync(d, u.includes('model') ? Buffer.from('turbo bytes') : engineBytes) });
+  assert.equal(second.model, join(dataDir, 'dictation', 'turbo.bin'));
+  assert.ok(existsSync(first.model)); // the earlier verified model survives the switch...
+  const back = await ensureEngine({ platform: 'linux', arch: 'x64', dataDir, assets: mk('small'), fetchImpl: async () => { throw new Error('must not re-download'); } });
+  assert.deepEqual(back, first); // ...so switching back is instant, no download
+  rmSync(dataDir, { recursive: true, force: true });
 });
 
 test('model picker: suggestModel is conservative by cores and memory', () => {

@@ -372,7 +372,7 @@ function createWindow() {
 
 // --- Desktop dictation hotkey: user-chosen toggle, OFF by default; capture starts and stops only from that shortcut. ---
 const dictationHotkeyPath = () => join(app.getPath('userData'), 'dictation-hotkey.json');
-const DICTATION_MODELS = ['tiny', 'base', 'small'];
+const DICTATION_MODELS = ['tiny', 'base', 'small', 'turbo'];
 function dictationHotkeyGet() {
   try { const c = JSON.parse(readFileSync(dictationHotkeyPath(), 'utf8')); return { enabled: Boolean(c.enabled), accelerator: typeof c.accelerator === 'string' && c.accelerator.length <= 64 ? c.accelerator : 'Control+Shift+D', model: DICTATION_MODELS.includes(c.model) ? c.model : 'tiny' }; }
   catch { return { enabled: false, accelerator: 'Control+Shift+D', model: 'tiny' }; }
