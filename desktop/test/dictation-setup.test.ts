@@ -68,6 +68,25 @@ test('cancel aborts an in-flight download and reports failed/cancelled', async (
   assert.deepEqual(await call(registry, 'dictation.status'), { state: 'failed', reason: 'cancelled' });
 });
 
+test('switching models mid-download cancels the old model and downloads the new one', async () => {
+  const registry = new CommandRegistry();
+  const pathsTurbo = { binary: '/b', model: '/turbo.bin' };
+  let started: (string | undefined)[] = [];
+  const ready: unknown[] = [];
+  const setup = new DictationSetup(registry, tmp(), p => ready.push(p), log(), { model: 'small',
+    provision: o => new Promise<EnginePaths>((res, rej) => { started.push(o.model);
+      if (o.model === 'small') { o.signal?.addEventListener('abort', () => rej(new ProvisionError('DOWNLOAD_FAILED', 'cancelled'))); }
+      else res(pathsTurbo); }) });
+  const first = setup.start(true);
+  assert.equal(setup.state.state, 'downloading');
+  setup.setModel('turbo');
+  await setup.start(true); // must not join the small download; cancels it and downloads turbo
+  await first.catch(() => undefined);
+  assert.deepEqual(started, ['small', 'turbo']);
+  assert.equal(setup.state.state, 'ready');
+  assert.deepEqual(ready, [pathsTurbo]); // small never reported ready
+});
+
 test('autoStart attaches an existing env engine, skips downloads within the backoff window, and starts once after it', async () => {
   const dir = tmp();
   const bin = join(dir, 'w'); const model = join(dir, 'm');

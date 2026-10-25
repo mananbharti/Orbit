@@ -175,6 +175,7 @@ export class DictationSetup {
   private current: DictationSetupState = { state: 'off' };
   private abort?: AbortController;
   private running?: Promise<void>;
+  private runningModel?: ModelName; // the model the current/last attempt is for; status is only 'ready' for this one
 
   constructor(registry: CommandRegistry, private readonly dataDir: string,
     private readonly onReady: (paths: EnginePaths) => void, private readonly log: ActivityLog,
@@ -195,33 +196,41 @@ export class DictationSetup {
   get state(): DictationSetupState { return this.current; }
 
   /** Marks the engine ready when it was configured outside provisioning (env override wired at startup). */
-  markReady(): void { this.current = { state: 'ready' }; }
+  markReady(): void { this.current = { state: 'ready' }; this.runningModel = this.options.model; }
 
   /** Startup path: attach an existing engine immediately, or kick off one automatic attempt when backoff allows. */
   autoStart(): EnginePaths | undefined {
     const existing = resolveEnginePaths(this.options.env ?? process.env, this.dataDir, assetsFor(this.options.model));
-    if (existing) { this.current = { state: 'ready' }; return existing; }
+    if (existing) { this.current = { state: 'ready' }; this.runningModel = this.options.model; return existing; }
     if ((this.options.auto ?? true) && autoProvisionAllowed(this.dataDir)) void this.start(false);
     return undefined;
   }
 
-  /** Starts (or joins) the one-time download. `manual` retries ignore the backoff window. */
+  /** Starts (or joins) the one-time download. `manual` retries ignore the backoff window. A start for a different model than the in-flight download cancels it and waits for the cleanup before downloading the new pick, so the visible status never describes the wrong model. */
   async start(manual: boolean): Promise<void> {
-    if (this.current.state === 'ready' || this.running) return this.running;
+    if (this.current.state === 'ready' && this.runningModel === this.options.model) return;
+    if (this.running) {
+      if (this.runningModel === this.options.model) return this.running;
+      this.cancel();
+      await this.running.catch(() => undefined); // wait for the old download to settle and clean up
+    }
     if (!manual && !autoProvisionAllowed(this.dataDir)) return;
     markProvisionAttempt(this.dataDir);
     this.abort = new AbortController();
     this.current = { state: 'downloading' };
+    const attemptModel = this.options.model;
+    this.runningModel = attemptModel;
     const provision = this.options.provision ?? (o => ensureEngine(o));
     this.running = (async () => {
       try {
-        const paths = await provision({ dataDir: this.dataDir, env: this.options.env, model: this.options.model, signal: this.abort!.signal });
+        const paths = await provision({ dataDir: this.dataDir, env: this.options.env, model: attemptModel, signal: this.abort!.signal });
+        if (this.runningModel !== attemptModel) return; // a newer pick owns the status now
         this.current = { state: 'ready' };
         this.onReady(paths);
         this.log.record({ severity: 'info', eventType: 'dictation.engine_ready', outcome: 'success' });
       } catch (e) {
         const reason = e instanceof ProvisionError ? e.code : 'DOWNLOAD_FAILED';
-        if (this.current.state === 'downloading') this.current = { state: 'failed', reason }; // a user cancel already settled the honest 'cancelled' reason
+        if (this.current.state === 'downloading' && this.runningModel === attemptModel) this.current = { state: 'failed', reason }; // a user cancel already settled the honest 'cancelled' reason
         this.log.record({ severity: 'info', eventType: 'dictation.engine_unavailable', outcome: 'failed' });
       } finally { this.running = undefined; this.abort = undefined; }
     })();
