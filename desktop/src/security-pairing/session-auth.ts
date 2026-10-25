@@ -56,6 +56,11 @@ export class SessionAuth {
     return { sessionToken, session };
   }
 
+  /** Whether an already-issued session is still valid right now (injected clock, active device). */
+  isLive(session: Session): boolean {
+    return session.expiresAt > this.now() && this.credentials.isActive(session.deviceId);
+  }
+
   authenticate(token: string): Session | undefined {
     if (!TOKEN_PATTERN.test(token)) return undefined;
     const key = credentialHash(token);

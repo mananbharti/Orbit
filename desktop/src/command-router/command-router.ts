@@ -2,7 +2,7 @@
 import type { ActivityLog } from '../activity-log/activity-log.js';
 import { failure, success, type CommandMessage, type ResponseMessage } from '../protocol/messages.js';
 import { isSensitiveCommand, requireBiometricConfirmation, type BiometricConfirmation } from '../security-pairing/biometric-confirmation.js';
-import type { SessionAuth } from '../security-pairing/session-auth.js';
+import type { Session, SessionAuth } from '../security-pairing/session-auth.js';
 import type { CommandRegistry } from './command-registry.js';
 import type { CommandConnection } from './command-context.js';
 import { ProtocolError } from '../protocol/errors.js';
@@ -31,6 +31,14 @@ export class CommandRouter {
     // Never evict IDs while a session is valid: a retry could otherwise repeat a sensitive operation.
     if (requests.ids.size >= 4_096) return failure(message.requestId, 'BUSY');
     requests.ids.add(message.requestId);
+    return this.dispatchAuthorized(message, session, connection, sessionToken);
+  }
+
+  /** Dispatches a command for an already-authenticated session - the same scope, duplicate-safe and
+   *  sensitive-command enforcement as dispatch(), without re-authenticating a token. Trusted callers
+   *  inside the desktop (e.g. natural-language control) synthesize sub-commands through this so a
+   *  mapped command can never bypass the gates a directly-sent command would face. */
+  async dispatchAuthorized(message: CommandMessage, session: Session, connection?: CommandConnection, sessionToken?: string): Promise<ResponseMessage> {
     const handler = this.registry.get(message.type);
     let response: ResponseMessage;
     try {
@@ -41,7 +49,7 @@ export class CommandRouter {
         const context = { session, requestId: message.requestId, connection };
         if (isSensitiveCommand(message.type) && !await this.biometric.verify(message, context)) {
           response = failure(message.requestId, 'BIOMETRIC_REQUIRED');
-        } else if (!this.auth.authenticate(sessionToken)) {
+        } else if (sessionToken ? !this.auth.authenticate(sessionToken) : !this.auth.isLive(session)) {
           // Verification may have awaited user interaction past session expiry.
           response = failure(message.requestId, 'UNAUTHENTICATED');
         } else response = success(message.requestId, await handler.execute(message.payload, context));

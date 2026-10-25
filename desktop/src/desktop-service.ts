@@ -37,6 +37,7 @@ import { MemoryService } from './memory/memory-service.js';
 import { SystemControl } from './system-control/system-control.js';
 import { AudioMixer } from './system-control/audio-mixer.js';
 import { PanicLock } from './security-pairing/panic-lock.js';
+import { NlControlService, type NlDecider } from './nl-control/nl-service.js';
 import { createSystemControl } from './os-integration/create-system-control.js';
 import { inputDeviceFactory } from './os-integration/create-input-device.js';
 import { createAudioMixer } from './os-integration/create-audio-mixer.js';
@@ -95,6 +96,8 @@ export async function startDesktop(options: { directory: string; host: string; p
   /** Desktop-owner confirmation for sensitive commands (power); without one they stay denied (BIOMETRIC_REQUIRED). */
   input?: { createDevice: () => InputDevice; confirmation?: BiometricConfirmation };
   biometric?: BiometricConfirmation;
+  /** Optional natural-language intent decider (e.g. a local Laya server); without one nl.control still works on deterministic patterns. */
+  nl?: { decider?: NlDecider };
   /** Called when the browser extension connects or drops; lets the shell refresh its settings surface. */
   onExtensionConnection?: (connected: boolean) => void }) {
   const directory = privateDirectory(options.directory);
@@ -111,6 +114,7 @@ export async function startDesktop(options: { directory: string; host: string; p
   let memory: MemoryService | undefined;
   let system: SystemControl | undefined;
   let panic: PanicLock | undefined;
+  let nl: NlControlService | undefined;
   let devices: DeviceDirectory | undefined;
   let automations: AutomationService | undefined;
   let extensionServer: ExtensionServer | undefined;
@@ -139,6 +143,8 @@ export async function startDesktop(options: { directory: string; host: string; p
     panic = new PanicLock(registry, store, systemFactory, log, () => transport?.closeUnauthenticated());
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log, options.biometric);
+    // Natural-language control routes through the same registry/router.
+    nl = new NlControlService(registry, router, log, options.nl?.decider);
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
     transport = createWebSocketTransport(transportOptions);
@@ -177,6 +183,7 @@ export async function startDesktop(options: { directory: string; host: string; p
         await tabs?.stop();
         await extensionServer?.stop();
         devices?.stop(); system?.stop(); panic?.stop(); mixer?.stop();
+        nl?.stop();
         await dictation?.stop();
         memory?.stop();
         await input?.stop();

@@ -9,7 +9,7 @@ export interface ActivityEvent {
     | 'clipboard.changed' | 'clipboard.ignored' | 'clipboard.conflict' | 'clipboard.unavailable' | 'file.state'
     | 'input.started' | 'input.ended' | 'input.release_failed'
     | 'dictation.started' | 'dictation.finished' | 'dictation.insert' | 'dictation.engine_ready' | 'dictation.engine_unavailable' | 'pairing.revoked' | 'system.panic'
-    | 'memory.remembered' | 'memory.forgotten' | 'system.power' | 'system.audio' | 'system.volume' | 'system.brightness' | 'system.mode' | 'system.media' | 'automation.fired' | 'terminal.started' | 'terminal.ended';
+    | 'memory.remembered' | 'memory.forgotten' | 'system.power' | 'system.audio' | 'system.volume' | 'system.brightness' | 'system.mode' | 'system.media' | 'automation.fired' | 'terminal.started' | 'terminal.ended' | 'nl.unmatched';
   deviceId?: string;
   sessionId?: string;
   requestId?: string;
