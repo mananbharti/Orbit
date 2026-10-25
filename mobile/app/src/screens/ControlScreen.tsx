@@ -63,11 +63,16 @@ export function ControlScreen({ api, nl, onBack, onPanic }: { api: SystemApi; nl
     const text = phrase.trim();
     if (!text || busy) return;
     setBusy(true); setError(undefined); setNote(undefined);
-    const describe = (out: NlOutcome): string =>
-      out.status === 'executed' ? 'Done on your computer'
-      : out.status === 'rejected' ? `Not allowed (${out.error})`
-      : out.status === 'unclear' ? out.hint
-      : "Didn't understand - try 'volume 50' or 'agla gana'";
+    const describe = (out: NlOutcome): string => {
+      if (out.status === 'executed') return 'Done on your computer';
+      if (out.status === 'unclear') return out.hint;
+      if (out.status === 'unknown') return "Didn't understand - try 'volume 50' or 'agla gana'";
+      // Rejected: name what actually happened - a permission denial, an unavailable feature, or a failure.
+      if (out.error === 'SCOPE_DENIED' || out.error === 'BIOMETRIC_REQUIRED' || out.error === 'UNAUTHENTICATED')
+        return `Not allowed on your computer (${out.error})`;
+      if (out.error === 'SYSTEM_UNAVAILABLE') return 'That is not available on your computer right now';
+      return `Couldn't do that on your computer (${out.error})`;
+    };
     void nl.say(text).then(out => {
       // Only 'executed' is success: rejected/unclear/unknown all mean nothing happened - show them as errors, not green notes.
       if (out.status === 'executed') { setNote(describe(out)); setPhrase(''); void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
