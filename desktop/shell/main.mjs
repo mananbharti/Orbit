@@ -443,7 +443,17 @@ function createTray() {
   tray.setToolTip('Orbit');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Orbit', click: () => (win.show(), win.focus()) },
-    { label: 'Send files to phone…', click: async () => { const r = await dialog.showOpenDialog(win, { title: 'Send files to your phone', properties: ['openFile', 'multiSelections'] }); if (!r.canceled) await offerToPhones(r.filePaths.slice(0, 8)); } },
+    { label: 'Send files to phone…', click: async () => {
+      const r = await dialog.showOpenDialog(win, { title: 'Send files to your phone', properties: ['openFile', 'multiSelections'] });
+      if (r.canceled) return;
+      const out = await offerToPhones(r.filePaths.slice(0, 8));
+      const failed = out.error || (out.errors && out.errors.length);
+      // The window is usually hidden when the tray is used, so the result must reach the user here.
+      if (Notification.isSupported()) new Notification({ title: 'Orbit', body: failed
+        ? (out.error || 'Could not send ' + out.errors.map(e => e.name).join(', ') + ' - Orbit is open with the reason.')
+        : 'Waiting for your phone: ' + out.offered.join(', ') }).show();
+      if (failed) { win.show(); win.focus(); } // the Files tab carries the plain-words reason
+    } },
     { type: 'separator' }, { label: 'Quit Orbit', click: () => app.quit() }]));
   tray.on('click', () => (win.show(), win.focus()));
 }
