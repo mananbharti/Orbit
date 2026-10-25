@@ -83,6 +83,31 @@ test('ensureEngine downloads, verifies, extracts and reports engine+model paths'
   rmSync(dataDir, { recursive: true, force: true });
 });
 
+test('failed or cancelled provisioning leaves no partial model or engine in the data dir', async () => {
+  const stage = join(tmp(), 'payload'); mkdirSync(stage);
+  writeFileSync(join(stage, 'whisper-cli'), '#!/bin/sh\necho fake\n');
+  const engineTar = join(tmp(), 'engine.tar.gz');
+  execFileSync('tar', ['czf', engineTar, '-C', stage, 'whisper-cli']);
+  const engineBytes = Buffer.from(execFileSync('cat', [engineTar]));
+  const assets = fakeAssets(engineBytes, Buffer.from('real model'));
+  const dataDir = tmp();
+  // Integrity failure on the model: HASH_MISMATCH and nothing partial kept.
+  await assert.rejects(
+    ensureEngine({ platform: 'linux', arch: 'x64', dataDir, assets, fetchImpl: async (u, d) => writeFileSync(d, u.includes('model') ? 'tampered' : engineBytes) }),
+    (e: unknown) => e instanceof ProvisionError && e.code === 'HASH_MISMATCH');
+  assert.equal(existsSync(join(dataDir, 'dictation', 'model.bin')), false);
+  assert.equal(existsSync(join(dataDir, 'dictation', 'engine')), false);
+  // Cancel mid-download: same clean state.
+  const abort = new AbortController();
+  await assert.rejects(
+    ensureEngine({ platform: 'linux', arch: 'x64', dataDir, assets, signal: abort.signal,
+      fetchImpl: async (_u, d) => { abort.abort(); writeFileSync(d, 'partial'); throw new Error('aborted'); } }),
+    (e: unknown) => e instanceof ProvisionError);
+  assert.equal(existsSync(join(dataDir, 'dictation', 'model.bin')), false);
+  assert.equal(existsSync(join(dataDir, 'dictation', 'engine')), false);
+  rmSync(dataDir, { recursive: true, force: true });
+});
+
 test('env override skips provisioning entirely even when nothing is downloaded yet', async () => {
   const dir = tmp();
   const bin = join(dir, 'my-whisper'); const model = join(dir, 'my-model');
