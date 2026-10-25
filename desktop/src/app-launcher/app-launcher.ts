@@ -31,6 +31,11 @@ export class AppLauncher {
   private readonly jobs = new Set<Promise<unknown>>();
   private catalog = new Map<string, NativeApp>();
   private revision = randomUUID() as string;
+
+  /** Read-only snapshot for in-desktop consumers (natural-language "open X"); same data the phone pages through. */
+  catalogSnapshot(): { revision: string; apps: { appId: string; name: string }[] } {
+    return { revision: this.revision, apps: [...this.catalog].map(([appId, app]) => ({ appId, name: app.name })) };
+  }
   private busy = false;
   private adapter?: AppLauncherAdapter;
 

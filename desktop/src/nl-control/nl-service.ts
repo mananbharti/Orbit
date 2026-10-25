@@ -21,10 +21,13 @@ export interface NlDecider {
   decide(text: string, criteria: readonly string[]): Promise<{ choice: string; probability: number }>;
 }
 
+export interface NlCatalog { revision: string; apps: { appId: string; name: string }[] }
+
 export class NlControlService {
   private readonly unregister: () => void;
   constructor(registry: CommandRegistry, private readonly router: CommandRouter, private readonly log: ActivityLog,
-    private readonly decider?: NlDecider, private readonly minProbability = 0.6) {
+    private readonly decider?: NlDecider, private readonly minProbability = 0.6,
+    private readonly apps?: () => NlCatalog) {
     this.unregister = registry.register('nl.control', {
       validate: payload => nlControlSchema.safeParse(payload).success,
       execute: async (payload, context) => {
@@ -36,6 +39,24 @@ export class NlControlService {
   }
 
   stop(): void { this.unregister(); }
+
+  /** "open X" / "X kholo" against the live app catalog: exact name wins, a unique substring wins,
+   *  several matches ask which one, none falls through to the model decider / honest unknown. */
+  private matchLaunch(text: string): { appId: string; name: string; revision: string } | { ambiguous: string[] } | undefined {
+    const t = text.toLowerCase().replace(/[.!,?]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const m = /^(?:open|launch|start|kholo|khol do|chalao|chalu karo)\s+(.+)$/i.exec(t)
+      ?? /^(.+?)\s+(?:kholo|khol do|kholo na|chalao|chalu karo)$/i.exec(t);
+    if (!m) return undefined;
+    const wanted = m[1]!.trim();
+    if (!wanted) return undefined;
+    const { revision, apps } = this.apps!();
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const exact = apps.filter(a => norm(a.name) === wanted);
+    const hits = exact.length ? exact : apps.filter(a => norm(a.name).includes(wanted));
+    if (hits.length === 1) return { appId: hits[0]!.appId, name: hits[0]!.name, revision };
+    if (hits.length > 1) return { ambiguous: hits.slice(0, 4).map(a => a.name) };
+    return undefined;
+  }
 
   private async handle(text: string, session: Parameters<CommandRouter['dispatchAuthorized']>[1],
     connection?: CommandConnection): Promise<NlOutcome & JsonValue> {
@@ -51,6 +72,11 @@ export class NlControlService {
           matched = payload === 'needs-params' ? { intent, missing: true } : payload !== undefined ? { intent, payload } : undefined;
         }
       } catch { /* decider unreachable: fall through to unknown */ }
+    }
+    if (!matched && this.apps) {
+      const launch = this.matchLaunch(text);
+      if (launch && 'ambiguous' in launch) return { status: 'unclear', hint: `Which one: ${launch.ambiguous.join(', ')}?` };
+      if (launch) matched = { intent: { id: 'launcher.launch', command: 'launcher.launch', describe: `Open ${launch.name}`, build: () => undefined }, payload: { appId: launch.appId, catalogRevision: launch.revision } };
     }
     if (!matched) {
       this.log.record({ severity: 'info', eventType: 'nl.unmatched', outcome: 'rejected' });

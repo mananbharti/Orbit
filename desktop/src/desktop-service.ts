@@ -144,7 +144,7 @@ export async function startDesktop(options: { directory: string; host: string; p
     if (options.audioMixer !== false) mixer = new AudioMixer(registry, options.audioMixer?.createAdapter ?? createAudioMixer, log);
     const router = new CommandRouter(registry, auth, log, options.biometric);
     // Natural-language control routes through the same registry/router.
-    nl = new NlControlService(registry, router, log, options.nl?.decider);
+    nl = new NlControlService(registry, router, log, options.nl?.decider, undefined, () => launcher!.catalogSnapshot());
     const transportOptions: TransportOptions = { host: options.host, port: options.port,
       tls: { cert: identity.certificate, key: identity.privateKey }, router, auth, log };
     transport = createWebSocketTransport(transportOptions);

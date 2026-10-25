@@ -145,4 +145,33 @@ describe('nl.control service', () => {
     assert.deepEqual(await say('do the thing'), { status: 'unknown' });
     assert.equal(executed.length, 1);
   });
+
+  it('launcher intent: opens a uniquely named app from the live catalog', async () => {
+    const c = core();
+    const executed: { type: string; payload: JsonValue }[] = [];
+    c.registry.register('launcher.launch', { validate: () => true, execute: async payload => { executed.push({ type: 'launcher.launch', payload }); return { launched: true }; } });
+    new NlControlService(c.registry, c.router, c.log, undefined, 0.6,
+      () => ({ revision: 'rev1', apps: [{ appId: 'chrome', name: 'Google Chrome' }, { appId: 'code', name: 'Visual Studio Code' }] }));
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    assert.deepEqual(await say('open chrome'), { status: 'executed', command: 'launcher.launch', result: { launched: true } });
+    assert.deepEqual(executed[0], { type: 'launcher.launch', payload: { appId: 'chrome', catalogRevision: 'rev1' } });
+    assert.equal((await say('code kholo') as { status: string }).status, 'executed');
+    assert.deepEqual(executed[1], { type: 'launcher.launch', payload: { appId: 'code', catalogRevision: 'rev1' } });
+  });
+
+  it('launcher intent: ambiguous names ask which one, unknown names stay unknown - nothing launches', async () => {
+    const c = core();
+    const executed: string[] = [];
+    c.registry.register('launcher.launch', { validate: () => true, execute: async () => { executed.push('x'); return { launched: true }; } });
+    new NlControlService(c.registry, c.router, c.log, undefined, 0.6,
+      () => ({ revision: 'r', apps: [{ appId: 'n1', name: 'Notes' }, { appId: 'n2', name: 'Noteshelf' }] }));
+    const { session } = c.auth.issue(c.credential)!;
+    const say = (text: string) => c.registry.get('nl.control')!.execute({ text }, { session, requestId: randomUUID(), connection: { isAuthorized: () => true } as never });
+    const amb = await say('open note') as { status: string; hint?: string };
+    assert.equal(amb.status, 'unclear');
+    assert.match(amb.hint!, /Notes/);
+    assert.deepEqual(await say('open itunes'), { status: 'unknown' });
+    assert.equal(executed.length, 0);
+  });
 });
