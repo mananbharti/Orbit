@@ -102,7 +102,8 @@ async function boot() {
     const captureProbe = dictationInsertion ? { current: dictationInsertion.captureFocus } : undefined;
     localDictation = new LocalDictation({ ...(captureProbe ? { probe: captureProbe } : {}),
       transcribe: async pcm => { if (!localDictationEngine) return undefined; const r = await dictate(pcm, localDictationEngine, { signal: new AbortController().signal }); return r.status === 'text' ? r.text : undefined; },
-      onPreview: dictationPreview, onState: dictationStatePush });
+      onPreview: dictationPreview, onState: dictationStatePush,
+      onEmpty: reason => dictationWin?.webContents.send('orbit:dictation-empty', reason) });
     dictationHotkeyApply(dictationHotkeyGet());
     const dictationSetup = new DictationSetup(registry, dataDir, attachDictation, service.log, { model: dictationHotkeyGet().model });
     dictationSetupRef = dictationSetup;

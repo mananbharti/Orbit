@@ -53,6 +53,25 @@ test('silence and engine failure stop cleanly without previewing; working state 
   assert.equal(d.current, 'idle');
 });
 
+test('an empty outcome is never silent: no-speech and engine failure each reach onEmpty, cancel does not', async () => {
+  const empties: string[] = [];
+  const silent = new LocalDictation({ transcribe: async () => undefined, onPreview: () => {}, onEmpty: r => empties.push(r) });
+  await silent.toggle(async () => clip());
+  await silent.toggle(async () => clip());
+  assert.deepEqual(empties, ['no-speech']);
+  const broken = new LocalDictation({ transcribe: async () => { throw new Error('engine died'); }, onPreview: () => {}, onEmpty: r => empties.push(r) });
+  await broken.toggle(async () => clip());
+  await broken.toggle(async () => clip());
+  assert.deepEqual(empties, ['no-speech', 'error']);
+  assert.equal(broken.current, 'idle');
+  const cancelled = new LocalDictation({ transcribe: async () => undefined, onPreview: () => {}, onEmpty: r => empties.push(r) });
+  await cancelled.toggle(async () => clip());
+  const stop = cancelled.toggle(async () => clip());
+  cancelled.cancel();
+  await stop;
+  assert.deepEqual(empties, ['no-speech', 'error'], 'a cancelled transcription must not cry wolf');
+});
+
 test('cancel while recording drops the capture; cancel while working suppresses the preview', async () => {
   let previewed = 0;
   const d = new LocalDictation({ probe: { current: async () => ({ id: '1', pid: 1 }) }, transcribe: async () => 'text', onPreview: () => { previewed++; } });

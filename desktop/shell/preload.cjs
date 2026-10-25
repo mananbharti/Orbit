@@ -31,4 +31,5 @@ contextBridge.exposeInMainWorld('orbit', {
   onDictationCapture: cb => { const f = (_e, action) => cb(action); ipcRenderer.on('orbit:dictation-capture', f); return () => ipcRenderer.removeListener('orbit:dictation-capture', f); },
   onDictationState: cb => { const f = (_e, s) => cb(s); ipcRenderer.on('orbit:dictation-state', f); return () => ipcRenderer.removeListener('orbit:dictation-state', f); },
   onDictationPreview: cb => { const f = (_e, payload) => cb(payload); ipcRenderer.on('orbit:dictation-preview', f); return () => ipcRenderer.removeListener('orbit:dictation-preview', f); },
+  onDictationEmpty: cb => { const f = (_e, reason) => cb(reason); ipcRenderer.on('orbit:dictation-empty', f); return () => ipcRenderer.removeListener('orbit:dictation-empty', f); },
 });

@@ -309,6 +309,12 @@ if (api.onDictationState) api.onDictationState(st => {
   if (st === 'idle') { dictationStatus('Dictation engine: ready'); dictationBannerHide(); }
   if (st === 'working') { dictationStatus('Transcribing...'); dictationBannerShow('Transcribing...', 'info'); } // transcription can take many seconds; keep it visible on every tab
 });
+if (api.onDictationEmpty) api.onDictationEmpty(reason => { // sent after the idle state, so this banner is not hidden by the state handler
+  const msg = reason === 'error' ? 'Transcription failed - press the shortcut and try again.'
+    : 'Nothing was heard - try again, a little louder or closer to the microphone.';
+  dictationStatus(msg);
+  dictationBannerShow(msg, 'err', 6000);
+});
 if (api.onDictationPreview) api.onDictationPreview(payload => {
   const card = $('dictation-preview-card'); if (!card) return;
   if (payload.hide) { card.classList.remove('on'); return; }

@@ -6,6 +6,9 @@ export interface LocalDictationDeps {
   transcribe: (pcm: Int16Array) => Promise<string | undefined>; // undefined = no speech / failure
   onPreview: (text: string, target?: FocusHandle) => void; // the only exit for transcript text
   onState?: (state: LocalDictationState) => void;
+  // A finished recording that produced no transcript still needs an answer: silence and engine
+  // failure look identical to a broken shortcut without one. Never fired for a cancel.
+  onEmpty?: (reason: 'no-speech' | 'error') => void;
 }
 export type LocalDictationState = 'idle' | 'recording' | 'working';
 
@@ -29,9 +32,11 @@ export class LocalDictation {
     this.set('working');
     const pcm = await capture();
     if (!pcm || pcm.length === 0) { this.set('idle'); return 'stopped'; }
-    const text = await this.deps.transcribe(pcm).catch(() => undefined);
+    let failed = false;
+    const text = await this.deps.transcribe(pcm).catch(() => { failed = true; return undefined; });
     pcm.fill(0);
-    if (!text || this.cancelled) { this.cancelled = false; this.set('idle'); return 'stopped'; }
+    if (this.cancelled) { this.cancelled = false; this.set('idle'); return 'stopped'; }
+    if (!text) { this.set('idle'); this.deps.onEmpty?.(failed ? 'error' : 'no-speech'); return 'stopped'; }
     this.deps.onPreview(text, this.startFocus);
     this.set('idle');
     return 'stopped';
