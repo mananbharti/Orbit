@@ -90,7 +90,7 @@ async function boot() {
     const { WhisperCpp } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'whisper-cpp.js')).href);
     const { DictationService } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'dictation-service.js')).href);
     let dictationServiceRef;
-    const attachDictation = paths => { localDictationEngine = new WhisperCpp(paths); if (dictationServiceRef) dictationServiceRef.swapEngine(localDictationEngine); else dictationServiceRef = new DictationService(registry, localDictationEngine, service.log); };
+    const attachDictation = (paths, model) => { localDictationEngine = new WhisperCpp(paths); dictationAttachedModel = model ?? dictationHotkeyGet().model; if (dictationServiceRef) dictationServiceRef.swapEngine(localDictationEngine); else dictationServiceRef = new DictationService(registry, localDictationEngine, service.log); };
     attachDictationRef = attachDictation;
     const { LocalDictation } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'local-dictation.js')).href);
     const { dictate } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'pipeline.js')).href);
@@ -211,7 +211,8 @@ ipcMain.handle('orbit:state', () => snapshot());
 ipcMain.handle('orbit:dictation-get', async () => {
   const { suggestModel, MODEL_SIZES_MB } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
   const { cpus, totalmem } = await import('node:os');
-  return { ...dictationHotkeyGet(), state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine), setup: dictationSetupRef ? dictationSetupRef.statusPayload() : undefined, suggested: suggestModel(cpus().length, totalmem() / (1024 ** 3)), sizes: MODEL_SIZES_MB };
+  const picked = dictationHotkeyGet();
+  return { ...picked, state: localDictation?.current ?? 'idle', engine: Boolean(localDictationEngine) && dictationAttachedModel === picked.model, attached: localDictationEngine ? dictationAttachedModel : undefined, setup: dictationSetupRef ? dictationSetupRef.statusPayload() : undefined, suggested: suggestModel(cpus().length, totalmem() / (1024 ** 3)), sizes: MODEL_SIZES_MB };
 });
 ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
   if (!DICTATION_MODELS.includes(model)) return { ok: false };
@@ -221,7 +222,7 @@ ipcMain.handle('orbit:dictation-set-model', async (_e, model) => {
   const { assetsFor, resolveEnginePaths } = await import(pathToFileURL(join(here, '..', 'dist', 'src', 'dictation', 'provision.js')).href);
   if (!dictationDataDir) return { ok: false, reason: 'not ready yet' };
   const existing = resolveEnginePaths(process.env, dictationDataDir, assetsFor(model));
-  if (existing) { try { attachDictationRef?.(existing); dictationSetupRef?.markReady(); } catch { return { ok: false, reason: 'engine failed to load' }; } }
+  if (existing) { try { attachDictationRef?.(existing, model); dictationSetupRef?.markReady(); } catch { return { ok: false, reason: 'engine failed to load' }; } }
   else void dictationSetupRef?.start(true); // visible, cancellable download of the newly picked model
   return { ok: true, downloaded: Boolean(existing) };
 });
@@ -388,7 +389,7 @@ function dictationStatePush(state) {
   tray?.setToolTip(state === 'recording' ? 'Orbit - recording dictation' : 'Orbit');
   dictationWin?.webContents.send('orbit:dictation-state', state);
 }
-let dictationDevice; let dictationProbe; let dictationActivator; let dictationInsertion; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; // { text, target } awaiting the user's per-use choice
+let dictationDevice; let dictationProbe; let dictationActivator; let dictationInsertion; let dictationPending; let dictationSetupRef; let attachDictationRef; let dictationDataDir; let dictationAttachedModel; // { text, target } awaiting the user's per-use choice
 async function dictationReleaseDevice() { try { await dictationDevice?.releaseAll(); } catch { /* already released */ } dictationDevice = undefined; }
 // The transcript is never typed automatically: it goes to the preview card, and the user copies it or confirms typing into the captured window.
 function dictationPreview(text, target) {
