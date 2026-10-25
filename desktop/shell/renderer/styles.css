@@ -196,6 +196,8 @@ progress.fail::-webkit-progress-value { background: var(--bad); }
 /* Dictation hotkey surfaces: class-toggled because the page CSP blocks inline style attributes. */
 #dictation-banner { display: none; background: #b3261e; color: #fff; padding: 10px 16px; border-radius: 10px; margin: 12px 24px 0; font-weight: 600; }
 #dictation-banner.on { display: block; }
+#dictation-banner.info { background: #3c4043; font-weight: 500; }
+#dictation-banner.err { background: #8c1d18; }
 #dictation-preview-card { display: none; margin: 12px 24px 0; }
 #dictation-preview-card.on { display: block; }
 #dictation-preview-text { white-space: pre-wrap; }

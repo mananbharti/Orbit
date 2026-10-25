@@ -208,6 +208,16 @@ api.state().then(render); api.onState(render);
 // --- Dictation hotkey: capture runs here (mic lives in the renderer); the main process owns the toggle, transcription and insertion. ---
 let dicStream, dicCtx, dicNode, dicChunks = [], dicCapTimer, dicKey = 'the shortcut';
 function dictationStatus(text) { const el = $('dictation-status'); if (el) el.textContent = text; }
+let dicBannerTimer; // error/info banners auto-hide; a token keeps a stale timer from hiding a newer banner
+function dictationBannerShow(text, mode, autoHideMs) {
+  const b = $('dictation-banner'); if (!b) return;
+  clearTimeout(dicBannerTimer);
+  b.textContent = text;
+  b.classList.remove('info', 'err'); if (mode) b.classList.add(mode);
+  b.classList.add('on');
+  if (autoHideMs) { const shown = text; dicBannerTimer = setTimeout(() => { if (b.textContent === shown) b.classList.remove('on', 'info', 'err'); }, autoHideMs); }
+}
+function dictationBannerHide() { clearTimeout(dicBannerTimer); const b = $('dictation-banner'); if (b) b.classList.remove('on', 'info', 'err'); }
 function dictationEngineLine(cfg) { // honest setup state: 'setting up' only while a download is actually running or about to
   if (cfg.engine) return 'Dictation engine: ready';
   const s = cfg.setup && cfg.setup.state;
@@ -234,7 +244,7 @@ function dictationCleanupMic() { // every exit path releases the mic: tracks sto
   if (dicStream) { dicStream.getTracks().forEach(t => t.stop()); dicStream = undefined; }
   dicNode = undefined;
   dicChunks.forEach(c => c.fill(0)); dicChunks = [];
-  const b = $('dictation-banner'); if (b) b.classList.remove('on');
+  dictationBannerHide();
 }
 async function dictationStartCapture() {
   try {
@@ -256,12 +266,13 @@ async function dictationStartCapture() {
     };
     src.connect(dicNode); dicNode.connect(dicCtx.destination);
     dictationStatus('Recording... press ' + dicKey + ' again to stop');
-    const b = $('dictation-banner');
-    if (b) { b.textContent = '\u25CF Recording - press ' + dicKey + ' again to stop'; b.classList.add('on'); }
+    dictationBannerShow('\u25CF Recording - press ' + dicKey + ' again to stop');
     dicCapTimer = setTimeout(() => dictationStopCapture(), 60000);
   } catch (e) {
     dictationCleanupMic(); // a partial setup must never leave the mic open
-    dictationStatus('Microphone unavailable: ' + (e && e.message ? e.message : e));
+    const msg = 'Microphone unavailable: ' + (e && e.message ? e.message : e);
+    dictationStatus(msg);
+    dictationBannerShow(msg, 'err', 6000); // the status line lives on the Settings tab; the failure must be visible wherever the user is
   }
 }
 async function dictationStopCapture() {
@@ -271,7 +282,7 @@ async function dictationStopCapture() {
   if (dicCtx) { const c = dicCtx; dicCtx = undefined; await c.close().catch(() => {}); }
   if (dicStream) { dicStream.getTracks().forEach(t => t.stop()); dicStream = undefined; }
   dicNode = undefined; dicChunks = [];
-  const b = $('dictation-banner'); if (b) b.classList.remove('on');
+  dictationBannerHide();
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const pcm = new Int16Array(total); let off = 0;
   for (const c of chunks) { pcm.set(c, off); off += c.length; c.fill(0); }
@@ -284,12 +295,13 @@ function dictationAbortCapture() { // shortcut disabled or app quitting: drop ev
 }
 if (api.onDictationCapture) api.onDictationCapture(action => { if (action === 'start') void dictationStartCapture(); else if (action === 'abort') dictationAbortCapture(); else void dictationStopCapture(); });
 if (api.onDictationState) api.onDictationState(st => {
-  if (st === 'idle') dictationStatus('Dictation engine: ready');
-  if (st === 'working') { dictationStatus('Transcribing...'); const b = $('dictation-banner'); if (b) b.classList.remove('on'); }
+  if (st === 'idle') { dictationStatus('Dictation engine: ready'); dictationBannerHide(); }
+  if (st === 'working') { dictationStatus('Transcribing...'); dictationBannerShow('Transcribing...', 'info'); } // transcription can take many seconds; keep it visible on every tab
 });
 if (api.onDictationPreview) api.onDictationPreview(payload => {
   const card = $('dictation-preview-card'); if (!card) return;
   if (payload.hide) { card.classList.remove('on'); return; }
+  dictationBannerHide();
   $('dictation-preview-why').textContent = 'Nothing was sent anywhere. Copy the text, or confirm the window to insert it into.';
   $('dictation-preview-text').textContent = payload.text;
   const typeBtn = $('dictation-preview-type');
